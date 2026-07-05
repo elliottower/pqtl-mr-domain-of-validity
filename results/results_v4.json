@@ -1,0 +1,171 @@
+{
+  "analysis_1_lof_auc": {
+    "n": 132,
+    "n_success": 38,
+    "n_failure": 94,
+    "auc": 0.5377939529675252,
+    "mannwhitney_p": 0.49905579906508457,
+    "permutation_p": 0.4945,
+    "n_permutations": 10000
+  },
+  "analysis_2_concordance": {
+    "total": 130,
+    "concordant": 67,
+    "discordant": 63,
+    "concordance_rate": 0.5153846153846153,
+    "binomial_p_vs_50pct": 0.7925825227940961,
+    "lof_directional_base_rate": 0.26153846153846155,
+    "binomial_p_vs_lof_base": 7.356181152598034e-10,
+    "by_mechanism": {
+      "activity_blocking": {
+        "concordant": 44,
+        "discordant": 31
+      },
+      "mixed": {
+        "concordant": 1,
+        "discordant": 1
+      },
+      "abundance_modulating": {
+        "concordant": 22,
+        "discordant": 31
+      }
+    },
+    "by_outcome": {
+      "SUCCESS": {
+        "concordant": 16,
+        "discordant": 21
+      },
+      "FAILURE": {
+        "concordant": 51,
+        "discordant": 42
+      }
+    }
+  },
+  "analysis_3_depth2": {
+    "n_all": 132,
+    "n_depth2": 12,
+    "depth2_success": 5,
+    "depth2_success_rate": 0.4166666666666667,
+    "all_success_rate": 0.2878787878787879,
+    "depth2_auc": 0.4857142857142857,
+    "depth2_pairs": [
+      {
+        "gene": "APP",
+        "disease": "Alzheimers disease",
+        "mechanism": "mixed",
+        "outcome": "SUCCESS"
+      },
+      {
+        "gene": "ALDH5A1",
+        "disease": "Bipolar disorder",
+        "mechanism": "activity_blocking",
+        "outcome": "SUCCESS"
+      },
+      {
+        "gene": "GRIK2",
+        "disease": "Bipolar disorder",
+        "mechanism": "activity_blocking",
+        "outcome": "FAILURE"
+      },
+      {
+        "gene": "CD80",
+        "disease": "Crohns disease",
+        "mechanism": "abundance_modulating",
+        "outcome": "FAILURE"
+      },
+      {
+        "gene": "IL12B",
+        "disease": "Crohns disease",
+        "mechanism": "abundance_modulating",
+        "outcome": "SUCCESS"
+      },
+      {
+        "gene": "MMP1",
+        "disease": "Lung cancer",
+        "mechanism": "abundance_modulating",
+        "outcome": "FAILURE"
+      },
+      {
+        "gene": "TOP2B",
+        "disease": "Lung cancer",
+        "mechanism": "activity_blocking",
+        "outcome": "SUCCESS"
+      },
+      {
+        "gene": "ALDH5A1",
+        "disease": "Major depressive disorder",
+        "mechanism": "activity_blocking",
+        "outcome": "SUCCESS"
+      },
+      {
+        "gene": "CACNB3",
+        "disease": "Multiple sclerosis",
+        "mechanism": "activity_blocking",
+        "outcome": "FAILURE"
+      },
+      {
+        "gene": "ITGAV",
+        "disease": "Myocardial infarction",
+        "mechanism": "abundance_modulating",
+        "outcome": "FAILURE"
+      },
+      {
+        "gene": "PDE5A",
+        "disease": "Myocardial infarction",
+        "mechanism": "activity_blocking",
+        "outcome": "FAILURE"
+      },
+      {
+        "gene": "SERPINC1",
+        "disease": "Pancreatic cancer",
+        "mechanism": "abundance_modulating",
+        "outcome": "FAILURE"
+      }
+    ]
+  },
+  "analysis_4_thresholded": {
+    "n": 132,
+    "tp": 3,
+    "fp": 4,
+    "tn": 90,
+    "fn": 35,
+    "sensitivity": 0.07894736842105263,
+    "specificity": 0.9574468085106383,
+    "ba": 0.5181970884658454,
+    "ppv": 0.42857142857142855
+  },
+  "analysis_5_mechanism_auc": {
+    "activity_blocking": {
+      "n": 75,
+      "n_success": 21,
+      "n_failure": 54,
+      "auc": 0.5864197530864198,
+      "mannwhitney_p": 0.24994312784488804
+    },
+    "abundance_modulating": {
+      "n": 55,
+      "n_success": 16,
+      "n_failure": 39,
+      "auc": 0.4983974358974359,
+      "mannwhitney_p": 0.9926072134622668
+    }
+  },
+  "analysis_6_combined": {
+    "n": 130,
+    "n_success": 37,
+    "n_failure": 93,
+    "auc_pqtl_only": 0.5129322871258355,
+    "p_pqtl": 0.8204074631874199,
+    "auc_lof_only": 0.5408311537343795,
+    "p_lof": 0.4700864783697083,
+    "auc_combined": 0.5585585585585585,
+    "p_combined": 0.29970187983517393
+  },
+  "meta": {
+    "total_pairs": 138,
+    "pairs_with_lof": 132,
+    "structural_missingness": 6,
+    "prespec": "PRESPEC_V4.md",
+    "instrument_data": "genebass_lof_results_v2.json"
+  }
+}

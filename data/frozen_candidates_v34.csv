@@ -1,0 +1,212 @@
+pair_id,gene,disease,ot_disease_id,instrument_source,mechanism_class,disease_area,sample_overlap,n_drugs,action_types,sentinel_rsid,sentinel_chr,sentinel_pos_hg19,sentinel_beta,sentinel_se,sentinel_neglog10p,sentinel_eaf
+ACHE|Alzheimers disease,ACHE,Alzheimers disease,Alzheimer disease,EpiGraphDB,activity_blocking,non_oncology,clean,7,INHIBITOR,,,,,,,
+AGER|Alzheimers disease,AGER,Alzheimers disease,Alzheimer disease,UKB-PPP,activity_blocking,non_oncology,clean,1,ANTAGONIST,rs204993,6,32155581,-0.0883,0.0059,49.71,0.3199
+APP|Alzheimers disease,APP,Alzheimers disease,Alzheimer disease,UKB-PPP,mixed,non_oncology,clean,9,STABILISER; INHIBITOR; BINDING AGENT; DISRUPTING AGENT,rs8131895,21,27503527,-0.0542,0.0055,22.35,0.6541
+BCHE|Alzheimers disease,BCHE,Alzheimers disease,Alzheimer disease,UKB-PPP,activity_blocking,non_oncology,clean,2,INHIBITOR,rs73165060,3,165481418,-0.3473,0.008,398.1,0.2095
+BCR|Alzheimers disease,BCR,Alzheimers disease,Alzheimer disease,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs149005797,22,23485100,-0.0407,0.0055,12.98,0.0042
+CSF1R|Alzheimers disease,CSF1R,Alzheimers disease,Alzheimer disease,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs56048668,5,149460542,-0.2059,0.0053,321.74,0.0067
+FGFR3|Alzheimers disease,FGFR3,Alzheimers disease,Alzheimer disease,EpiGraphDB,activity_blocking,non_oncology,clean,1,INHIBITOR,,,,,,,
+FLT3|Alzheimers disease,FLT3,Alzheimers disease,Alzheimer disease,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs9554228,13,28637838,-0.0677,0.0056,33.24,0.6272
+KIT|Alzheimers disease,KIT,Alzheimers disease,Alzheimer disease,UKB-PPP,activity_blocking,non_oncology,clean,2,INHIBITOR,rs218263,4,55408104,-0.0454,0.0055,16,0.1238
+KLKB1|Alzheimers disease,KLKB1,Alzheimers disease,Alzheimer disease,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs4253306,4,187174030,-0.2364,0.0066,277.04,0.1004
+MMP1|Alzheimers disease,MMP1,Alzheimers disease,Alzheimer disease,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+MMP13|Alzheimers disease,MMP13,Alzheimers disease,Alzheimer disease,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,11:102826877_GC_G,11,102826877,-0.1034,0.0055,76.83,0.5609
+MMP7|Alzheimers disease,MMP7,Alzheimers disease,Alzheimer disease,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+MMP8|Alzheimers disease,MMP8,Alzheimers disease,Alzheimer disease,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+PDE5A|Alzheimers disease,PDE5A,Alzheimers disease,Alzheimer disease,EpiGraphDB,activity_blocking,non_oncology,clean,1,INHIBITOR,,,,,,,
+PDGFRA|Alzheimers disease,PDGFRA,Alzheimers disease,Alzheimer disease,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs35597368,4,55139771,-0.1973,0.0053,292.2,0.1097
+PDGFRB|Alzheimers disease,PDGFRB,Alzheimers disease,Alzheimer disease,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs2304058,5,149508544,0.8378,0.0033,7830.64,0.5575
+ALDH5A1|Amyotrophic lateral sclerosis,ALDH5A1,Amyotrophic lateral sclerosis,amyotrophic lateral sclerosis,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs2744583,6,24505030,-0.0747,0.0063,31.5,0.4925
+C5|Amyotrophic lateral sclerosis,C5,Amyotrophic lateral sclerosis,amyotrophic lateral sclerosis,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+FGFR3|Amyotrophic lateral sclerosis,FGFR3,Amyotrophic lateral sclerosis,amyotrophic lateral sclerosis,EpiGraphDB,activity_blocking,non_oncology,clean,1,INHIBITOR,,,,,,,
+IGF1R|Amyotrophic lateral sclerosis,IGF1R,Amyotrophic lateral sclerosis,amyotrophic lateral sclerosis,UKB-PPP,mixed,non_oncology,clean,1,AGONIST,rs9672558,15,99180205,-0.0597,0.0054,27.34,0.1567
+IMPA1|Amyotrophic lateral sclerosis,IMPA1,Amyotrophic lateral sclerosis,amyotrophic lateral sclerosis,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs2400589,8,82575783,-0.1644,0.007,121.63,0.2972
+KIT|Amyotrophic lateral sclerosis,KIT,Amyotrophic lateral sclerosis,amyotrophic lateral sclerosis,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs218263,4,55408104,-0.0454,0.0055,16,0.1238
+PDGFRA|Amyotrophic lateral sclerosis,PDGFRA,Amyotrophic lateral sclerosis,amyotrophic lateral sclerosis,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs35597368,4,55139771,-0.1973,0.0053,292.2,0.1097
+PDGFRB|Amyotrophic lateral sclerosis,PDGFRB,Amyotrophic lateral sclerosis,amyotrophic lateral sclerosis,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs2304058,5,149508544,0.8378,0.0033,7830.64,0.5575
+SOD1|Amyotrophic lateral sclerosis,SOD1,Amyotrophic lateral sclerosis,amyotrophic lateral sclerosis,UKB-PPP,abundance_modulating,non_oncology,clean,1,ANTISENSE INHIBITOR,rs7282332,21,33126239,0.0439,0.0055,14.8,0.103
+IGF1R|Anorexia nervosa,IGF1R,Anorexia nervosa,anorexia nervosa,UKB-PPP,mixed,non_oncology,clean,1,AGONIST,rs9672558,15,99180205,-0.0597,0.0054,27.34,0.1567
+PTH1R|Anorexia nervosa,PTH1R,Anorexia nervosa,anorexia nervosa,UKB-PPP,abundance_modulating,non_oncology,clean,1,AGONIST,rs121434601,3,46939587,0.1646,0.0053,208.04,0.0027
+SOST|Anorexia nervosa,SOST,Anorexia nervosa,anorexia nervosa,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs6416905,17,41804464,-0.0383,0.0056,11.13,0.6392
+TNFSF11|Anorexia nervosa,TNFSF11,Anorexia nervosa,anorexia nervosa,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs2062305,13,43052880,-0.0827,0.0054,51.4,0.5316
+IMPA1|Autism spectrum disorder,IMPA1,Autism spectrum disorder,autism spectrum disorder,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs2400589,8,82575783,-0.1644,0.007,121.63,0.2972
+ALDH5A1|Bipolar disorder,ALDH5A1,Bipolar disorder,bipolar disorder,UKB-PPP,activity_blocking,non_oncology,clean,2,INHIBITOR,rs2744583,6,24505030,-0.0747,0.0063,31.5,0.4925
+CA2|Bipolar disorder,CA2,Bipolar disorder,bipolar disorder,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs2980370,8,86860127,0.0736,0.0055,40.49,0.5207
+CA4|Bipolar disorder,CA4,Bipolar disorder,bipolar disorder,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs140574067,17,58247515,-0.1195,0.0052,114.01,0.0073
+GRIK2|Bipolar disorder,GRIK2,Bipolar disorder,bipolar disorder,UKB-PPP,activity_blocking,non_oncology,clean,1,ANTAGONIST,rs59321237,6,101329742,0.1547,0.0056,166.08,0.0292
+IMPA1|Bipolar disorder,IMPA1,Bipolar disorder,bipolar disorder,UKB-PPP,activity_blocking,non_oncology,clean,2,INHIBITOR,rs2400589,8,82575783,-0.1644,0.007,121.63,0.2972
+ACE|Chronic kidney disease,ACE,Chronic kidney disease,chronic kidney disease,EpiGraphDB,activity_blocking,non_oncology,clean,2,INHIBITOR,,,,,,,
+CD80|Chronic kidney disease,CD80,Chronic kidney disease,chronic kidney disease,UKB-PPP,abundance_modulating,non_oncology,overlap_flagged,1,INHIBITOR,rs16829980,3,119278468,0.26,0.0054,491.38,0.1062
+CD86|Chronic kidney disease,CD86,Chronic kidney disease,chronic kidney disease,UKB-PPP,abundance_modulating,non_oncology,overlap_flagged,1,INHIBITOR,3:121822003_GAATGGGTTGTCTAACTCTACTGGTTTTTCCC_G,3,121822003,0.0882,0.0054,58.03,0.1194
+DPP4|Chronic kidney disease,DPP4,Chronic kidney disease,chronic kidney disease,UKB-PPP,activity_blocking,non_oncology,overlap_flagged,2,INHIBITOR,rs13015258,2,162930725,-0.1819,0.0055,231.78,0.6212
+EGLN1|Chronic kidney disease,EGLN1,Chronic kidney disease,chronic kidney disease,UKB-PPP,activity_blocking,non_oncology,overlap_flagged,4,INHIBITOR,rs77466488,1,231624369,0.0841,0.0058,46.75,0.0355
+ELN|Chronic kidney disease,ELN,Chronic kidney disease,chronic kidney disease,UKB-PPP,abundance_modulating,non_oncology,overlap_flagged,1,PROTEOLYTIC ENZYME,rs17855988,7,73474825,0.0865,0.0054,56.06,0.1001
+GHR|Chronic kidney disease,GHR,Chronic kidney disease,chronic kidney disease,EpiGraphDB,abundance_modulating,non_oncology,clean,1,AGONIST,,,,,,,
+MME|Chronic kidney disease,MME,Chronic kidney disease,chronic kidney disease,UKB-PPP,activity_blocking,non_oncology,overlap_flagged,1,INHIBITOR,rs61762319,3,154801978,-0.0496,0.0056,18.31,0.0299
+PDE5A|Chronic kidney disease,PDE5A,Chronic kidney disease,chronic kidney disease,EpiGraphDB,activity_blocking,non_oncology,clean,2,INHIBITOR,,,,,,,
+SERPINC1|Chronic kidney disease,SERPINC1,Chronic kidney disease,chronic kidney disease,UKB-PPP,abundance_modulating,non_oncology,overlap_flagged,1,ACTIVATOR,rs2227624,1,173884010,-0.0747,0.0054,42.64,0.0034
+CD80|Crohns disease,CD80,Crohns disease,Crohn disease,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs16829980,3,119278468,0.26,0.0054,491.38,0.1062
+CD86|Crohns disease,CD86,Crohns disease,Crohn disease,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,3:121822003_GAATGGGTTGTCTAACTCTACTGGTTTTTCCC_G,3,121822003,0.0882,0.0054,58.03,0.1194
+CSF2RB|Crohns disease,CSF2RB,Crohns disease,Crohn disease,EpiGraphDB,abundance_modulating,non_oncology,clean,1,AGONIST,,,,,,,
+ICAM1|Crohns disease,ICAM1,Crohns disease,Crohn disease,EpiGraphDB,abundance_modulating,non_oncology,clean,1,ANTISENSE INHIBITOR,,,,,,,
+IL12B|Crohns disease,IL12B,Crohns disease,Crohn disease,EpiGraphDB,abundance_modulating,non_oncology,clean,5,INHIBITOR,,,,,,,
+ITGB7|Crohns disease,ITGB7,Crohns disease,Crohn disease,UKB-PPP,abundance_modulating,non_oncology,clean,3,INHIBITOR; ANTAGONIST,rs61754162,12,53586536,-0.0687,0.0054,36.37,0.0025
+TNF|Crohns disease,TNF,Crohns disease,Crohn disease,UKB-PPP,abundance_modulating,non_oncology,clean,4,INHIBITOR,rs4645843,6,31544562,-0.07,0.0055,36.57,0.0011
+GSR|Glioma,GSR,Glioma,glioma,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs8190982,8,30556381,-0.0854,0.0063,40.79,0.3254
+MAP2K1|Glioma,MAP2K1,Glioma,glioma,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs77428206,15,66776480,0.0425,0.0055,13.79,0.0961
+TNC|Glioma,TNC,Glioma,glioma,EpiGraphDB,abundance_modulating,oncology,clean,1,OTHER,,,,,,,
+VEGFA|Glioma,VEGFA,Glioma,glioma,EpiGraphDB,abundance_modulating,oncology,clean,1,INHIBITOR,,,,,,,
+PCSK9|Hypercholesterolemia,PCSK9,Hypercholesterolemia,Hypercholesterolemia,EpiGraphDB,abundance_modulating,non_oncology,clean,6,RNAI INHIBITOR; INHIBITOR,,,,,,,
+ITGB7|Inflammatory bowel disease,ITGB7,Inflammatory bowel disease,inflammatory bowel disease,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs61754162,12,53586536,-0.0687,0.0054,36.37,0.0025
+TNF|Inflammatory bowel disease,TNF,Inflammatory bowel disease,inflammatory bowel disease,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs4645843,6,31544562,-0.07,0.0055,36.57,0.0011
+CD80|Juvenile idiopathic arthritis,CD80,Juvenile idiopathic arthritis,juvenile idiopathic arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs16829980,3,119278468,0.26,0.0054,491.38,0.1062
+CD86|Juvenile idiopathic arthritis,CD86,Juvenile idiopathic arthritis,juvenile idiopathic arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,3:121822003_GAATGGGTTGTCTAACTCTACTGGTTTTTCCC_G,3,121822003,0.0882,0.0054,58.03,0.1194
+GHR|Juvenile idiopathic arthritis,GHR,Juvenile idiopathic arthritis,juvenile idiopathic arthritis,EpiGraphDB,abundance_modulating,non_oncology,clean,1,AGONIST,,,,,,,
+IL17F|Juvenile idiopathic arthritis,IL17F,Juvenile idiopathic arthritis,juvenile idiopathic arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs2397084,6,52101844,-0.1087,0.0055,86.24,0.095
+IL6R|Juvenile idiopathic arthritis,IL6R,Juvenile idiopathic arthritis,juvenile idiopathic arthritis,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+TNF|Juvenile idiopathic arthritis,TNF,Juvenile idiopathic arthritis,juvenile idiopathic arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,5,INHIBITOR,rs4645843,6,31544562,-0.07,0.0055,36.57,0.0011
+CD274|Lung cancer,CD274,Lung cancer,lung cancer,EpiGraphDB,abundance_modulating,oncology,clean,2,INHIBITOR,,,,,,,
+CLU|Lung cancer,CLU,Lung cancer,lung cancer,UKB-PPP,abundance_modulating,oncology,clean,1,ANTISENSE INHIBITOR,rs553014,8,27566514,0.0981,0.0063,53.67,0.5129
+EGFR|Lung cancer,EGFR,Lung cancer,lung cancer,UKB-PPP,activity_blocking,oncology,clean,5,INHIBITOR,rs10081281,7,55236796,0.1008,0.0057,69.21,0.4534
+GART|Lung cancer,GART,Lung cancer,lung cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,21:34871738_ATTT_A,21,34871738,-0.078,0.0054,46.14,0.7685
+MAP2K1|Lung cancer,MAP2K1,Lung cancer,lung cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs77428206,15,66776480,0.0425,0.0055,13.79,0.0961
+MET|Lung cancer,MET,Lung cancer,lung cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs1858830,7,116312439,-0.1189,0.0054,105.38,0.4426
+MMP1|Lung cancer,MMP1,Lung cancer,lung cancer,EpiGraphDB,abundance_modulating,oncology,clean,1,INHIBITOR,,,,,,,
+MMP12|Lung cancer,MMP12,Lung cancer,lung cancer,EpiGraphDB,abundance_modulating,oncology,clean,1,INHIBITOR,,,,,,,
+MMP3|Lung cancer,MMP3,Lung cancer,lung cancer,UKB-PPP,abundance_modulating,oncology,clean,1,INHIBITOR,rs678815,11,102713777,0.4292,0.0078,633.32,0.483
+MMP7|Lung cancer,MMP7,Lung cancer,lung cancer,EpiGraphDB,abundance_modulating,oncology,clean,1,INHIBITOR,,,,,,,
+MMP9|Lung cancer,MMP9,Lung cancer,lung cancer,EpiGraphDB,abundance_modulating,oncology,clean,1,INHIBITOR,,,,,,,
+PDCD1|Lung cancer,PDCD1,Lung cancer,lung cancer,UKB-PPP,abundance_modulating,oncology,clean,4,INHIBITOR; ANTAGONIST,2:242801752_CG_C,2,242801752,-0.1693,0.0054,215.73,0.2032
+RET|Lung cancer,RET,Lung cancer,lung cancer,EpiGraphDB,activity_blocking,oncology,clean,1,INHIBITOR,,,,,,,
+RRM2B|Lung cancer,RRM2B,Lung cancer,lung cancer,EpiGraphDB,activity_blocking,oncology,clean,1,INHIBITOR,,,,,,,
+SERPINC1|Lung cancer,SERPINC1,Lung cancer,lung cancer,UKB-PPP,abundance_modulating,oncology,clean,1,ACTIVATOR,rs2227624,1,173884010,-0.0747,0.0054,42.64,0.0034
+TIGIT|Lung cancer,TIGIT,Lung cancer,lung cancer,UKB-PPP,abundance_modulating,oncology,clean,1,ANTAGONIST,rs6792290,3,114013194,0.0617,0.0055,28.77,0.2895
+TOP2B|Lung cancer,TOP2B,Lung cancer,lung cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs3806631,3,25706846,0.0568,0.0055,24.26,0.1998
+VEGFA|Lung cancer,VEGFA,Lung cancer,lung cancer,EpiGraphDB,abundance_modulating,oncology,clean,1,INHIBITOR,,,,,,,
+ACHE|Major depressive disorder,ACHE,Major depressive disorder,depressive disorder,EpiGraphDB,activity_blocking,non_oncology,clean,1,INHIBITOR,,,,,,,
+ALDH5A1|Major depressive disorder,ALDH5A1,Major depressive disorder,depressive disorder,UKB-PPP,activity_blocking,non_oncology,clean,2,INHIBITOR,rs2744583,6,24505030,-0.0747,0.0063,31.5,0.4925
+CACNA2D3|Major depressive disorder,CACNA2D3,Major depressive disorder,depressive disorder,EpiGraphDB,activity_blocking,non_oncology,clean,1,MODULATOR,,,,,,,
+CACNB3|Major depressive disorder,CACNB3,Major depressive disorder,depressive disorder,UKB-PPP,activity_blocking,non_oncology,clean,1,MODULATOR,rs7975385,12,49190992,0.0692,0.0055,36.03,0.2333
+IMPA1|Major depressive disorder,IMPA1,Major depressive disorder,depressive disorder,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs2400589,8,82575783,-0.1644,0.007,121.63,0.2972
+PDE5A|Major depressive disorder,PDE5A,Major depressive disorder,depressive disorder,EpiGraphDB,activity_blocking,non_oncology,clean,1,INHIBITOR,,,,,,,
+ACHE|Multiple sclerosis,ACHE,Multiple sclerosis,multiple sclerosis,EpiGraphDB,activity_blocking,non_oncology,clean,1,INHIBITOR,,,,,,,
+CACNA2D3|Multiple sclerosis,CACNA2D3,Multiple sclerosis,multiple sclerosis,EpiGraphDB,activity_blocking,non_oncology,clean,1,MODULATOR,,,,,,,
+CACNB3|Multiple sclerosis,CACNB3,Multiple sclerosis,multiple sclerosis,UKB-PPP,activity_blocking,non_oncology,clean,1,MODULATOR,rs7975385,12,49190992,0.0692,0.0055,36.03,0.2333
+FGFR3|Multiple sclerosis,FGFR3,Multiple sclerosis,multiple sclerosis,EpiGraphDB,activity_blocking,non_oncology,clean,1,INHIBITOR,,,,,,,
+IFNAR1|Multiple sclerosis,IFNAR1,Multiple sclerosis,multiple sclerosis,EpiGraphDB,abundance_modulating,non_oncology,clean,3,AGONIST,,,,,,,
+IL2RA|Multiple sclerosis,IL2RA,Multiple sclerosis,multiple sclerosis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs12722497,10,6095928,0.3983,0.005,1260.79,0.0887
+ITGB7|Multiple sclerosis,ITGB7,Multiple sclerosis,multiple sclerosis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs61754162,12,53586536,-0.0687,0.0054,36.37,0.0025
+KIT|Multiple sclerosis,KIT,Multiple sclerosis,multiple sclerosis,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs218263,4,55408104,-0.0454,0.0055,16,0.1238
+PDGFRA|Multiple sclerosis,PDGFRA,Multiple sclerosis,multiple sclerosis,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs35597368,4,55139771,-0.1973,0.0053,292.2,0.1097
+PDGFRB|Multiple sclerosis,PDGFRB,Multiple sclerosis,multiple sclerosis,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs2304058,5,149508544,0.8378,0.0033,7830.64,0.5575
+SNAP25|Multiple sclerosis,SNAP25,Multiple sclerosis,multiple sclerosis,UKB-PPP,activity_blocking,non_oncology,clean,2,INHIBITOR,rs362562,20,10243186,-0.0697,0.0059,31.67,0.4136
+ACE|Myocardial infarction,ACE,Myocardial infarction,myocardial infarction,EpiGraphDB,activity_blocking,non_oncology,clean,7,INHIBITOR,,,,,,,
+C5|Myocardial infarction,C5,Myocardial infarction,myocardial infarction,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+CSF3R|Myocardial infarction,CSF3R,Myocardial infarction,myocardial infarction,UKB-PPP,abundance_modulating,non_oncology,clean,1,AGONIST,rs3917999,1,36933317,0.1777,0.0053,243.16,0.0106
+DPP4|Myocardial infarction,DPP4,Myocardial infarction,myocardial infarction,UKB-PPP,activity_blocking,non_oncology,clean,2,INHIBITOR,rs13015258,2,162930725,-0.1819,0.0055,231.78,0.6212
+F10|Myocardial infarction,F10,Myocardial infarction,myocardial infarction,EpiGraphDB,activity_blocking,non_oncology,clean,3,INHIBITOR,,,,,,,
+F2|Myocardial infarction,F2,Myocardial infarction,myocardial infarction,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs1799963,11,46761055,0.1127,0.0054,95.11,0.0109
+F2R|Myocardial infarction,F2R,Myocardial infarction,myocardial infarction,UKB-PPP,activity_blocking,non_oncology,clean,2,ANTAGONIST,rs11954573,5,76035067,0.0554,0.0055,23.33,0.2707
+ITGAV|Myocardial infarction,ITGAV,Myocardial infarction,myocardial infarction,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs2595391,2,187532373,0.089,0.0055,57.93,0.1081
+MME|Myocardial infarction,MME,Myocardial infarction,myocardial infarction,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs61762319,3,154801978,-0.0496,0.0056,18.31,0.0299
+NOS1|Myocardial infarction,NOS1,Myocardial infarction,myocardial infarction,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs3844049,12,117879324,-0.1047,0.0055,79.6,0.4401
+NOS2|Myocardial infarction,NOS2,Myocardial infarction,myocardial infarction,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs2297518,17,26096597,-0.0529,0.0055,21.11,0.1888
+PCSK9|Myocardial infarction,PCSK9,Myocardial infarction,myocardial infarction,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+PDE5A|Myocardial infarction,PDE5A,Myocardial infarction,myocardial infarction,EpiGraphDB,activity_blocking,non_oncology,clean,1,INHIBITOR,,,,,,,
+PLA2G10|Myocardial infarction,PLA2G10,Myocardial infarction,myocardial infarction,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs536340612,16,14658120,-0.1327,0.0054,132.76,0.0042
+PLA2G2A|Myocardial infarction,PLA2G2A,Myocardial infarction,myocardial infarction,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+PLAT|Myocardial infarction,PLAT,Myocardial infarction,myocardial infarction,EpiGraphDB,abundance_modulating,non_oncology,clean,4,EXOGENOUS PROTEIN,,,,,,,
+PLAU|Myocardial infarction,PLAU,Myocardial infarction,myocardial infarction,EpiGraphDB,abundance_modulating,non_oncology,clean,1,EXOGENOUS PROTEIN,,,,,,,
+PLG|Myocardial infarction,PLG,Myocardial infarction,myocardial infarction,EpiGraphDB,abundance_modulating,non_oncology,clean,2,ACTIVATOR,,,,,,,
+SERPINC1|Myocardial infarction,SERPINC1,Myocardial infarction,myocardial infarction,UKB-PPP,abundance_modulating,non_oncology,clean,6,ACTIVATOR,rs2227624,1,173884010,-0.0747,0.0054,42.64,0.0034
+CSF2RB|Neuroblastoma,CSF2RB,Neuroblastoma,neuroblastoma,EpiGraphDB,abundance_modulating,oncology,clean,1,AGONIST,,,,,,,
+CSF3R|Neuroblastoma,CSF3R,Neuroblastoma,neuroblastoma,UKB-PPP,abundance_modulating,oncology,clean,1,AGONIST,rs3917999,1,36933317,0.1777,0.0053,243.16,0.0106
+IL2RA|Neuroblastoma,IL2RA,Neuroblastoma,neuroblastoma,UKB-PPP,abundance_modulating,oncology,clean,1,AGONIST,rs12722497,10,6095928,0.3983,0.005,1260.79,0.0887
+TOP2B|Neuroblastoma,TOP2B,Neuroblastoma,neuroblastoma,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs3806631,3,25706846,0.0568,0.0055,24.26,0.1998
+ANGPT1|Ovarian cancer,ANGPT1,Ovarian cancer,ovarian cancer,UKB-PPP,abundance_modulating,oncology,clean,1,INHIBITOR,rs6993770,8,106581528,-0.1287,0.0054,123.14,0.287
+ANGPT2|Ovarian cancer,ANGPT2,Ovarian cancer,ovarian cancer,UKB-PPP,abundance_modulating,oncology,clean,1,INHIBITOR,rs1968586,8,6279511,-0.1312,0.0058,111.11,0.3554
+CD274|Ovarian cancer,CD274,Ovarian cancer,ovarian cancer,EpiGraphDB,abundance_modulating,oncology,clean,3,INHIBITOR; OTHER,,,,,,,
+CSF3R|Ovarian cancer,CSF3R,Ovarian cancer,ovarian cancer,UKB-PPP,abundance_modulating,oncology,clean,1,AGONIST,rs3917999,1,36933317,0.1777,0.0053,243.16,0.0106
+FGFR2|Ovarian cancer,FGFR2,Ovarian cancer,ovarian cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs3096763,10,123318185,-0.0672,0.0059,29.62,0.5913
+FGFR3|Ovarian cancer,FGFR3,Ovarian cancer,ovarian cancer,EpiGraphDB,activity_blocking,oncology,clean,2,INHIBITOR,,,,,,,
+FGFR4|Ovarian cancer,FGFR4,Ovarian cancer,ovarian cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs351855,5,176520243,0.7167,0.0052,3286.63,0.296
+FLT1|Ovarian cancer,FLT1,Ovarian cancer,ovarian cancer,UKB-PPP,activity_blocking,oncology,clean,3,INHIBITOR,rs552252905,13,28986016,-0.0556,0.0055,23.66,0.0012
+FLT4|Ovarian cancer,FLT4,Ovarian cancer,ovarian cancer,EpiGraphDB,activity_blocking,oncology,clean,3,INHIBITOR,,,,,,,
+FOLR1|Ovarian cancer,FOLR1,Ovarian cancer,ovarian cancer,UKB-PPP,abundance_modulating,oncology,clean,3,INHIBITOR; BINDING AGENT,rs2071010,11,71900964,0.0725,0.0055,38.75,0.0602
+GAS6|Ovarian cancer,GAS6,Ovarian cancer,ovarian cancer,UKB-PPP,abundance_modulating,oncology,clean,1,INHIBITOR,rs6602909,13,114551993,-0.2303,0.0107,102.21,0.3242
+KDR|Ovarian cancer,KDR,Ovarian cancer,ovarian cancer,EpiGraphDB,activity_blocking,oncology,clean,4,INHIBITOR,,,,,,,
+KIT|Ovarian cancer,KIT,Ovarian cancer,ovarian cancer,UKB-PPP,activity_blocking,oncology,clean,2,INHIBITOR,rs218263,4,55408104,-0.0454,0.0055,16,0.1238
+MUC16|Ovarian cancer,MUC16,Ovarian cancer,ovarian cancer,UKB-PPP,abundance_modulating,oncology,clean,1,OTHER,rs11673136,19,9007748,0.0648,0.0062,24.49,0.4728
+PARP1|Ovarian cancer,PARP1,Ovarian cancer,ovarian cancer,UKB-PPP,activity_blocking,oncology,clean,9,INHIBITOR,rs1433574,1,226609339,-0.0858,0.0054,55.27,0.1607
+PDCD1|Ovarian cancer,PDCD1,Ovarian cancer,ovarian cancer,UKB-PPP,abundance_modulating,oncology,clean,4,INHIBITOR; ANTAGONIST,2:242801752_CG_C,2,242801752,-0.1693,0.0054,215.73,0.2032
+PDGFRA|Ovarian cancer,PDGFRA,Ovarian cancer,ovarian cancer,UKB-PPP,activity_blocking,oncology,clean,3,INHIBITOR,rs35597368,4,55139771,-0.1973,0.0053,292.2,0.1097
+PDGFRB|Ovarian cancer,PDGFRB,Ovarian cancer,ovarian cancer,UKB-PPP,activity_blocking,oncology,clean,3,INHIBITOR,rs2304058,5,149508544,0.8378,0.0033,7830.64,0.5575
+RRM2B|Ovarian cancer,RRM2B,Ovarian cancer,ovarian cancer,EpiGraphDB,activity_blocking,oncology,clean,2,INHIBITOR,,,,,,,
+TOP2B|Ovarian cancer,TOP2B,Ovarian cancer,ovarian cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs3806631,3,25706846,0.0568,0.0055,24.26,0.1998
+VEGFA|Ovarian cancer,VEGFA,Ovarian cancer,ovarian cancer,EpiGraphDB,abundance_modulating,oncology,clean,1,INHIBITOR,,,,,,,
+CSF2RB|Pancreatic cancer,CSF2RB,Pancreatic cancer,exocrine pancreatic carcinoma,EpiGraphDB,abundance_modulating,oncology,clean,1,AGONIST,,,,,,,
+EGFR|Pancreatic cancer,EGFR,Pancreatic cancer,exocrine pancreatic carcinoma,UKB-PPP,activity_blocking,oncology,clean,3,INHIBITOR,rs10081281,7,55236796,0.1008,0.0057,69.21,0.4534
+FGFR3|Pancreatic cancer,FGFR3,Pancreatic cancer,exocrine pancreatic carcinoma,EpiGraphDB,activity_blocking,oncology,clean,1,INHIBITOR,,,,,,,
+FLT1|Pancreatic cancer,FLT1,Pancreatic cancer,exocrine pancreatic carcinoma,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs552252905,13,28986016,-0.0556,0.0055,23.66,0.0012
+FLT3|Pancreatic cancer,FLT3,Pancreatic cancer,exocrine pancreatic carcinoma,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs9554228,13,28637838,-0.0677,0.0056,33.24,0.6272
+FLT4|Pancreatic cancer,FLT4,Pancreatic cancer,exocrine pancreatic carcinoma,EpiGraphDB,activity_blocking,oncology,clean,1,INHIBITOR,,,,,,,
+KDR|Pancreatic cancer,KDR,Pancreatic cancer,exocrine pancreatic carcinoma,EpiGraphDB,activity_blocking,oncology,clean,1,INHIBITOR,,,,,,,
+KIT|Pancreatic cancer,KIT,Pancreatic cancer,exocrine pancreatic carcinoma,UKB-PPP,activity_blocking,oncology,clean,2,INHIBITOR,rs218263,4,55408104,-0.0454,0.0055,16,0.1238
+PDGFRA|Pancreatic cancer,PDGFRA,Pancreatic cancer,exocrine pancreatic carcinoma,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs35597368,4,55139771,-0.1973,0.0053,292.2,0.1097
+PDGFRB|Pancreatic cancer,PDGFRB,Pancreatic cancer,exocrine pancreatic carcinoma,UKB-PPP,activity_blocking,oncology,clean,2,INHIBITOR,rs2304058,5,149508544,0.8378,0.0033,7830.64,0.5575
+RET|Pancreatic cancer,RET,Pancreatic cancer,exocrine pancreatic carcinoma,EpiGraphDB,activity_blocking,oncology,clean,1,INHIBITOR,,,,,,,
+RRM2B|Pancreatic cancer,RRM2B,Pancreatic cancer,exocrine pancreatic carcinoma,EpiGraphDB,activity_blocking,oncology,clean,2,INHIBITOR,,,,,,,
+SERPINC1|Pancreatic cancer,SERPINC1,Pancreatic cancer,exocrine pancreatic carcinoma,UKB-PPP,abundance_modulating,oncology,clean,1,ACTIVATOR,rs2227624,1,173884010,-0.0747,0.0054,42.64,0.0034
+VEGFA|Pancreatic cancer,VEGFA,Pancreatic cancer,exocrine pancreatic carcinoma,EpiGraphDB,abundance_modulating,oncology,clean,1,INHIBITOR,,,,,,,
+ACHE|Parkinsons disease,ACHE,Parkinsons disease,Parkinson disease,EpiGraphDB,activity_blocking,non_oncology,clean,2,INHIBITOR,,,,,,,
+BCHE|Parkinsons disease,BCHE,Parkinsons disease,Parkinson disease,UKB-PPP,activity_blocking,non_oncology,clean,2,INHIBITOR,rs73165060,3,165481418,-0.3473,0.008,398.1,0.2095
+COMT|Parkinsons disease,COMT,Parkinsons disease,Parkinson disease,UKB-PPP,activity_blocking,non_oncology,clean,3,INHIBITOR,rs4680,22,19951271,-0.3277,0.0052,811.09,0.5176
+DDC|Parkinsons disease,DDC,Parkinsons disease,Parkinson disease,UKB-PPP,activity_blocking,non_oncology,clean,3,INHIBITOR,rs73695512,7,50587972,-0.2428,0.0055,409.44,0.0161
+SNCA|Parkinsons disease,SNCA,Parkinsons disease,Parkinson disease,EpiGraphDB,abundance_modulating,non_oncology,clean,1,BINDING AGENT,,,,,,,
+CD80|Rheumatoid arthritis,CD80,Rheumatoid arthritis,rheumatoid arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs16829980,3,119278468,0.26,0.0054,491.38,0.1062
+CD86|Rheumatoid arthritis,CD86,Rheumatoid arthritis,rheumatoid arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,3:121822003_GAATGGGTTGTCTAACTCTACTGGTTTTTCCC_G,3,121822003,0.0882,0.0054,58.03,0.1194
+CSF2|Rheumatoid arthritis,CSF2,Rheumatoid arthritis,rheumatoid arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs25882,5,131411460,0.1334,0.0056,124.61,0.2066
+IL12B|Rheumatoid arthritis,IL12B,Rheumatoid arthritis,rheumatoid arthritis,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+IL1R1|Rheumatoid arthritis,IL1R1,Rheumatoid arthritis,rheumatoid arthritis,EpiGraphDB,abundance_modulating,non_oncology,clean,1,ANTAGONIST,,,,,,,
+IL6R|Rheumatoid arthritis,IL6R,Rheumatoid arthritis,rheumatoid arthritis,EpiGraphDB,abundance_modulating,non_oncology,clean,4,INHIBITOR; ANTAGONIST,,,,,,,
+IL6ST|Rheumatoid arthritis,IL6ST,Rheumatoid arthritis,rheumatoid arthritis,EpiGraphDB,abundance_modulating,non_oncology,clean,1,ANTAGONIST,,,,,,,
+ITGAV|Rheumatoid arthritis,ITGAV,Rheumatoid arthritis,rheumatoid arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,1,ANTAGONIST,rs2595391,2,187532373,0.089,0.0055,57.93,0.1081
+ITGB5|Rheumatoid arthritis,ITGB5,Rheumatoid arthritis,rheumatoid arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,1,ANTAGONIST,rs17282078,3,124481760,0.0611,0.0057,26.2,0.1302
+MIF|Rheumatoid arthritis,MIF,Rheumatoid arthritis,rheumatoid arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,22:24256692_AT_A,22,24256692,-0.0754,0.0054,42.89,0.5799
+PLA2G10|Rheumatoid arthritis,PLA2G10,Rheumatoid arthritis,rheumatoid arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs536340612,16,14658120,-0.1327,0.0054,132.76,0.0042
+PLA2G2A|Rheumatoid arthritis,PLA2G2A,Rheumatoid arthritis,rheumatoid arthritis,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+TNF|Rheumatoid arthritis,TNF,Rheumatoid arthritis,rheumatoid arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,7,INHIBITOR,rs4645843,6,31544562,-0.07,0.0055,36.57,0.0011
+TNFSF13B|Rheumatoid arthritis,TNFSF13B,Rheumatoid arthritis,rheumatoid arthritis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs374039502,13,108960385,0.1379,0.0054,141.12,0.0206
+ACHE|Schizophrenia,ACHE,Schizophrenia,schizophrenia,EpiGraphDB,activity_blocking,non_oncology,clean,1,INHIBITOR,,,,,,,
+ALDH5A1|Schizophrenia,ALDH5A1,Schizophrenia,schizophrenia,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs2744583,6,24505030,-0.0747,0.0063,31.5,0.4925
+IMPA1|Schizophrenia,IMPA1,Schizophrenia,schizophrenia,UKB-PPP,activity_blocking,non_oncology,clean,1,INHIBITOR,rs2400589,8,82575783,-0.1644,0.007,121.63,0.2972
+CD22|Systemic lupus erythematosus,CD22,Systemic lupus erythematosus,systemic lupus erythematosus,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs10411704,19,35800662,-0.1988,0.0057,265.51,0.7855
+CD40LG|Systemic lupus erythematosus,CD40LG,Systemic lupus erythematosus,systemic lupus erythematosus,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs36206512,X,135730217,-0.1717,0.0053,223.83,0.0353
+CLEC4C|Systemic lupus erythematosus,CLEC4C,Systemic lupus erythematosus,systemic lupus erythematosus,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+IFNAR1|Systemic lupus erythematosus,IFNAR1,Systemic lupus erythematosus,systemic lupus erythematosus,EpiGraphDB,abundance_modulating,non_oncology,clean,1,ANTAGONIST,,,,,,,
+IL12B|Systemic lupus erythematosus,IL12B,Systemic lupus erythematosus,systemic lupus erythematosus,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+IL2RA|Systemic lupus erythematosus,IL2RA,Systemic lupus erythematosus,systemic lupus erythematosus,UKB-PPP,abundance_modulating,non_oncology,clean,1,AGONIST,rs12722497,10,6095928,0.3983,0.005,1260.79,0.0887
+TNFRSF13C|Systemic lupus erythematosus,TNFRSF13C,Systemic lupus erythematosus,systemic lupus erythematosus,UKB-PPP,abundance_modulating,non_oncology,clean,1,BINDING AGENT,rs141342807,22,42312807,-0.3203,0.0051,796.27,0.0798
+TNFSF13B|Systemic lupus erythematosus,TNFSF13B,Systemic lupus erythematosus,systemic lupus erythematosus,UKB-PPP,abundance_modulating,non_oncology,clean,3,INHIBITOR,rs374039502,13,108960385,0.1379,0.0054,141.12,0.0206
+EGFR|Thyroid cancer,EGFR,Thyroid cancer,thyroid cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs10081281,7,55236796,0.1008,0.0057,69.21,0.4534
+EPHA1|Thyroid cancer,EPHA1,Thyroid cancer,thyroid cancer,EpiGraphDB,activity_blocking,oncology,clean,1,INHIBITOR,,,,,,,
+EPHA2|Thyroid cancer,EPHA2,Thyroid cancer,thyroid cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs924204,1,16513926,-0.1004,0.0058,66.55,0.5901
+EPHA4|Thyroid cancer,EPHA4,Thyroid cancer,thyroid cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs10932916,2,222389971,0.0822,0.0068,32.64,0.5141
+EPHB2|Thyroid cancer,EPHB2,Thyroid cancer,thyroid cancer,EpiGraphDB,activity_blocking,oncology,clean,1,INHIBITOR,,,,,,,
+EPHB4|Thyroid cancer,EPHB4,Thyroid cancer,thyroid cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs314361,7,100413005,0.1195,0.0054,105.86,0.5204
+ERBB2|Thyroid cancer,ERBB2,Thyroid cancer,thyroid cancer,UKB-PPP,mixed,oncology,clean,1,INHIBITOR,rs4252624,17,37867647,0.1053,0.0053,85.84,0.0122
+ERBB3|Thyroid cancer,ERBB3,Thyroid cancer,thyroid cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs75526830,12,56489394,0.2644,0.0053,528.81,0.0049
+ERBB4|Thyroid cancer,ERBB4,Thyroid cancer,thyroid cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs6735267,2,213403863,0.1186,0.0063,77.69,0.2688
+FLT1|Thyroid cancer,FLT1,Thyroid cancer,thyroid cancer,UKB-PPP,activity_blocking,oncology,clean,3,INHIBITOR,rs552252905,13,28986016,-0.0556,0.0055,23.66,0.0012
+FLT4|Thyroid cancer,FLT4,Thyroid cancer,thyroid cancer,EpiGraphDB,activity_blocking,oncology,clean,3,INHIBITOR,,,,,,,
+KDR|Thyroid cancer,KDR,Thyroid cancer,thyroid cancer,EpiGraphDB,activity_blocking,oncology,clean,5,INHIBITOR,,,,,,,
+MAP2K1|Thyroid cancer,MAP2K1,Thyroid cancer,thyroid cancer,UKB-PPP,activity_blocking,oncology,clean,2,INHIBITOR,rs77428206,15,66776480,0.0425,0.0055,13.79,0.0961
+MET|Thyroid cancer,MET,Thyroid cancer,thyroid cancer,UKB-PPP,activity_blocking,oncology,clean,1,INHIBITOR,rs1858830,7,116312439,-0.1189,0.0054,105.38,0.4426
+RET|Thyroid cancer,RET,Thyroid cancer,thyroid cancer,EpiGraphDB,activity_blocking,oncology,clean,2,INHIBITOR,,,,,,,
+TEK|Thyroid cancer,TEK,Thyroid cancer,thyroid cancer,EpiGraphDB,activity_blocking,oncology,clean,1,INHIBITOR,,,,,,,
+CD80|Ulcerative colitis,CD80,Ulcerative colitis,ulcerative colitis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,rs16829980,3,119278468,0.26,0.0054,491.38,0.1062
+CD86|Ulcerative colitis,CD86,Ulcerative colitis,ulcerative colitis,UKB-PPP,abundance_modulating,non_oncology,clean,1,INHIBITOR,3:121822003_GAATGGGTTGTCTAACTCTACTGGTTTTTCCC_G,3,121822003,0.0882,0.0054,58.03,0.1194
+IL12B|Ulcerative colitis,IL12B,Ulcerative colitis,ulcerative colitis,EpiGraphDB,abundance_modulating,non_oncology,clean,4,INHIBITOR,,,,,,,
+ITGB7|Ulcerative colitis,ITGB7,Ulcerative colitis,ulcerative colitis,UKB-PPP,abundance_modulating,non_oncology,clean,2,INHIBITOR; ANTAGONIST,rs61754162,12,53586536,-0.0687,0.0054,36.37,0.0025
+MMP9|Ulcerative colitis,MMP9,Ulcerative colitis,ulcerative colitis,EpiGraphDB,abundance_modulating,non_oncology,clean,1,INHIBITOR,,,,,,,
+TNF|Ulcerative colitis,TNF,Ulcerative colitis,ulcerative colitis,UKB-PPP,abundance_modulating,non_oncology,clean,3,INHIBITOR,rs4645843,6,31544562,-0.07,0.0055,36.57,0.0011

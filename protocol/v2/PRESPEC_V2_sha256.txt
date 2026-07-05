@@ -1,0 +1,8 @@
+V2 Sweep Protocol — artifact hashes
+Timestamp: 2026-07-04 07:15 UTC
+
+PRESPEC_V2_SWEEP.md                             dcfa5b2ed5dfa24c32d11e9871de8ac02a916f2e4bcb2170097c9bba318df86d
+results/disease_sweep_20260704_015239.csv       443e0540510cb3c0c173fc87480f2512a1a2a9b6483b4de8fc34c36d921503e2
+candidate_sweep.py                              5d5e33090e79387caaff8222037de8852555e877b0cdca9087aec79530fe1cfa
+drug_pipeline.py                                9fd52b078a1c1fad28cd5aad4f783544058d4a3f29200bd183914cbe6ea0518e
+data/observational_estimates.csv                f69d7ad8f6d1d7a3ecb529910157e24c05861629bc70bced353bfa92905ceea0

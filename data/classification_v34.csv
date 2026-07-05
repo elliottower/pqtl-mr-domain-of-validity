@@ -1,0 +1,139 @@
+pair_id,gene,disease,outcome,mechanism_class,disease_area,instrument_source,sample_overlap,mr_beta,mr_se,mr_p,mr_causal,mr_source,mr_rsid,prediction,correct
+ACHE|Alzheimers disease,ACHE,Alzheimers disease,SUCCESS,activity_blocking,non_oncology,EpiGraphDB,clean,-0.012794613,0.052525253,0.807548572,False,catalog,rs4727469,FAILURE,False
+AGER|Alzheimers disease,AGER,Alzheimers disease,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.15855039637599094,0.1959229898074745,0.4183721910581433,False,opengwas_cached,rs204993,FAILURE,True
+APP|Alzheimers disease,APP,Alzheimers disease,SUCCESS,mixed,non_oncology,UKB-PPP,clean,-0.6088560885608857,0.2785977859778598,0.028857299272498044,True,opengwas_cached,rs8131895,SUCCESS,True
+BCHE|Alzheimers disease,BCHE,Alzheimers disease,SUCCESS,activity_blocking,non_oncology,UKB-PPP,clean,0.003455226029369421,0.05125251943564642,0.9462507466797766,False,opengwas_cached,rs73165060,FAILURE,False
+FGFR3|Alzheimers disease,FGFR3,Alzheimers disease,FAILURE,activity_blocking,non_oncology,EpiGraphDB,clean,0.0113,0.0167,0.4986301373545444,False,opengwas_cached_epi,rs2403274,FAILURE,True
+FLT3|Alzheimers disease,FLT3,Alzheimers disease,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.11225997045790252,0.21565731166912852,0.6026817199138879,False,opengwas_cached,rs9554228,FAILURE,True
+KIT|Alzheimers disease,KIT,Alzheimers disease,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.41409691629955947,0.4779735682819383,0.38629307548098313,False,opengwas_cached,rs218263,FAILURE,True
+KLKB1|Alzheimers disease,KLKB1,Alzheimers disease,SUCCESS,abundance_modulating,non_oncology,UKB-PPP,clean,0.06218274111675127,0.10025380710659898,0.5350911245967429,False,opengwas_cached,rs4253306,FAILURE,False
+MMP1|Alzheimers disease,MMP1,Alzheimers disease,FAILURE,abundance_modulating,non_oncology,EpiGraphDB,clean,0.0207,0.0148,0.16191837020659716,False,opengwas_cached_epi,rs471994,FAILURE,True
+MMP7|Alzheimers disease,MMP7,Alzheimers disease,FAILURE,abundance_modulating,non_oncology,EpiGraphDB,clean,0.024247867,0.05463254,0.657161436,False,catalog,rs11568819,FAILURE,True
+MMP8|Alzheimers disease,MMP8,Alzheimers disease,FAILURE,abundance_modulating,non_oncology,EpiGraphDB,clean,-0.0639794168,0.1096054889,0.5594056342,False,catalog,rs35231465,FAILURE,True
+PDE5A|Alzheimers disease,PDE5A,Alzheimers disease,FAILURE,activity_blocking,non_oncology,EpiGraphDB,clean,-0.004140127,0.049681529,0.933586496,False,catalog,rs4834770,FAILURE,True
+PDGFRA|Alzheimers disease,PDGFRA,Alzheimers disease,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,-0.0973137354282818,0.11961479979726304,0.415897449222734,False,opengwas_cached,rs35597368,FAILURE,True
+PDGFRB|Alzheimers disease,PDGFRB,Alzheimers disease,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.00286464550011936,0.01706851277154452,0.8667153151589755,False,opengwas_cached,rs2304058,FAILURE,True
+ALDH5A1|Amyotrophic lateral sclerosis,ALDH5A1,Amyotrophic lateral sclerosis,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,-0.21151271753681394,0.14190093708165996,0.1360754665012431,False,opengwas_cached,rs2744583,FAILURE,True
+C5|Amyotrophic lateral sclerosis,C5,Amyotrophic lateral sclerosis,FAILURE,abundance_modulating,non_oncology,EpiGraphDB,clean,0.018681319,0.099450549,0.850997921,False,catalog,rs1035029,FAILURE,True
+IGF1R|Amyotrophic lateral sclerosis,IGF1R,Amyotrophic lateral sclerosis,FAILURE,mixed,non_oncology,UKB-PPP,clean,0.11892797319932999,0.2529313232830821,0.6382130803551802,False,opengwas_cached,rs9672558,FAILURE,True
+IMPA1|Amyotrophic lateral sclerosis,IMPA1,Amyotrophic lateral sclerosis,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,-0.08759124087591241,0.06995133819951338,0.21050649949921296,False,opengwas_cached,rs2400589,FAILURE,True
+KIT|Amyotrophic lateral sclerosis,KIT,Amyotrophic lateral sclerosis,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,-0.08810572687224669,0.33920704845814975,0.7950641353565948,False,opengwas_cached,rs218263,FAILURE,True
+PDGFRA|Amyotrophic lateral sclerosis,PDGFRA,Amyotrophic lateral sclerosis,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,-0.005575266092245312,0.08616320324379119,0.9484081791998022,False,opengwas_cached,rs35597368,FAILURE,True
+PDGFRB|Amyotrophic lateral sclerosis,PDGFRB,Amyotrophic lateral sclerosis,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.0004774409166865601,0.012771544521365481,0.9701794856493567,False,opengwas_cached,rs2304058,FAILURE,True
+SOD1|Amyotrophic lateral sclerosis,SOD1,Amyotrophic lateral sclerosis,SUCCESS,abundance_modulating,non_oncology,UKB-PPP,clean,0.4829157175398633,0.37813211845102507,0.20156396777455365,False,opengwas_cached,rs7282332,FAILURE,False
+IGF1R|Anorexia nervosa,IGF1R,Anorexia nervosa,FAILURE,mixed,non_oncology,UKB-PPP,clean,2.6951423785594635,1.4371859296482412,0.06075264923663132,False,opengwas_cached,rs9672558,FAILURE,True
+SOST|Anorexia nervosa,SOST,Anorexia nervosa,FAILURE,abundance_modulating,non_oncology,UKB-PPP,clean,0.814621409921671,1.3237597911227155,0.538300749018723,False,opengwas_cached,rs6416905,FAILURE,True
+TNFSF11|Anorexia nervosa,TNFSF11,Anorexia nervosa,FAILURE,abundance_modulating,non_oncology,UKB-PPP,clean,0.32769044740024184,0.5513905683192262,0.5523126518383663,False,opengwas_cached,rs2062305,FAILURE,True
+IMPA1|Autism spectrum disorder,IMPA1,Autism spectrum disorder,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,-0.17031630170316303,0.2858880778588808,0.5513458044421671,False,opengwas_cached,rs2400589,FAILURE,True
+ALDH5A1|Bipolar disorder,ALDH5A1,Bipolar disorder,SUCCESS,activity_blocking,non_oncology,UKB-PPP,clean,-0.11116465863453816,0.17938420348058903,0.5354543328600915,False,opengwas_cached,rs2744583,FAILURE,False
+CA2|Bipolar disorder,CA2,Bipolar disorder,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,-0.2391847826086957,0.1861413043478261,0.19880503786331127,False,opengwas_cached,rs2980370,FAILURE,True
+GRIK2|Bipolar disorder,GRIK2,Bipolar disorder,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,-0.5080801551389786,0.25791855203619907,0.048846988309768656,True,opengwas_cached,rs59321237,SUCCESS,False
+IMPA1|Bipolar disorder,IMPA1,Bipolar disorder,SUCCESS,activity_blocking,non_oncology,UKB-PPP,clean,0.006697080291970803,0.08819951338199514,0.9394739661773307,False,opengwas_cached,rs2400589,FAILURE,False
+ACE|Chronic kidney disease,ACE,Chronic kidney disease,SUCCESS,activity_blocking,non_oncology,EpiGraphDB,clean,0.006174957,0.025728988,0.81,False,catalog,rs4344,FAILURE,False
+CD80|Chronic kidney disease,CD80,Chronic kidney disease,FAILURE,abundance_modulating,non_oncology,UKB-PPP,overlap_flagged,0.0013009307692307692,0.0008387115384615385,0.12087620652176126,False,opengwas_cached,rs16829980,FAILURE,True
+DPP4|Chronic kidney disease,DPP4,Chronic kidney disease,FAILURE,activity_blocking,non_oncology,UKB-PPP,overlap_flagged,0.0016387465640461793,0.0007704068169323804,0.0334102416172945,True,opengwas_cached,rs13015258,SUCCESS,False
+EGLN1|Chronic kidney disease,EGLN1,Chronic kidney disease,SUCCESS,activity_blocking,non_oncology,UKB-PPP,overlap_flagged,-0.0017062901307966709,0.004305719381688466,0.6918951127669501,False,opengwas_cached,rs77466488,FAILURE,False
+ELN|Chronic kidney disease,ELN,Chronic kidney disease,FAILURE,abundance_modulating,non_oncology,UKB-PPP,overlap_flagged,0.0024002427745664742,0.002682115606936416,0.370837055023734,False,opengwas_cached,rs17855988,FAILURE,True
+MME|Chronic kidney disease,MME,Chronic kidney disease,FAILURE,activity_blocking,non_oncology,UKB-PPP,overlap_flagged,0.012096048387096775,0.008157661290322582,0.1381318491603525,False,opengwas_cached,rs61762319,FAILURE,True
+PDE5A|Chronic kidney disease,PDE5A,Chronic kidney disease,FAILURE,activity_blocking,non_oncology,EpiGraphDB,clean,0.1146496815,0.0477707006,0.0163950718,True,catalog,rs4834770,SUCCESS,False
+CD80|Crohns disease,CD80,Crohns disease,FAILURE,abundance_modulating,non_oncology,UKB-PPP,clean,0.1725773076923077,0.07308192307692307,0.01820496976876829,True,opengwas_cached,rs16829980,SUCCESS,False
+ICAM1|Crohns disease,ICAM1,Crohns disease,FAILURE,abundance_modulating,non_oncology,EpiGraphDB,clean,-0.0180050884,0.0105978554,0.0893310591,False,catalog,rs5498,FAILURE,True
+IL12B|Crohns disease,IL12B,Crohns disease,SUCCESS,abundance_modulating,non_oncology,EpiGraphDB,clean,0.440467499,0.041918227,7.95e-26,True,catalog,rs4921484,SUCCESS,True
+GSR|Glioma,GSR,Glioma,SUCCESS,activity_blocking,oncology,UKB-PPP,clean,-1.8735362997658078,0.9683840749414518,0.05302666012984195,False,opengwas_cached,rs8190982,FAILURE,False
+MAP2K1|Glioma,MAP2K1,Glioma,SUCCESS,activity_blocking,oncology,UKB-PPP,clean,3.5717647058823525,3.0447058823529405,0.2407530416739151,False,opengwas_cached,rs77428206,FAILURE,False
+VEGFA|Glioma,VEGFA,Glioma,FAILURE,abundance_modulating,oncology,EpiGraphDB,clean,-0.0363,0.0667,0.5862846644900066,False,opengwas_cached_epi,rs6921438,FAILURE,True
+ITGB7|Inflammatory bowel disease,ITGB7,Inflammatory bowel disease,FAILURE,abundance_modulating,non_oncology,UKB-PPP,clean,2.368195050946143,1.9374090247452693,0.22157468809591763,False,opengwas_cached,rs61754162,FAILURE,True
+TNF|Inflammatory bowel disease,TNF,Inflammatory bowel disease,FAILURE,abundance_modulating,non_oncology,UKB-PPP,clean,1.591442857142857,8.7,0.8548572854281296,False,opengwas_cached,rs4645843,FAILURE,True
+IL6R|Juvenile idiopathic arthritis,IL6R,Juvenile idiopathic arthritis,SUCCESS,abundance_modulating,non_oncology,EpiGraphDB,clean,-0.1277093122,0.0498764895,0.010451828,True,catalog,rs4129267,SUCCESS,True
+CD274|Lung cancer,CD274,Lung cancer,SUCCESS,abundance_modulating,oncology,EpiGraphDB,clean,0.02324159,0.064048387,0.716697891,False,catalog,rs1411262,FAILURE,False
+CLU|Lung cancer,CLU,Lung cancer,FAILURE,abundance_modulating,oncology,UKB-PPP,clean,-0.10021926605504586,0.1677471967380224,0.5502121392077123,False,opengwas_cached,rs553014,FAILURE,True
+EGFR|Lung cancer,EGFR,Lung cancer,SUCCESS,activity_blocking,oncology,UKB-PPP,clean,0.22497916666666667,0.16500992063492062,0.1727476222976233,False,opengwas_cached,rs10081281,FAILURE,False
+MAP2K1|Lung cancer,MAP2K1,Lung cancer,SUCCESS,activity_blocking,oncology,UKB-PPP,clean,0.059548000000000004,0.6472235294117646,0.9266938225147492,False,opengwas_cached,rs77428206,FAILURE,False
+MET|Lung cancer,MET,Lung cancer,FAILURE,activity_blocking,oncology,UKB-PPP,clean,0.12294617325483599,0.16213624894869638,0.44827784638622536,False,opengwas_cached,rs1858830,FAILURE,True
+MMP1|Lung cancer,MMP1,Lung cancer,FAILURE,abundance_modulating,oncology,EpiGraphDB,clean,0.00818938,0.01684,0.6267507747565773,False,opengwas_cached_epi,rs471994,FAILURE,True
+MMP12|Lung cancer,MMP12,Lung cancer,FAILURE,abundance_modulating,oncology,EpiGraphDB,clean,-0.012740529,0.033381692,0.702711971,False,catalog,rs28381684,FAILURE,True
+MMP3|Lung cancer,MMP3,Lung cancer,FAILURE,abundance_modulating,oncology,UKB-PPP,clean,-0.00222846458527493,0.037798229263746506,0.952986475902642,False,opengwas_cached,rs678815,FAILURE,True
+MMP7|Lung cancer,MMP7,Lung cancer,FAILURE,abundance_modulating,oncology,EpiGraphDB,clean,-0.067103888,0.055731178,0.228564961,False,catalog,rs11568819,FAILURE,True
+MMP9|Lung cancer,MMP9,Lung cancer,FAILURE,abundance_modulating,oncology,EpiGraphDB,clean,-0.022927565,0.063999357,0.720158627,False,catalog,rs2250889,FAILURE,True
+SERPINC1|Lung cancer,SERPINC1,Lung cancer,FAILURE,abundance_modulating,oncology,UKB-PPP,clean,0.19622356091030788,2.0800669344042837,0.9248428773234402,False,opengwas_cached,rs2227624,FAILURE,True
+TIGIT|Lung cancer,TIGIT,Lung cancer,FAILURE,abundance_modulating,oncology,UKB-PPP,clean,0.1183030794165316,0.3108427876823339,0.7035088806389249,False,opengwas_cached,rs6792290,FAILURE,True
+TOP2B|Lung cancer,TOP2B,Lung cancer,SUCCESS,activity_blocking,oncology,UKB-PPP,clean,0.008818221830985915,0.36422535211267604,0.980684387561724,False,opengwas_cached,rs3806631,FAILURE,False
+VEGFA|Lung cancer,VEGFA,Lung cancer,SUCCESS,abundance_modulating,oncology,EpiGraphDB,clean,0.019305856,0.025231383,0.444180735,False,catalog,rs6921438,FAILURE,False
+ACHE|Major depressive disorder,ACHE,Major depressive disorder,FAILURE,activity_blocking,non_oncology,EpiGraphDB,clean,-0.00404283,0.071380471,0.954833752,False,catalog,rs4727469,FAILURE,True
+ALDH5A1|Major depressive disorder,ALDH5A1,Major depressive disorder,SUCCESS,activity_blocking,non_oncology,UKB-PPP,clean,0.1178045515394913,0.05756358768406961,0.04070605961745189,True,opengwas_cached,rs2744583,SUCCESS,True
+IMPA1|Major depressive disorder,IMPA1,Major depressive disorder,SUCCESS,activity_blocking,non_oncology,UKB-PPP,clean,0.06386861313868614,0.02858880778588808,0.025480273288998198,True,opengwas_cached,rs2400589,SUCCESS,True
+ACHE|Multiple sclerosis,ACHE,Multiple sclerosis,FAILURE,activity_blocking,non_oncology,EpiGraphDB,clean,-0.066675513,0.05559719,0.23,False,catalog,rs4727469,FAILURE,True
+CACNA2D3|Multiple sclerosis,CACNA2D3,Multiple sclerosis,FAILURE,activity_blocking,non_oncology,EpiGraphDB,clean,-0.00975229,0.0215779,0.6512997247390879,False,opengwas_cached_epi,rs34084772,FAILURE,True
+CACNB3|Multiple sclerosis,CACNB3,Multiple sclerosis,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.08842023121387282,0.3108959537572254,0.7761003543049483,False,opengwas_cached,rs7975385,FAILURE,True
+IFNAR1|Multiple sclerosis,IFNAR1,Multiple sclerosis,SUCCESS,abundance_modulating,non_oncology,EpiGraphDB,clean,0.0705298,0.0253732,0.005440969243445021,True,opengwas_cached_epi,rs2257167,SUCCESS,True
+KIT|Multiple sclerosis,KIT,Multiple sclerosis,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.8321013215859031,0.5449801762114537,0.12679907293555553,False,opengwas_cached,rs218263,FAILURE,True
+PDGFRA|Multiple sclerosis,PDGFRA,Multiple sclerosis,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.08123568170299036,0.1378297009630005,0.5555985433344113,False,opengwas_cached,rs35597368,FAILURE,True
+PDGFRB|Multiple sclerosis,PDGFRB,Multiple sclerosis,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.013443781332060157,0.01979768441155407,0.4971009416852913,False,opengwas_cached,rs2304058,FAILURE,True
+SNAP25|Multiple sclerosis,SNAP25,Multiple sclerosis,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.13694992826398852,0.23781205164992827,0.564699921972322,False,opengwas_cached,rs362562,FAILURE,True
+ACE|Myocardial infarction,ACE,Myocardial infarction,SUCCESS,activity_blocking,non_oncology,EpiGraphDB,clean,0.020060377,0.017740787,0.258,False,catalog,rs4344,FAILURE,False
+C5|Myocardial infarction,C5,Myocardial infarction,FAILURE,abundance_modulating,non_oncology,EpiGraphDB,clean,-0.004580626,0.059361143,0.938491966,False,catalog,rs1035029,FAILURE,True
+CSF3R|Myocardial infarction,CSF3R,Myocardial infarction,FAILURE,abundance_modulating,non_oncology,UKB-PPP,clean,-0.048884918401800787,0.22948790095666852,0.8313133827181299,False,opengwas_cached,rs3917999,FAILURE,True
+DPP4|Myocardial infarction,DPP4,Myocardial infarction,SUCCESS,activity_blocking,non_oncology,UKB-PPP,clean,-0.033726498075865856,0.0612627817482133,0.5819615153639361,False,opengwas_cached,rs13015258,FAILURE,False
+F10|Myocardial infarction,F10,Myocardial infarction,FAILURE,activity_blocking,non_oncology,EpiGraphDB,clean,-0.000694588,0.0122894,0.9549281394236808,False,opengwas_cached_epi,rs547138,FAILURE,True
+F2|Myocardial infarction,F2,Myocardial infarction,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,1.1216681455190771,0.6385004436557231,0.0789651071618952,False,opengwas_cached,rs1799963,FAILURE,True
+F2R|Myocardial infarction,F2R,Myocardial infarction,SUCCESS,activity_blocking,non_oncology,UKB-PPP,clean,0.14762472924187728,0.20628339350180505,0.4742134239027782,False,opengwas_cached,rs11954573,FAILURE,False
+ITGAV|Myocardial infarction,ITGAV,Myocardial infarction,FAILURE,abundance_modulating,non_oncology,UKB-PPP,clean,0.6610977528089887,0.19187752808988767,0.0005701828282666185,True,opengwas_cached,rs2595391,SUCCESS,False
+MME|Myocardial infarction,MME,Myocardial infarction,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.7473084677419356,1.0272600806451613,0.46693356980892375,False,opengwas_cached,rs61762319,FAILURE,True
+NOS1|Myocardial infarction,NOS1,Myocardial infarction,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.021194555873925502,0.1036618911174785,0.8379952107903914,False,opengwas_cached,rs3844049,FAILURE,True
+NOS2|Myocardial infarction,NOS2,Myocardial infarction,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,0.08982854442344045,0.24585822306238186,0.7148372798387942,False,opengwas_cached,rs2297518,FAILURE,True
+PDE5A|Myocardial infarction,PDE5A,Myocardial infarction,FAILURE,activity_blocking,non_oncology,EpiGraphDB,clean,-0.0698710191,0.0324405733,0.0312546207,True,catalog,rs4834770,SUCCESS,False
+PLA2G2A|Myocardial infarction,PLA2G2A,Myocardial infarction,FAILURE,abundance_modulating,non_oncology,EpiGraphDB,clean,0.0090187849,0.0132926548,0.4974681391,False,catalog,rs11573156,FAILURE,True
+PLAT|Myocardial infarction,PLAT,Myocardial infarction,SUCCESS,abundance_modulating,non_oncology,EpiGraphDB,clean,-0.091929872,0.076501928,0.229492421,False,catalog,rs77346091,FAILURE,False
+PLAU|Myocardial infarction,PLAU,Myocardial infarction,SUCCESS,abundance_modulating,non_oncology,EpiGraphDB,clean,-0.0626336756,0.0463643505,0.1767269535,False,catalog,rs2227551,FAILURE,False
+PLG|Myocardial infarction,PLG,Myocardial infarction,SUCCESS,abundance_modulating,non_oncology,EpiGraphDB,clean,-0.0633544646,0.0336474599,0.0597152816,False,catalog,rs783150,FAILURE,False
+CSF2RB|Neuroblastoma,CSF2RB,Neuroblastoma,SUCCESS,abundance_modulating,oncology,EpiGraphDB,clean,-0.241055701,0.1374751117,0.0795248368,False,catalog,rs1534881,FAILURE,False
+ANGPT1|Ovarian cancer,ANGPT1,Ovarian cancer,FAILURE,abundance_modulating,oncology,UKB-PPP,clean,0.035229215229215224,0.11600621600621601,0.7613687570097504,False,opengwas_cached,rs6993770,FAILURE,True
+ANGPT2|Ovarian cancer,ANGPT2,Ovarian cancer,FAILURE,abundance_modulating,oncology,UKB-PPP,clean,-0.07439786585365854,0.10724085365853657,0.48784179000140704,False,opengwas_cached,rs1968586,FAILURE,True
+CD274|Ovarian cancer,CD274,Ovarian cancer,FAILURE,abundance_modulating,oncology,EpiGraphDB,clean,0.091451613,0.048387097,0.05875796,False,catalog,rs1411262,FAILURE,True
+CSF3R|Ovarian cancer,CSF3R,Ovarian cancer,FAILURE,abundance_modulating,oncology,UKB-PPP,clean,-0.6409679234665167,0.34265616207090605,0.06140244453879405,False,opengwas_cached,rs3917999,FAILURE,True
+FGFR2|Ovarian cancer,FGFR2,Ovarian cancer,FAILURE,activity_blocking,oncology,UKB-PPP,clean,-0.0076324404761904776,0.19895833333333335,0.9693990546950079,False,opengwas_cached,rs3096763,FAILURE,True
+FGFR3|Ovarian cancer,FGFR3,Ovarian cancer,FAILURE,activity_blocking,oncology,EpiGraphDB,clean,0.04099435,0.084858757,0.629032392,False,catalog,rs2403274,FAILURE,True
+FGFR4|Ovarian cancer,FGFR4,Ovarian cancer,FAILURE,activity_blocking,oncology,UKB-PPP,clean,-0.009813031952002232,0.020175805776475514,0.626700454500684,False,opengwas_cached,rs351855,FAILURE,True
+FLT4|Ovarian cancer,FLT4,Ovarian cancer,FAILURE,activity_blocking,oncology,EpiGraphDB,clean,0.0504132231,0.0692011019,0.4663056199,False,catalog,rs34221241,FAILURE,True
+FOLR1|Ovarian cancer,FOLR1,Ovarian cancer,SUCCESS,abundance_modulating,oncology,UKB-PPP,clean,0.009867586206896553,0.37296551724137933,0.9788927503786504,False,opengwas_cached,rs2071010,FAILURE,False
+GAS6|Ovarian cancer,GAS6,Ovarian cancer,FAILURE,abundance_modulating,oncology,UKB-PPP,clean,0.020347372991749893,0.062483716891011724,0.7446946203253981,False,opengwas_cached,rs6602909,FAILURE,True
+KDR|Ovarian cancer,KDR,Ovarian cancer,FAILURE,activity_blocking,oncology,EpiGraphDB,clean,0.0380452693,0.0348278553,0.2746659,False,catalog,rs34231037,FAILURE,True
+KIT|Ovarian cancer,KIT,Ovarian cancer,FAILURE,activity_blocking,oncology,UKB-PPP,clean,-0.7266519823788545,0.44008810572687224,0.09870771480827967,False,opengwas_cached,rs218263,FAILURE,True
+PARP1|Ovarian cancer,PARP1,Ovarian cancer,SUCCESS,activity_blocking,oncology,UKB-PPP,clean,-0.23671328671328673,0.20442890442890443,0.24689474902201525,False,opengwas_cached,rs1433574,FAILURE,False
+PDGFRA|Ovarian cancer,PDGFRA,Ovarian cancer,FAILURE,activity_blocking,oncology,UKB-PPP,clean,0.20329447541814497,0.11231626964014191,0.07029298801192736,False,opengwas_cached,rs35597368,FAILURE,True
+PDGFRB|Ovarian cancer,PDGFRB,Ovarian cancer,FAILURE,activity_blocking,oncology,UKB-PPP,clean,-0.007840773454285032,0.01617331105275722,0.6278203169615284,False,opengwas_cached,rs2304058,FAILURE,True
+TOP2B|Ovarian cancer,TOP2B,Ovarian cancer,FAILURE,activity_blocking,oncology,UKB-PPP,clean,-0.08860915492957747,0.29436619718309853,0.7634017246387149,False,opengwas_cached,rs3806631,FAILURE,True
+VEGFA|Ovarian cancer,VEGFA,Ovarian cancer,SUCCESS,abundance_modulating,oncology,EpiGraphDB,clean,-0.0173145379,0.0201623238,0.3904745614,False,catalog,rs6921438,FAILURE,False
+CSF2RB|Pancreatic cancer,CSF2RB,Pancreatic cancer,FAILURE,abundance_modulating,oncology,EpiGraphDB,clean,0.0620349898,0.1516105025,0.6824123895,False,catalog,rs1534881,FAILURE,True
+EGFR|Pancreatic cancer,EGFR,Pancreatic cancer,FAILURE,activity_blocking,oncology,UKB-PPP,clean,-0.10019841269841269,0.5912698412698413,0.8654324045069416,False,opengwas_cached,rs10081281,FAILURE,True
+FGFR3|Pancreatic cancer,FGFR3,Pancreatic cancer,FAILURE,activity_blocking,oncology,EpiGraphDB,clean,0.0349,0.0654,0.5935912207130132,False,opengwas_cached_epi,rs2403274,FAILURE,True
+FLT3|Pancreatic cancer,FLT3,Pancreatic cancer,FAILURE,activity_blocking,oncology,UKB-PPP,clean,0.7296898079763664,0.8818316100443132,0.4079703300375501,False,opengwas_cached,rs9554228,FAILURE,True
+FLT4|Pancreatic cancer,FLT4,Pancreatic cancer,FAILURE,activity_blocking,oncology,EpiGraphDB,clean,0.067,0.0886,0.44952469190635147,False,opengwas_cached_epi,rs34221241,FAILURE,True
+KDR|Pancreatic cancer,KDR,Pancreatic cancer,FAILURE,activity_blocking,oncology,EpiGraphDB,clean,-0.0257,0.1554,0.8686451579620786,False,opengwas_cached_epi,rs34231037,FAILURE,True
+KIT|Pancreatic cancer,KIT,Pancreatic cancer,FAILURE,activity_blocking,oncology,UKB-PPP,clean,-1.5154185022026432,1.8017621145374447,0.4003054743668246,False,opengwas_cached,rs218263,FAILURE,True
+PDGFRA|Pancreatic cancer,PDGFRA,Pancreatic cancer,FAILURE,activity_blocking,oncology,UKB-PPP,clean,0.2321338063862139,0.45413076533198177,0.6092385250408092,False,opengwas_cached,rs35597368,FAILURE,True
+PDGFRB|Pancreatic cancer,PDGFRB,Pancreatic cancer,FAILURE,activity_blocking,oncology,UKB-PPP,clean,-0.05586058725232753,0.0712580568154691,0.4330872894230482,False,opengwas_cached,rs2304058,FAILURE,True
+RET|Pancreatic cancer,RET,Pancreatic cancer,FAILURE,activity_blocking,oncology,EpiGraphDB,clean,0.1359,0.073,0.06265331009448563,False,opengwas_cached_epi,rs2795507,FAILURE,True
+SERPINC1|Pancreatic cancer,SERPINC1,Pancreatic cancer,FAILURE,abundance_modulating,oncology,UKB-PPP,clean,-20.499330655957163,8.18607764390897,0.012273901846399758,True,opengwas_cached,rs2227624,SUCCESS,False
+VEGFA|Pancreatic cancer,VEGFA,Pancreatic cancer,FAILURE,abundance_modulating,oncology,EpiGraphDB,clean,0.0499917088,0.0684446952,0.4651483658,False,catalog,rs6921438,FAILURE,True
+ACHE|Parkinsons disease,ACHE,Parkinsons disease,SUCCESS,activity_blocking,non_oncology,EpiGraphDB,clean,-0.040163538,0.138165689,0.771287567,False,catalog,rs4727469,FAILURE,False
+BCHE|Parkinsons disease,BCHE,Parkinsons disease,SUCCESS,activity_blocking,non_oncology,UKB-PPP,clean,0.1033688453786352,0.06075439101641233,0.08886381041928483,False,opengwas_cached,rs73165060,FAILURE,False
+COMT|Parkinsons disease,COMT,Parkinsons disease,SUCCESS,activity_blocking,non_oncology,UKB-PPP,clean,0.09673481843149222,0.052792187976808055,0.06689632309935521,False,opengwas_cached,rs4680,FAILURE,False
+DDC|Parkinsons disease,DDC,Parkinsons disease,SUCCESS,activity_blocking,non_oncology,UKB-PPP,clean,0.4670510708401977,0.2862438220757826,0.10275225306059392,False,opengwas_cached,rs73695512,FAILURE,False
+CD80|Rheumatoid arthritis,CD80,Rheumatoid arthritis,SUCCESS,abundance_modulating,non_oncology,UKB-PPP,clean,0.0,0.06836730769230769,1.0,False,opengwas_cached,rs16829980,FAILURE,False
+CSF2|Rheumatoid arthritis,CSF2,Rheumatoid arthritis,FAILURE,abundance_modulating,non_oncology,UKB-PPP,clean,0.3845074962518741,0.12081784107946027,0.0014598983168658966,True,opengwas_cached,rs25882,SUCCESS,False
+IL12B|Rheumatoid arthritis,IL12B,Rheumatoid arthritis,FAILURE,abundance_modulating,non_oncology,EpiGraphDB,clean,-0.03186145,0.04853998,0.511569348,False,catalog,rs4921484,FAILURE,True
+IL1R1|Rheumatoid arthritis,IL1R1,Rheumatoid arthritis,SUCCESS,abundance_modulating,non_oncology,EpiGraphDB,clean,-0.061658502,0.078661943,0.433133066,False,catalog,rs7588201,FAILURE,False
+IL6R|Rheumatoid arthritis,IL6R,Rheumatoid arthritis,SUCCESS,abundance_modulating,non_oncology,EpiGraphDB,clean,-0.0747951282,0.0123723165,1.4907520833850402e-09,True,catalog,rs4129267,SUCCESS,True
+IL6ST|Rheumatoid arthritis,IL6ST,Rheumatoid arthritis,FAILURE,abundance_modulating,non_oncology,EpiGraphDB,clean,0.0,0.0733776357,1.0,False,catalog,rs11574765,FAILURE,True
+PLA2G2A|Rheumatoid arthritis,PLA2G2A,Rheumatoid arthritis,FAILURE,abundance_modulating,non_oncology,EpiGraphDB,clean,-0.0198026,0.0250301,0.4288556165976598,False,opengwas_cached_epi,rs11573156,FAILURE,True
+ACHE|Schizophrenia,ACHE,Schizophrenia,FAILURE,activity_blocking,non_oncology,EpiGraphDB,clean,0.055234694,0.036026936,0.125238923,False,catalog,rs4727469,FAILURE,True
+ALDH5A1|Schizophrenia,ALDH5A1,Schizophrenia,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,-0.17801874163319947,0.11512717536813923,0.1220371845534379,False,opengwas_cached,rs2744583,FAILURE,True
+IMPA1|Schizophrenia,IMPA1,Schizophrenia,FAILURE,activity_blocking,non_oncology,UKB-PPP,clean,-0.00669470802919708,0.05656934306569343,0.9057941752617314,False,opengwas_cached,rs2400589,FAILURE,True
+CD22|Systemic lupus erythematosus,CD22,Systemic lupus erythematosus,FAILURE,abundance_modulating,non_oncology,UKB-PPP,clean,0.2414486921529175,0.18108651911468812,0.18242243945173564,False,opengwas_cached,rs10411704,FAILURE,True
+IFNAR1|Systemic lupus erythematosus,IFNAR1,Systemic lupus erythematosus,SUCCESS,abundance_modulating,non_oncology,EpiGraphDB,clean,0.014,0.042,0.7388826803635273,False,opengwas_cached_epi,rs2257167,FAILURE,False
+IL12B|Systemic lupus erythematosus,IL12B,Systemic lupus erythematosus,FAILURE,abundance_modulating,non_oncology,EpiGraphDB,clean,0.027,0.03,0.36812025069351895,False,opengwas_cached_epi,rs4921484,FAILURE,True
+EPHB2|Thyroid cancer,EPHB2,Thyroid cancer,FAILURE,activity_blocking,oncology,EpiGraphDB,clean,-0.0203048,0.1781,0.9092315620975554,False,opengwas_cached_epi,rs6687487,FAILURE,True
+CD80|Ulcerative colitis,CD80,Ulcerative colitis,FAILURE,abundance_modulating,non_oncology,UKB-PPP,clean,-0.017766038461538458,0.0769553846153846,0.8174223717225431,False,opengwas_cached,rs16829980,FAILURE,True
+IL12B|Ulcerative colitis,IL12B,Ulcerative colitis,SUCCESS,abundance_modulating,non_oncology,EpiGraphDB,clean,0.365497919,0.043523956,4.56e-17,True,catalog,rs4921484,SUCCESS,True
+MMP9|Ulcerative colitis,MMP9,Ulcerative colitis,FAILURE,abundance_modulating,non_oncology,EpiGraphDB,clean,0.0004936441,0.0483216162,0.9918491103,False,catalog,rs2250889,FAILURE,True

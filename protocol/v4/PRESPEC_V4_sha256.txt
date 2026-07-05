@@ -1,0 +1,17 @@
+SHA-256 hashes for V4 pre-registration artifacts
+Generated: 2026-07-05
+All files hashed BEFORE any classification or outcome analysis.
+Re-hashed after CKD mapping addition and frozen:true flag set.
+No outcomes touched between original hash and re-hash.
+
+PRESPEC_V4.md:
+c4064aca7ccea071b833ef34a9894abedcf5e89a1c1cec8708893153a115ee37
+
+canonical_disease_mapping.json:
+41bd3306bbacfa864f3921a00352d85b71086d225fa0fb3844dedf1765cb80ad
+
+query_genebass_lof_v2.py:
+51e19e7f7b824b0dd2e05c6428566bc46ec5ee1e16c4df72558c0fd544902542
+
+genebass_lof_results_v2.json:
+7b1ced9e546757fdc5a7311d20a3227c5a9603916dd536c2e85f8230b48ef280

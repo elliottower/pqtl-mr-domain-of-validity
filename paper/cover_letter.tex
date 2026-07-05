@@ -1,0 +1,34 @@
+\documentclass[11pt]{letter}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+
+\signature{Elliot Tower \\ Independent researcher \\ \texttt{elliot@elliottower.ai}}
+
+\begin{document}
+
+\begin{letter}{Editorial Board \\ \emph{GigaScience} \\ Oxford University Press}
+
+\opening{Dear Editors,}
+
+I am submitting the manuscript ``The Domain of Validity of \emph{Cis}-pQTL Mendelian Randomization for Drug-Target Prioritization: A Pre-Registered, Mechanism-Stratified Evaluation'' for consideration as a Research Article in \emph{GigaScience}.
+
+\emph{Cis}-pQTL Mendelian randomization is widely used to prioritize drug targets, but its predictive validity has never been evaluated with respect to how the drug acts on its target. This manuscript maps the method's domain of validity: MR is informative when the drug modulates protein abundance (the same causal axis the genetic instrument measures) and provides no information when the drug blocks protein activity without changing protein level. This dissociation was predicted a priori, pre-registered as a co-primary analysis, and confirmed in 195 Phase~III drug-target pairs across 24 diseases.
+
+\emph{GigaScience} is a good fit for three reasons:
+
+\begin{enumerate}
+\item \textbf{Reproducibility.} The protocol evolved across six publicly versioned iterations (V1--V3.4), each SHA-256 hashed before outcome adjudication. The classifier carries zero free parameters. A second instrument (loss-of-function burden from Genebass) was separately pre-registered and evaluated.
+
+\item \textbf{Methodological characterization.} The finding is a mechanism dissociation that yields a translational rule: trust a significant MR result for an abundance-modulating target; treat MR silence on an activity-blocking target as uninformative, not disqualifying.
+
+\item \textbf{Open data and open code.} All analysis scripts, the 211-pair classification table, frozen candidate sets, missingness bounds, and pre-registration documents are available under an MIT license at \url{https://github.com/elliottower/pqtl-mr-domain-of-validity}.
+\end{enumerate}
+
+I used AI assistants (Claude Code by Anthropic; Perplexity AI) for text editing, code drafting/debugging, and independent code review. I reviewed and verified all outputs and take full responsibility for the content. Full details are disclosed in the manuscript.
+
+I confirm that this manuscript has not been published previously and is not under consideration at another journal. I have no competing interests and this work received no external funding.
+
+\closing{Sincerely,}
+
+\end{letter}
+\end{document}

@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.DS_Store
+*.aux
+*.log
+*.out
+*.bbl
+*.blg
+*.synctex.gz
+.env
+.venv/
+venv/
+
+# Build artifacts (PDFs are tracked intentionally)
+paper/cover_letter.aux
+paper/cover_letter.log
+paper/cover_letter.out

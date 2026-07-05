@@ -1,0 +1,146 @@
+{
+  "_meta": {
+    "description": "Canonical one-phenocode-per-disease mapping for Genebass LoF burden.",
+    "selection_rule": "Best-powered phenotype per disease, chosen by scientific relevance and expected case count. NEVER selected by p-value.",
+    "frozen": true,
+    "notes": "Must be frozen (SHA-256 hashed) before any classification step."
+  },
+  "Alzheimers disease": {
+    "phenocode": "Alzheimers_custom1",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Primary Alzheimer's phenotype; custom2 likely stricter definition with fewer cases"
+  },
+  "Amyotrophic lateral sclerosis": {
+    "phenocode": "ALS_custom",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Only available phenotype"
+  },
+  "Anorexia nervosa": {
+    "phenocode": null,
+    "trait_type": null,
+    "coding": null,
+    "rationale": "No matching phenotype in Genebass. Psychiatric eating disorder with very low UKB prevalence. Structural missingness."
+  },
+  "Autism spectrum disorder": {
+    "phenocode": null,
+    "trait_type": null,
+    "coding": null,
+    "rationale": "No matching phenotype in Genebass. Adult cohort underascertains childhood-diagnosed ASD. Structural missingness."
+  },
+  "Bipolar disorder": {
+    "phenocode": "Bipolar_disorder_custom",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Only available phenotype"
+  },
+  "Chronic kidney disease": {
+    "phenocode": "30700",
+    "trait_type": "continuous",
+    "coding": "",
+    "rationale": "UKB field 30700 = serum creatinine, the standard substrate for eGFR and CKD staging. Continuous biomarker is better-powered than binary ICD code for LoF burden testing. Higher creatinine (positive beta) = impaired renal function = disease risk."
+  },
+  "Crohns disease": {
+    "phenocode": "CrohnsDisease_custom",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Purpose-built Crohn's phenotype, likely higher case count than ICD K50 subcode 41210|K508"
+  },
+  "Glioma": {
+    "phenocode": "C71",
+    "trait_type": "icd10",
+    "coding": "",
+    "rationale": "ICD-10 C71 = brain cancer, broadest glioma definition. Custom 41200/41210 codes are histological subtypes with fewer cases."
+  },
+  "Inflammatory bowel disease": {
+    "phenocode": "IBD_custom1",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Composite IBD phenotype, likely largest case count. IBD_custom2 is alternative definition."
+  },
+  "Juvenile idiopathic arthritis": {
+    "phenocode": null,
+    "trait_type": null,
+    "coding": null,
+    "rationale": "Pediatric disease absent from adult UKB exome cohort. Structural missingness."
+  },
+  "Lung cancer": {
+    "phenocode": "LungCancer_custom",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Purpose-built lung cancer phenotype, likely higher N than ICD C34. FH_Lung_cancer is family history, not case status."
+  },
+  "Major depressive disorder": {
+    "phenocode": "Depression_custom",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Purpose-built depression phenotype with highest expected N. FH_ is family history. ICD F32x subcodes have fewer cases."
+  },
+  "Multiple sclerosis": {
+    "phenocode": "Multiple_sclerosis_custom",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Full-name phenotype. MS_custom also exists but may be less specific."
+  },
+  "Myocardial infarction": {
+    "phenocode": "CAD_custom",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "CAD is the broader phenotype encompassing MI. Highest case count. HCadjBMI/WCadjBMI are anthropometric traits (false positive from substring matching), excluded."
+  },
+  "Neuroblastoma": {
+    "phenocode": null,
+    "trait_type": null,
+    "coding": null,
+    "rationale": "Pediatric cancer absent from adult UKB exome cohort. Structural missingness."
+  },
+  "Ovarian cancer": {
+    "phenocode": "C56",
+    "trait_type": "icd10",
+    "coding": "",
+    "rationale": "ICD-10 C56, only available phenotype"
+  },
+  "Pancreatic cancer": {
+    "phenocode": "C25",
+    "trait_type": "icd10",
+    "coding": "",
+    "rationale": "ICD-10 C25 = pancreatic cancer, broadest definition. 41200 subcodes (C253, C254) are histological subtypes."
+  },
+  "Parkinsons disease": {
+    "phenocode": "Parkinsons_custom",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Purpose-built Parkinson's phenotype. FH_ is family history, excluded."
+  },
+  "Rheumatoid arthritis": {
+    "phenocode": "RA_custom",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Only available phenotype"
+  },
+  "Schizophrenia": {
+    "phenocode": "Schizophrenia_custom",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Purpose-built phenotype with higher expected N than ICD F20 subcode"
+  },
+  "Systemic lupus erythematosus": {
+    "phenocode": "Lupus_custom",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Purpose-built lupus phenotype. SLE_custom also exists. sleep_duration was a false positive from 'sle' substring matching, excluded."
+  },
+  "Thyroid cancer": {
+    "phenocode": "C73",
+    "trait_type": "icd10",
+    "coding": "",
+    "rationale": "ICD-10 C73 = thyroid cancer. Thyroid_custom may include non-cancer thyroid conditions, so ICD-10 is more specific."
+  },
+  "Ulcerative colitis": {
+    "phenocode": "UlcerativeColitis_custom",
+    "trait_type": "categorical",
+    "coding": "",
+    "rationale": "Purpose-built UC phenotype, highest expected N. ICD K51 subcodes have fewer cases."
+  }
+}
