@@ -1,0 +1,26 @@
+{
+  "title": "The Domain of Validity of Cis-pQTL Mendelian Randomization for Drug-Target Prioritization",
+  "upload_type": "software",
+  "description": "Pre-registered mechanism-stratified evaluation of cis-pQTL MR for drug-target prioritization against 195 Phase III drug-target pairs across 24 diseases.",
+  "creators": [
+    {
+      "name": "Tower, Elliot",
+      "orcid": "0000-0001-7004-8884"
+    }
+  ],
+  "license": "MIT",
+  "keywords": [
+    "Mendelian randomization",
+    "pQTL",
+    "drug target",
+    "domain of validity",
+    "pharmacology"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/elliottower/pqtl-mr-domain-of-validity",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}
