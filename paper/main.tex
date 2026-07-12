@@ -10,6 +10,8 @@
 \usepackage{pdflscape}
 \usepackage{multirow}
 \usepackage[affil-it]{authblk}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
 
 \renewcommand{\arraystretch}{1.3}
 
@@ -35,9 +37,58 @@ We evaluated a pre-registered, frozen, zero-parameter MR classifier against 195 
 \section{Introduction}
 \label{sec:intro}
 
-Drug development is dominated by failure. Roughly 90\% of compounds entering clinical trials never reach approval, and the single largest determinant of success is target selection rather than chemistry or trial execution \cite{nelson2015support, king2019greater}. Human genetics supplies a prior: targets with genetic association to the indication have approximately twice the historical approval rate \cite{nelson2015support, king2019greater, minikel2024refining}. Among genetic approaches, Mendelian randomization (MR) using a \emph{cis}-acting protein quantitative trait locus (pQTL) as a natural randomization of lifelong protein exposure estimates the causal effect of perturbing a specific protein on disease risk, conceptually mimicking a randomized trial of the drug's target \cite{gill2021mendelian}.
+Drug development is dominated by failure. Roughly 90\% of compounds entering clinical trials never reach approval, and the single largest determinant of success is target selection rather than chemistry or trial execution \cite{nelson2015support, king2019greater}. Human genetics supplies a prior: targets with genetic association to the indication have approximately twice the historical approval rate \cite{nelson2015support, king2019greater, minikel2024refining}. Among genetic approaches, Mendelian randomization (MR) using a \emph{cis}-acting protein quantitative trait locus (pQTL)---a genetic variant near a gene that changes how much of that gene's protein circulates in blood---as a natural randomization of lifelong protein exposure estimates the causal effect of perturbing a specific protein on disease risk, conceptually mimicking a randomized trial of the drug's target \cite{gill2021mendelian}.
 
 The ${\sim}2\times$ genetic lift documented by prior work treats all drug mechanisms as interchangeable. A \emph{cis}-pQTL, however, instruments a specific causal axis: lifelong variation in circulating protein \emph{abundance}. Drugs that modulate protein abundance---biologics that deplete a circulating target, antisense oligonucleotides that reduce translation---operate on this same axis. Drugs that block enzymatic \emph{activity} or antagonize a receptor without changing the target protein's measured level operate on a different axis entirely. For these activity-blocking drugs, a pQTL-based MR estimate answers ``what happens with less of this protein?'' when the drug asks ``what happens when this protein's function is blocked?'' The method should therefore have a \emph{mechanism-dependent domain of validity}, performing well where instrument and drug share a causal axis and providing no information where they do not.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+    every node/.style={font=\small},
+    box/.style={draw, rounded corners, minimum width=1.8cm, minimum height=0.7cm, align=center},
+    arr/.style={-{Stealth[length=2.5mm]}, thick},
+]
+
+\node[font=\normalsize\bfseries] at (2.5, 1.4) {(A) Abundance-modulating drug};
+
+\node[box] (snpA) at (0, 0) {\emph{cis}-pQTL};
+\node[box] (lvlA) at (3.6, 0) {Protein\\level};
+\node[box] (funA) at (3.6, -2.4) {Protein\\function};
+\node[box] (disA) at (6.4, -1.2) {Disease};
+\node[box] (drugA) at (0, -2.4) {Drug};
+
+\draw[arr] (snpA) -- node[above, font=\scriptsize, midway] {measures} (lvlA);
+\draw[arr] (lvlA) -- (funA);
+\draw[arr] (funA) -- (disA);
+\draw[arr] (drugA) -- node[above, font=\scriptsize, midway, sloped] {lowers level} (lvlA);
+
+\node[font=\scriptsize, green!50!black] at (3, -3.8) {Both act on protein level};
+\node[font=\scriptsize, green!50!black] at (3, -4.2) {$\Rightarrow$ MR is informative};
+
+\begin{scope}[xshift=8cm]
+
+\node[font=\normalsize\bfseries] at (3, 1.4) {(B) Activity-blocking drug};
+
+\node[box] (snpB) at (0, 0) {\emph{cis}-pQTL};
+\node[box] (lvlB) at (3.6, 0) {Protein\\level};
+\node[box] (funB) at (3.6, -2.4) {Protein\\function};
+\node[box] (disB) at (6.4, -1.2) {Disease};
+\node[box] (drugB) at (0, -2.4) {Drug};
+
+\draw[arr] (snpB) -- node[above, font=\scriptsize, midway] {measures} (lvlB);
+\draw[arr] (lvlB) -- (funB);
+\draw[arr] (funB) -- (disB);
+\draw[arr] (drugB) -- node[above, font=\scriptsize, midway, sloped] {blocks} (funB);
+
+\node[font=\scriptsize, red!70!black] at (3, -3.8) {pQTL acts on level; drug acts on function};
+\node[font=\scriptsize, red!70!black] at (3, -4.2) {$\Rightarrow$ MR is uninformative};
+
+\end{scope}
+
+\end{tikzpicture}
+\caption{Causal structure of \emph{cis}-pQTL Mendelian randomization under two drug mechanisms. Both panels share the same causal chain: protein level determines protein function, which determines disease risk. (A)~An abundance-modulating drug reduces protein level---the same node the genetic instrument acts on---so MR estimates the drug-relevant effect. (B)~An activity-blocking drug blocks protein function directly (the protein is still present at normal levels but cannot act). The genetic instrument still measures protein level, so MR answers ``what happens with less protein?'' when the drug asks ``what happens when the protein is blocked?''---a structural mismatch independent of sample size.}
+\label{fig:dag}
+\end{figure}
 
 We test this prediction in a pre-registered, outcome-blind evaluation of a frozen, zero-parameter MR classifier against 195 Phase~III drug-target pairs across 24 diseases. The evaluation has three properties that distinguish it from prior retrospective analyses. First, the evaluable set is the mechanical intersection of an independent pQTL catalog and an independent drug database, neither of which references clinical outcomes, eliminating the possibility of tuning inclusion criteria to the answer. Second, the classifier ($p < 0.05 \rightarrow$ predict SUCCESS) carries zero free parameters, removing degrees of freedom that retrospective analyses retain. Third, the protocol evolved across six publicly versioned iterations (V1--V3.4), each SHA-256 hashed before execution with a documented deviation log.
 
@@ -59,13 +110,13 @@ Genetic instruments were drawn from two sources: the published EpiGraphDB \emph{
 For each disease, a non-UKB outcome GWAS was selected to avoid sample overlap with UKB-PPP instruments. Sources included FinnGen R10, CARDIoGRAMplusC4D, IMSGC, PGC, IIBDGC, ILCCO/TRICL, and disease-specific consortia (full mapping in Supplementary~S1). Seven chronic kidney disease pairs used a UKB-derived outcome GWAS (no non-UKB alternative with adequate $N$) and were flagged for sensitivity analysis. Two diseases (juvenile idiopathic arthritis, neuroblastoma) had no GWAS available on OpenGWAS. MR estimates were single-SNP Wald ratios: $\hat{\beta} = \beta_{\text{outcome}} / \beta_{\text{exposure}}$, $\text{SE} = |\text{SE}_{\text{outcome}} / \beta_{\text{exposure}}|$.
 
 \paragraph{Pre-registration protocol.}
-The protocol evolved across six publicly versioned iterations (V1--V3.4), each SHA-256 hashed before execution, with all amendments timestamped and justified in the deviation log (Supplementary~S1). V3.4 expanded V3.3 ($n = 50$) by adding UKB-PPP instruments and broadening the disease universe, motivated solely by insufficient power at V3.3 (the V3.3 BA~CI included $0.50$). The candidate universe was frozen (SHA-256: \texttt{c428c733aa66cbdb45ae4761424871f4dfa93e17...}) before outcome adjudication.
+The protocol evolved across six publicly versioned iterations (V1--V3.4), each SHA-256 hashed before execution, with all amendments timestamped and justified in the deviation log (Supplementary~S1). V3.4 expanded V3.3 ($n = 50$) by adding UKB-PPP instruments and broadening the disease universe, motivated solely by insufficient power at V3.3 (the V3.3 BA~CI included $0.50$). The candidate universe was frozen (SHA-256: \texttt{c428c733aa66cb\-db45ae4761\-424871f4\-dfa93e17\allowbreak...}) before outcome adjudication.
 
 \paragraph{Outcome adjudication.}
 Outcome labels were adjudicated independently against FDA/EMA records and ClinicalTrials.gov. SUCCESS denotes regulatory approval or a met Phase~III primary endpoint; FAILURE denotes a failed primary endpoint or discontinuation. A TARGET\_MISMATCH exclusion rule removed pairs where the drug acts on a different protein than the pQTL target. To avoid asymmetric scrutiny, the mismatch audit was applied to all pairs.
 
 \paragraph{Mechanism classification.}
-Each pair was classified by drug mechanism of action into one of three strata: \emph{abundance-modulating} (the drug reduces circulating protein level or blocks a soluble ligand, matching the pQTL perturbation), \emph{activity-blocking} (the drug inhibits enzymatic activity or blocks a receptor without changing the target protein's measured circulating level), or \emph{mixed} (both mechanisms apply). Classification was determined by the drug's pharmacological action, not the MR result. The mixed stratum ($n = 3$) was too small for standalone analysis and was pooled only.
+Each pair was classified by drug mechanism of action into one of three strata: \emph{abundance-modulating} (the drug reduces circulating protein level or blocks a soluble ligand, matching the pQTL perturbation), \emph{activity-blocking} (the drug inhibits enzymatic activity or blocks a receptor without changing the target protein's measured circulating level), or \emph{mixed} (both mechanisms apply). Classification was determined by the drug's pharmacological action, not the MR result. The boundary is not always sharp: some receptor antagonists can indirectly perturb measured protein levels through feedback upregulation or receptor internalization, and tocilizumab (anti-IL6R) straddles both categories because it targets a soluble receptor-ligand axis. These edge cases were classified by primary pharmacological mechanism. The mixed stratum ($n = 3$) was too small for standalone analysis and was pooled only.
 
 \paragraph{Classifier.}
 The classifier carries zero free parameters: MR $p < 0.05 \rightarrow$ predict SUCCESS; MR $p \geq 0.05 \rightarrow$ predict FAILURE. The threshold $p < 0.05$ is the field-standard MR significance criterion and was not optimized on these data.
@@ -230,7 +281,7 @@ The classifier consists of a single threshold ($p < 0.05$) applied to published 
 
 \section*{Data availability}
 
-All data and pre-registration documents are publicly available at \url{https://github.com/elliottower/pqtl-mr-domain-of-validity}. The repository contains the full per-pair classification table (all 211 gene--disease pairs including exclusions), all six pre-registration protocol versions (V1--V3.4) with SHA-256 hashes and the deviation log, and V4 loss-of-function burden results from Genebass. A DOI-versioned snapshot is archived on Zenodo. This study uses only publicly available summary-level data from EpiGraphDB, UKB-PPP, Open Targets, FinnGen R10, CARDIoGRAMplusC4D, IMSGC, PGC, IIBDGC, ILCCO/TRICL, and Genebass. No individual-level data were used.
+All data and pre-registration documents are publicly available at \url{https://github.com/elliottower/pqtl-mr-domain-of-validity}. The repository contains the full per-pair classification table (all 211 gene--disease pairs including exclusions), all six pre-registration protocol versions (V1--V3.4) with SHA-256 hashes and the deviation log, and V4 loss-of-function burden results from Genebass. A DOI-versioned snapshot is archived on Zenodo (\url{https://zenodo.org/records/21207429}). This study uses only publicly available summary-level data from EpiGraphDB, UKB-PPP, Open Targets, FinnGen R10, CARDIoGRAMplusC4D, IMSGC, PGC, IIBDGC, ILCCO/TRICL, and Genebass. No individual-level data were used.
 
 \section*{Declarations}
 
@@ -247,7 +298,7 @@ None. This work was conducted independently.
 E.T. conceived the study, designed and pre-registered the protocol, collected and adjudicated data, wrote the classifier code, performed all analyses, and wrote the manuscript.
 
 \paragraph{Acknowledgements.}
-The author used Claude Code (Anthropic) to assist with drafting and editing manuscript text and with writing and debugging analysis code. Perplexity (Perplexity AI) was used as an independent reviewer of analysis code and study design at multiple stages before classification. The author reviewed and verified all outputs, takes full responsibility for the accuracy and integrity of the work, and confirms that all hypotheses, pre-registered predictions, interpretations, and conclusions are the author's own. No AI tool is listed as an author, and no AI-generated content was used as a primary data source.
+The author used Claude Code \cite{claudecode} to assist with drafting and editing manuscript text and with writing and debugging analysis code. Perplexity \cite{perplexityai} was used as an independent reviewer of analysis code and study design at multiple stages before classification. The author reviewed and verified all outputs, takes full responsibility for the accuracy and integrity of the work, and confirms that all hypotheses, pre-registered predictions, interpretations, and conclusions are the author's own. No AI tool is listed as an author, and no AI-generated content was used as a primary data source.
 
 \begin{thebibliography}{9}
 
@@ -285,6 +336,16 @@ Zheng, J. et al.
 Karczewski, K.J. et al.
 \newblock Systematic single-variant and gene-based association testing of thousands of phenotypes in 394,841 UK Biobank exomes.
 \newblock \emph{Cell Genomics}, 2(9):100168, 2022.
+
+\bibitem[Anthropic(2025)]{claudecode}
+Anthropic.
+\newblock Claude Code.
+\newblock \url{https://claude.ai/code}, 2025.
+
+\bibitem[Perplexity AI(2025)]{perplexityai}
+Perplexity AI.
+\newblock Perplexity.
+\newblock \url{https://perplexity.ai}, 2025.
 
 \end{thebibliography}
 

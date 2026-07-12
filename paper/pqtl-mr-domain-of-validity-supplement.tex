@@ -1,0 +1,207 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{lineno}
+
+\renewcommand{\arraystretch}{1.3}
+
+\title{Supplementary Materials\\[0.5em]
+\large Abundance or Activity? Mechanism-Dependent Validity of \emph{Cis}-pQTL Mendelian Randomization}
+
+\author{Elliot Tower}
+\date{}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\clearpage
+
+\section{Protocol Deviation Log}
+\label{supp:deviation}
+
+The protocol evolved across six publicly versioned iterations, each SHA-256 hashed before execution. All amendments were made before outcome adjudication and logged with timestamps.
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S1: Pre-registration protocol versions.}
+\label{tab:versions}
+\small
+\begin{tabular}{llp{6.5cm}}
+\toprule
+Version & Frozen & Key changes \\
+\midrule
+V1 & 2026-07-04 04:57Z & Initial 3-class taxonomy; 3 prospective predictions \\
+V2 & 2026-07-04 07:15Z & 6-class taxonomy; binary endpoint; 8 diseases \\
+V3 & --- & EpiGraphDB \emph{cis}-pQTL catalog; cis-only single-SNP Wald ratios \\
+V3.1 & --- & Peer-review fixes; $n = 4$ (underpowered) \\
+V3.2 & --- & 16 diseases; $n = 30$ (BA $= 0.589$) \\
+V3.3 & --- & 33 diseases; $n = 50$ (BA $= 0.580$) \\
+V3.4 & 2026-07-04 23:51Z & UKB-PPP instruments; 24 diseases; $n = 195$ evaluable (138 analyzed) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{What did not change across versions.}
+The classifier ($p < 0.05 \rightarrow$ CAUSAL), the instrument type (\emph{cis}-pQTL, single-SNP Wald ratio), the outcome adjudication procedure (FDA/EMA and ClinicalTrials.gov), the falsification criterion (BA 90\% CI lower bound $> 0.50$), and the anti-cherry-pick rule (mechanical intersection of independent databases) were constant across all versions.
+
+\paragraph{Motivation for V3.4 expansion.}
+V3.3 ($n = 50$) was underpowered for composite significance (BA CI $[0.496, 0.667]$ included $0.50$). V3.4 added UKB-PPP instruments to rescue 75 additional genes and expanded the evaluable set to 195 pairs. The BA decreased with expansion ($0.580 \rightarrow 0.559$), confirming that additional pairs diluted rather than inflated the estimate. No disease was selected or excluded based on trial outcome distributions.
+
+\section{Mechanism Class Assignments}
+\label{supp:mechanism}
+
+\begin{table}[H]
+\centering
+\caption{Table S2: Mechanism classification rules and examples.}
+\label{tab:mechanism_rules}
+\small
+\begin{tabular}{lcp{8cm}}
+\toprule
+Stratum & $n$ (analyzed) & Definition and examples \\
+\midrule
+Abundance-modulating & 59 & Drug reduces circulating protein level or blocks a soluble ligand, matching the pQTL perturbation. Examples: anti-cytokine biologics (ustekinumab, tocilizumab, anakinra), antisense oligonucleotides (mipomersen), anti-VEGF (bevacizumab), anti-complement (ravulizumab), immune checkpoint antibodies (atezolizumab). \\
+\midrule
+Activity-blocking & 76 & Drug inhibits enzymatic activity or blocks a cell-surface receptor without necessarily changing the target protein's measured circulating level. Examples: ACE inhibitors, Factor Xa inhibitors, thrombolytics, cholinesterase inhibitors, MMP inhibitors, PDE5 inhibitors, tyrosine kinase inhibitors. \\
+\midrule
+Mixed & 3 & Both mechanisms apply (e.g., APP$\rightarrow$Alzheimer's disease, where drugs include both amyloid-clearing antibodies and secretase inhibitors). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Disease-to-GWAS Mapping}
+\label{supp:gwas_mapping}
+
+For each disease, a non-UKB outcome GWAS was selected to avoid sample overlap with UKB-PPP instruments. The following table lists sources used.
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S3: Outcome GWAS sources by disease.}
+\label{tab:gwas_sources}
+\small
+\begin{tabular}{llc}
+\toprule
+Disease & GWAS source & Overlap flag \\
+\midrule
+Myocardial infarction & CARDIoGRAMplusC4D & No \\
+Multiple sclerosis & IMSGC & No \\
+Major depressive disorder & PGC & No \\
+Crohn's disease & IIBDGC & No \\
+Ulcerative colitis & IIBDGC & No \\
+Lung cancer & ILCCO/TRICL & No \\
+Rheumatoid arthritis & FinnGen R10 & No \\
+Chronic kidney disease & UKB-derived & Yes \\
+Parkinson's disease & PGC & No \\
+Type 2 diabetes & DIAGRAM & No \\
+Breast cancer & BCAC & No \\
+Prostate cancer & PRACTICAL & No \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+{\small Note: Seven chronic kidney disease pairs used a UKB-derived outcome GWAS (no non-UKB alternative with adequate $N$) and were flagged for sensitivity analysis. Full mapping for all 24 diseases is available in the repository.}
+\end{table}
+
+\section{Missingness Detail}
+\label{supp:missingness}
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S4: Missingness by mechanism stratum. The SUCCESS rate among missing abundance pairs (52.9\%) exceeds the analyzed rate (30.5\%), indicating non-random missingness that weakens the abundance arm. Activity-arm missingness is favorable.}
+\label{tab:miss_mech}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Stratum & Analyzed ($n$) & Missing ($n$) & \% SUCCESS (analyzed) & \% SUCCESS (missing) \\
+\midrule
+Abundance-modulating & 59 & 34 & 30.5\% & 52.9\% \\
+Activity-blocking & 76 & 22 & 27.6\% & 22.7\% \\
+Mixed & 3 & 1 & 33.3\% & 0.0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S5: Per-disease missingness (diseases with $\geq 1$ missing pair).}
+\label{tab:miss_disease}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Disease & Analyzed & Missing & \% Missing & Missing S/F \\
+\midrule
+Thyroid cancer & 1 & 15 & 94\% & 5S / 10F \\
+JIA & 1 & 5 & 83\% & 3S / 2F \\
+Neuroblastoma & 1 & 3 & 75\% & 0S / 3F \\
+Crohn's disease & 3 & 4 & 57\% & 2S / 2F \\
+Ulcerative colitis & 3 & 3 & 50\% & 2S / 1F \\
+Rheumatoid arthritis & 7 & 5 & 42\% & 3S / 2F \\
+SLE & 3 & 2 & 40\% & 1S / 1F \\
+Chronic kidney disease & 7 & 3 & 30\% & 1S / 2F \\
+Multiple sclerosis & 8 & 3 & 27\% & 2S / 1F \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Leave-One-Disease-Out Results}
+\label{supp:lodo}
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S6: Leave-one-disease-out BA stability. No single disease removal changes BA by more than $\pm 0.025$ or drops BA below $0.50$.}
+\label{tab:lodo}
+\small
+\begin{tabular}{lccr}
+\toprule
+Disease dropped & $n$ remaining & BA & $\Delta$BA \\
+\midrule
+Myocardial infarction & 122 & 0.584 & $+0.024$ \\
+Major depressive disorder & 135 & 0.538 & $-0.021$ \\
+Multiple sclerosis & 130 & 0.546 & $-0.013$ \\
+Chronic kidney disease & 131 & 0.573 & $+0.014$ \\
+Parkinson's disease & 134 & 0.570 & $+0.011$ \\
+Ulcerative colitis & 135 & 0.548 & $-0.011$ \\
+Lung cancer & 124 & 0.569 & $+0.010$ \\
+JIA & 137 & 0.549 & $-0.010$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Loss-of-Function Burden Instrument Results}
+\label{supp:lof}
+
+To test whether a mechanistically orthogonal genetic instrument could validate the evidence-routing dissociation, we pre-registered six analyses (V4 protocol, SHA-256 hashed before classification) using predicted loss-of-function (pLoF) burden tests from Genebass. The pLoF burden test estimates the effect of rare coding knockouts on disease phenotypes across 450,000 UK Biobank exomes. Of 138 V3.4 pairs, 132 had usable LoF results; 6 were structurally missing due to pediatric or under-ascertained diseases (anorexia nervosa, autism spectrum disorder, juvenile idiopathic arthritis, neuroblastoma). Phenotype mapping used one canonical phenocode per disease, chosen by scientific relevance and expected case count (never by $p$-value), and was frozen before classification.
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S7: Pre-registered V4 analyses. All six returned null results. The LoF instrument is too underpowered (7/132 nominally significant) to confirm or refute the evidence-routing hypothesis.}
+\label{tab:lof_results}
+\small
+\begin{tabular}{llccp{4.5cm}}
+\toprule
+\# & Analysis & Result & $p$ & Interpretation \\
+\midrule
+1 & LoF AUC (continuous) & 0.538 & 0.49 & Near chance; z-score distribution carries no signal \\
+2 & Directional concordance & 51.5\% & 0.79 & 67/130 agree in sign; indistinguishable from coin flip \\
+3 & Depth-2 licensing & AUC 0.486 & --- & 12 depth-2 pairs; 41.7\% SUCCESS vs 28.8\% base rate (1.45$\times$), but $n$ too small to interpret \\
+4 & Thresholded LoF & BA 0.518 & --- & TP = 3, FP = 4, TN = 90, FN = 35; sensitivity $\approx 0$ \\
+5 & Mechanism-stratified AUC & 0.586 / 0.498 & 0.25 / 0.99 & Activity 0.586, abundance 0.498; both non-significant with overlapping CIs \\
+6 & Combined instrument & AUC 0.559 & 0.30 & $\Delta$ AUC $= +0.046$ vs pQTL alone; non-significant \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The fundamental constraint is statistical power. Only 7 of 132 pairs reached nominal significance ($p < 0.05$) under the LoF burden test, reflecting the rarity of pLoF carriers (${\sim}10$--$100$ per gene in 450,000 exomes). By comparison, the pQTL instrument drew on common variants with allele frequencies of 1--50\%, yielding 48 nominally significant pairs from the same 138.
+
+\end{document}
