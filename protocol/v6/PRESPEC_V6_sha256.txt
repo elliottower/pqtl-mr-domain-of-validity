@@ -1,0 +1,4 @@
+SHA-256: 0a6abd8ba884e030a832820c1be100ebc928e0f576ee168ce9f1d0d6c96a1579
+Timestamp: 2026-07-17T19:22:11Z
+File: PRESPEC_V6.md
+Frozen before any V6 analysis results inspected by author.
