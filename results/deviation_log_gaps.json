@@ -1,0 +1,316 @@
+{
+  "seed": 20260731,
+  "n_bootstrap": 10000,
+  "adjudicated_file": "adjudicated_v34.csv",
+  "stop_condition_cross_platform": {
+    "n_genes_with_multiple_sources": 0,
+    "n_comparisons": 0,
+    "n_sign_flips": 0,
+    "n_order_of_magnitude_changes": 0,
+    "stop_condition_triggered": false,
+    "instrument_source_counts": {
+      "UKB-PPP": 135,
+      "EpiGraphDB": 76
+    },
+    "sentinel_beta_present_by_source": {
+      "EpiGraphDB": 0,
+      "UKB-PPP": 135
+    },
+    "max_sources_per_gene": 1,
+    "comparisons": [],
+    "interpretation": "Not testable: no protein carries instruments from more than one source, so the declared overlap test has no support in this dataset."
+  },
+  "datasets": {
+    "v5_primary": {
+      "n_rows_classification": 161,
+      "headline_reproduction": {
+        "stratum": "all pairs (headline)",
+        "n_pairs": 161,
+        "n_scored": 157,
+        "tp": 11,
+        "tn": 101,
+        "fp": 8,
+        "fn": 37,
+        "sensitivity": 0.2292,
+        "specificity": 0.9266,
+        "balanced_accuracy": 0.5779,
+        "ba_ci_low": 0.5251,
+        "ba_ci_high": 0.6332,
+        "ci_level": 0.9,
+        "n_dropped": 4,
+        "dropped_no_outcome": [
+          "CACNB3",
+          "MUC16",
+          "ITGAV",
+          "ITGB5"
+        ]
+      },
+      "analysis_09_instrument_source": [
+        {
+          "stratum": "instrument_source=EpiGraphDB",
+          "n_pairs": 59,
+          "n_scored": 59,
+          "tp": 7,
+          "tn": 36,
+          "fp": 2,
+          "fn": 14,
+          "sensitivity": 0.3333,
+          "specificity": 0.9474,
+          "balanced_accuracy": 0.6404,
+          "ba_ci_low": 0.5492,
+          "ba_ci_high": 0.7348,
+          "ci_level": 0.9,
+          "n_dropped": 0,
+          "dropped_no_outcome": []
+        },
+        {
+          "stratum": "instrument_source=UKB-PPP",
+          "n_pairs": 102,
+          "n_scored": 98,
+          "tp": 4,
+          "tn": 65,
+          "fp": 6,
+          "fn": 23,
+          "sensitivity": 0.1481,
+          "specificity": 0.9155,
+          "balanced_accuracy": 0.5318,
+          "ba_ci_low": 0.4715,
+          "ba_ci_high": 0.5984,
+          "ci_level": 0.9,
+          "n_dropped": 4,
+          "dropped_no_outcome": [
+            "CACNB3",
+            "MUC16",
+            "ITGAV",
+            "ITGB5"
+          ]
+        }
+      ],
+      "analysis_10_sample_overlap": {
+        "n_flagged": 5,
+        "excluding_flagged": {
+          "stratum": "sample_overlap excluded",
+          "n_pairs": 156,
+          "n_scored": 152,
+          "tp": 11,
+          "tn": 98,
+          "fp": 7,
+          "fn": 36,
+          "sensitivity": 0.234,
+          "specificity": 0.9333,
+          "balanced_accuracy": 0.5837,
+          "ba_ci_low": 0.5304,
+          "ba_ci_high": 0.6405,
+          "ci_level": 0.9,
+          "n_dropped": 4,
+          "dropped_no_outcome": [
+            "CACNB3",
+            "MUC16",
+            "ITGAV",
+            "ITGB5"
+          ]
+        },
+        "flagged_only": {
+          "stratum": "sample_overlap only",
+          "n_pairs": 5,
+          "n_scored": 5,
+          "tp": 0,
+          "tn": 3,
+          "fp": 1,
+          "fn": 1,
+          "sensitivity": 0.0,
+          "specificity": 0.75,
+          "balanced_accuracy": 0.375,
+          "ba_ci_low": 0.1667,
+          "ba_ci_high": 0.5,
+          "ci_level": 0.9,
+          "n_dropped": 0,
+          "dropped_no_outcome": []
+        }
+      },
+      "analysis_11_oncology": {
+        "n_oncology": 56,
+        "oncology": {
+          "stratum": "oncology",
+          "n_pairs": 56,
+          "n_scored": 55,
+          "tp": 0,
+          "tn": 43,
+          "fp": 1,
+          "fn": 11,
+          "sensitivity": 0.0,
+          "specificity": 0.9773,
+          "balanced_accuracy": 0.4886,
+          "ba_ci_low": 0.4659,
+          "ba_ci_high": 0.5,
+          "ci_level": 0.9,
+          "n_dropped": 1,
+          "dropped_no_outcome": [
+            "MUC16"
+          ]
+        },
+        "non_oncology": {
+          "stratum": "non-oncology",
+          "n_pairs": 105,
+          "n_scored": 102,
+          "tp": 11,
+          "tn": 58,
+          "fp": 7,
+          "fn": 26,
+          "sensitivity": 0.2973,
+          "specificity": 0.8923,
+          "balanced_accuracy": 0.5948,
+          "ba_ci_low": 0.5254,
+          "ba_ci_high": 0.6641,
+          "ci_level": 0.9,
+          "n_dropped": 3,
+          "dropped_no_outcome": [
+            "CACNB3",
+            "ITGAV",
+            "ITGB5"
+          ]
+        },
+        "disease_area_values": {
+          "non_oncology": 105,
+          "oncology": 56
+        }
+      },
+      "source_file": "results/v5/classification_v5.csv"
+    },
+    "v34_as_declared": {
+      "n_rows_classification": 138,
+      "headline_reproduction": {
+        "stratum": "all pairs (headline)",
+        "n_pairs": 138,
+        "n_scored": 138,
+        "tp": 8,
+        "tn": 90,
+        "fp": 8,
+        "fn": 32,
+        "sensitivity": 0.2,
+        "specificity": 0.9184,
+        "balanced_accuracy": 0.5592,
+        "ba_ci_low": 0.504,
+        "ba_ci_high": 0.6179,
+        "ci_level": 0.9,
+        "n_dropped": 0,
+        "dropped_no_outcome": []
+      },
+      "analysis_09_instrument_source": [
+        {
+          "stratum": "instrument_source=EpiGraphDB",
+          "n_pairs": 55,
+          "n_scored": 55,
+          "tp": 5,
+          "tn": 35,
+          "fp": 2,
+          "fn": 13,
+          "sensitivity": 0.2778,
+          "specificity": 0.9459,
+          "balanced_accuracy": 0.6119,
+          "ba_ci_low": 0.5217,
+          "ba_ci_high": 0.7087,
+          "ci_level": 0.9,
+          "n_dropped": 0,
+          "dropped_no_outcome": []
+        },
+        {
+          "stratum": "instrument_source=UKB-PPP",
+          "n_pairs": 83,
+          "n_scored": 83,
+          "tp": 3,
+          "tn": 55,
+          "fp": 6,
+          "fn": 19,
+          "sensitivity": 0.1364,
+          "specificity": 0.9016,
+          "balanced_accuracy": 0.519,
+          "ba_ci_low": 0.4537,
+          "ba_ci_high": 0.5924,
+          "ci_level": 0.9,
+          "n_dropped": 0,
+          "dropped_no_outcome": []
+        }
+      ],
+      "analysis_10_sample_overlap": {
+        "n_flagged": 5,
+        "excluding_flagged": {
+          "stratum": "sample_overlap excluded",
+          "n_pairs": 133,
+          "n_scored": 133,
+          "tp": 8,
+          "tn": 87,
+          "fp": 7,
+          "fn": 31,
+          "sensitivity": 0.2051,
+          "specificity": 0.9255,
+          "balanced_accuracy": 0.5653,
+          "ba_ci_low": 0.5083,
+          "ba_ci_high": 0.6237,
+          "ci_level": 0.9,
+          "n_dropped": 0,
+          "dropped_no_outcome": []
+        },
+        "flagged_only": {
+          "stratum": "sample_overlap only",
+          "n_pairs": 5,
+          "n_scored": 5,
+          "tp": 0,
+          "tn": 3,
+          "fp": 1,
+          "fn": 1,
+          "sensitivity": 0.0,
+          "specificity": 0.75,
+          "balanced_accuracy": 0.375,
+          "ba_ci_low": 0.1667,
+          "ba_ci_high": 0.5,
+          "ci_level": 0.9,
+          "n_dropped": 0,
+          "dropped_no_outcome": []
+        }
+      },
+      "analysis_11_oncology": {
+        "n_oncology": 48,
+        "oncology": {
+          "stratum": "oncology",
+          "n_pairs": 48,
+          "n_scored": 48,
+          "tp": 0,
+          "tn": 36,
+          "fp": 1,
+          "fn": 11,
+          "sensitivity": 0.0,
+          "specificity": 0.973,
+          "balanced_accuracy": 0.4865,
+          "ba_ci_low": 0.4615,
+          "ba_ci_high": 0.5,
+          "ci_level": 0.9,
+          "n_dropped": 0,
+          "dropped_no_outcome": []
+        },
+        "non_oncology": {
+          "stratum": "non-oncology",
+          "n_pairs": 90,
+          "n_scored": 90,
+          "tp": 8,
+          "tn": 54,
+          "fp": 7,
+          "fn": 21,
+          "sensitivity": 0.2759,
+          "specificity": 0.8852,
+          "balanced_accuracy": 0.5806,
+          "ba_ci_low": 0.5057,
+          "ba_ci_high": 0.6587,
+          "ci_level": 0.9,
+          "n_dropped": 0,
+          "dropped_no_outcome": []
+        },
+        "disease_area_values": {
+          "non_oncology": 90,
+          "oncology": 48
+        }
+      },
+      "source_file": "data/classification_v34.csv"
+    }
+  }
+}

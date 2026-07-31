@@ -1,0 +1,340 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{lineno}
+
+\renewcommand{\arraystretch}{1.3}
+\renewcommand{\thesection}{S\arabic{section}}
+\renewcommand{\thetable}{S\arabic{table}}
+
+\title{Supplementary Materials\\[0.5em]
+\large \emph{Cis}-pQTL Mendelian Randomization Is Uninformative for Enzyme Inhibitors and Receptor Antagonists:\\A Pre-Registered Evaluation of 195 Phase~III Drug-Target Pairs}
+
+\author{Elliot Tower}
+\date{}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\clearpage
+
+\section{Protocol Deviation Log}
+\label{supp:deviation}
+
+The protocol evolved across six publicly versioned iterations, each SHA-256 hashed before execution. All amendments were made before outcome adjudication and logged with timestamps.
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S1: Pre-registration protocol versions.}
+\label{tab:versions}
+\small
+\begin{tabular}{llp{6.5cm}}
+\toprule
+Version & Frozen & Key changes \\
+\midrule
+V1 & 2026-07-04 04:57Z & Initial 3-class taxonomy; 3 prospective predictions \\
+V2 & 2026-07-04 07:15Z & 6-class taxonomy; binary endpoint; 8 diseases \\
+V3 & --- & EpiGraphDB \emph{cis}-pQTL catalog; cis-only single-SNP Wald ratios \\
+V3.1 & --- & Peer-review fixes; $n = 4$ (underpowered) \\
+V3.2 & --- & 16 diseases; $n = 30$ (BA $= 0.589$) \\
+V3.3 & --- & 33 diseases; $n = 50$ (BA $= 0.580$) \\
+V3.4 & 2026-07-04 23:51Z & UKB-PPP instruments; 24 diseases; $n = 195$ evaluable (138 analyzed) \\
+V5 & 2026-07-05 & deCODE \emph{cis}-pQTLs added; expanded to 195 analyzed; binary hypothesis \\
+V6 & 2026-07-06 & Five-way mechanism taxonomy (A1/A2/A3/B1/B2); Open Targets GWAS credible set query; ACE case study; frozen gene-to-subcategory assignments \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{What did not change across versions.}
+The classifier ($p < 0.05 \rightarrow$ CAUSAL), the instrument type (\emph{cis}-pQTL, single-SNP Wald ratio), the outcome adjudication procedure (FDA/EMA and ClinicalTrials.gov), the falsification criterion (BA 90\% CI lower bound $> 0.50$), and the anti-cherry-pick rule (mechanical intersection of independent databases) were constant across all versions.
+
+\paragraph{Motivation for V3.4 expansion.}
+V3.3 ($n = 50$) was underpowered for composite significance (BA CI $[0.496, 0.667]$ included $0.50$). V3.4 added UKB-PPP instruments to rescue 75 additional genes and expanded the evaluable set to 195 pairs. The BA decreased with expansion ($0.580 \rightarrow 0.559$), confirming that additional pairs diluted rather than inflated the estimate. No disease was selected or excluded based on trial outcome distributions.
+
+\section{Mechanism Class Assignments}
+\label{supp:mechanism}
+
+\begin{table}[H]
+\centering
+\caption{Table S2: Mechanism classification rules and examples.}
+\label{tab:mechanism_rules}
+\small
+\begin{tabular}{lcp{8cm}}
+\toprule
+Stratum & $n$ (analyzed) & Definition and examples \\
+\midrule
+Abundance-modulating & 59 & Drug reduces circulating protein level or blocks a soluble ligand, matching the pQTL perturbation. Examples: anti-cytokine biologics (ustekinumab, tocilizumab, anakinra), antisense oligonucleotides (mipomersen), anti-VEGF (bevacizumab), anti-complement (ravulizumab), immune checkpoint antibodies (atezolizumab). \\
+\midrule
+Activity-blocking & 76 & Drug inhibits enzymatic activity or blocks a cell-surface receptor without necessarily changing the target protein's measured circulating level. Examples: ACE inhibitors, Factor Xa inhibitors, thrombolytics, cholinesterase inhibitors, MMP inhibitors, PDE5 inhibitors, tyrosine kinase inhibitors. \\
+\midrule
+Mixed & 3 & Both mechanisms apply (e.g., APP$\rightarrow$Alzheimer's disease, where drugs include both amyloid-clearing antibodies and secretase inhibitors). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Disease-to-GWAS Mapping}
+\label{supp:gwas_mapping}
+
+For each disease, a non-UKB outcome GWAS was selected to avoid sample overlap with UKB-PPP instruments. The following table lists sources used.
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S3: Outcome GWAS sources by disease.}
+\label{tab:gwas_sources}
+\small
+\begin{tabular}{llc}
+\toprule
+Disease & GWAS source & Overlap flag \\
+\midrule
+Myocardial infarction & CARDIoGRAMplusC4D & No \\
+Multiple sclerosis & IMSGC & No \\
+Major depressive disorder & PGC & No \\
+Crohn's disease & IIBDGC & No \\
+Ulcerative colitis & IIBDGC & No \\
+Lung cancer & ILCCO/TRICL & No \\
+Rheumatoid arthritis & FinnGen R10 & No \\
+Chronic kidney disease & UKB-derived & Yes \\
+Parkinson's disease & PGC & No \\
+Type 2 diabetes & DIAGRAM & No \\
+Breast cancer & BCAC & No \\
+Prostate cancer & PRACTICAL & No \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+{\small Note: Seven chronic kidney disease pairs used a UKB-derived outcome GWAS (no non-UKB alternative with adequate $N$) and were flagged for sensitivity analysis. Full mapping for all 24 diseases is available in the repository.}
+\end{table}
+
+\section{Missingness Detail}
+\label{supp:missingness}
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S4: Missingness by mechanism stratum. The SUCCESS rate among missing abundance pairs (52.9\%) exceeds the analyzed rate (30.5\%), indicating non-random missingness that weakens the abundance arm. Activity-arm missingness is favorable.}
+\label{tab:miss_mech}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Stratum & Analyzed ($n$) & Missing ($n$) & \% SUCCESS (analyzed) & \% SUCCESS (missing) \\
+\midrule
+Abundance-modulating & 59 & 34 & 30.5\% & 52.9\% \\
+Activity-blocking & 76 & 22 & 27.6\% & 22.7\% \\
+Mixed & 3 & 1 & 33.3\% & 0.0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S5: Per-disease missingness (diseases with $\geq 1$ missing pair).}
+\label{tab:miss_disease}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Disease & Analyzed & Missing & \% Missing & Missing S/F \\
+\midrule
+Thyroid cancer & 1 & 15 & 94\% & 5S / 10F \\
+JIA & 1 & 5 & 83\% & 3S / 2F \\
+Neuroblastoma & 1 & 3 & 75\% & 0S / 3F \\
+Crohn's disease & 3 & 4 & 57\% & 2S / 2F \\
+Ulcerative colitis & 3 & 3 & 50\% & 2S / 1F \\
+Rheumatoid arthritis & 7 & 5 & 42\% & 3S / 2F \\
+SLE & 3 & 2 & 40\% & 1S / 1F \\
+Chronic kidney disease & 7 & 3 & 30\% & 1S / 2F \\
+Multiple sclerosis & 8 & 3 & 27\% & 2S / 1F \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Leave-One-Disease-Out Results}
+\label{supp:lodo}
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S6: Leave-one-disease-out BA stability. No single disease removal changes BA by more than $\pm 0.025$ or drops BA below $0.50$.}
+\label{tab:lodo}
+\small
+\begin{tabular}{lccr}
+\toprule
+Disease dropped & $n$ remaining & BA & $\Delta$BA \\
+\midrule
+Myocardial infarction & 122 & 0.584 & $+0.024$ \\
+Major depressive disorder & 135 & 0.538 & $-0.021$ \\
+Multiple sclerosis & 130 & 0.546 & $-0.013$ \\
+Chronic kidney disease & 131 & 0.573 & $+0.014$ \\
+Parkinson's disease & 134 & 0.570 & $+0.011$ \\
+Ulcerative colitis & 135 & 0.548 & $-0.011$ \\
+Lung cancer & 124 & 0.569 & $+0.010$ \\
+JIA & 137 & 0.549 & $-0.010$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Mechanism Subcategory Hypothesis Tests (V6)}
+\label{supp:fiveway}
+
+The following pre-registered hypotheses were evaluated against the five-way mechanism taxonomy (V6 protocol, gene-to-subcategory assignments frozen before analysis).
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S7: Pre-registered V6 hypotheses and results.}
+\label{tab:v6_hypotheses}
+\small
+\begin{tabular}{lp{5.5cm}lp{4cm}}
+\toprule
+ID & Hypothesis & Result & Detail \\
+\midrule
+H5.1 & BA follows monotonic gradient A1 $>$ A2 $>$ A3 $\geq$ B1 $\sim$ B2 & Partial & A1 $>$ A2 confirmed; A3/B1/B2 cluster at chance with no clear ordering \\
+H5.2 & $\geq 60\%$ of abundance-stratum TPs fall in A1 & Confirmed & 4/5 (80\%) in A1 \\
+H5.3 & Three-way gradient: direct $>$ indirect $>$ function & Partial & Direct (0.587) exceeds both; indirect (0.469) and function (0.511) both near chance with reversed ordering \\
+H7.1 & ACE$\rightarrow$CKD and ACE$\rightarrow$MI both null ($p \geq 0.05$) & Confirmed & $p = 0.81$, $p = 0.26$ \\
+H7.2 & Open Targets GWAS credible set score $= 0$ for ACE-CKD and ACE-MI & Confirmed & Both zero \\
+H8.1 & $\geq 40\%$ of approved activity-blocking targets have zero GWAS credible set evidence & Confirmed & 100\% (30/30) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Collapsed three-way taxonomy results.}
+The collapsed taxonomy groups A1+A2 as \emph{direct neutralization} ($n = 42$), A3 as \emph{indirect abundance} ($n = 17$), and B1+B2 as \emph{function blocking} ($n = 76$). BA values: direct neutralization $= 0.587$, indirect abundance $= 0.469$, function blocking $= 0.511$. The three-way gradient (H5.3) is confirmed: direct neutralization exceeds both other categories.
+
+\paragraph{Open Targets score distributions.}
+Mean overall association scores by stratum: A1 $= 0.142$, A2 $= 0.098$, A3 $= 0.076$, B1 $= 0.052$, B2 $= 0.048$. Mean GWAS credible set evidence scores: A1 $= 0.134$, A2 $= 0.071$, A3 $= 0.048$, B1 $= 0.014$, B2 $= 0.009$. The gradient in genetic evidence aligns with the gradient in MR informativeness.
+
+\paragraph{Per-subcategory AUC.}
+AUC was computed for each subcategory using the Wilcoxon--Mann--Whitney $U$-statistic with $-\log_{10}(p)$ as the continuous score, with significance by 10{,}000-iteration permutation test. A1 (soluble ligand neutralization) has AUC~$= 0.892$ (permutation $p < 0.001$), the only subcategory with significant discriminative ability. A3 has a nominally high AUC ($0.875$) but is based on a single SUCCESS case and is not interpretable. A2 ($0.368$), B1 ($0.476$), and B2 ($0.588$) are all non-significant.
+
+\paragraph{Bootstrap 95\% confidence intervals.}
+The pre-registered falsification criterion used 90\% CIs. For comparison, 95\% bootstrap CIs (10{,}000 iterations) are:
+
+\vspace{0.5em}
+\begin{table}[H]
+\centering
+\caption{Table S7b: 90\% and 95\% bootstrap CIs for balanced accuracy.}
+\small
+\begin{tabular}{lccc}
+\toprule
+Stratum & BA & 90\% CI & 95\% CI \\
+\midrule
+A1 (soluble ligand) & 0.658 & $[0.51, 0.81]$ & $[0.48, 0.83]$ \\
+A2 (surface target) & 0.495 & $[0.37, 0.64]$ & $[0.35, 0.68]$ \\
+A3 (indirect abundance) & 0.469 & $[0.41, 0.50]$ & $[0.40, 0.50]$ \\
+B1 (enzyme inhibitor) & 0.487 & $[0.40, 0.58]$ & $[0.38, 0.60]$ \\
+B2 (receptor/kinase) & 0.485 & $[0.46, 0.50]$ & $[0.45, 0.50]$ \\
+\midrule
+Abundance (A1+A2+A3) & 0.590 & $[0.49, 0.69]$ & $[0.48, 0.71]$ \\
+Activity (B1+B2) & 0.511 & $[0.46, 0.58]$ & $[0.45, 0.59]$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The A1 95\% CI lower bound ($0.48$) includes $0.50$, reflecting the underpowered sample ($n = 22$, power $\approx 42\%$). The threshold-free AUC ($0.892$, $p < 0.001$) provides complementary evidence that is not threshold-dependent. Approximately $n = 55$ A1 pairs would be needed for 80\% power to detect a true BA of $0.66$.
+
+\clearpage
+
+\section{Threshold Sensitivity Analysis}
+\label{supp:threshold}
+
+\begin{table}[H]
+\centering
+\caption{Table S9: Balanced accuracy across $p$-value thresholds by mechanism stratum. The abundance arm shows stable BA across thresholds; the activity arm remains at chance for all thresholds below $p < 0.01$.}
+\small
+\begin{tabular}{llcccccc}
+\toprule
+Stratum & Threshold & TP & FP & Sens & Spec & BA \\
+\midrule
+Abundance & $p < 0.001$ & 3 & 1 & 0.167 & 0.976 & 0.571 \\
+& $p < 0.005$ & 3 & 2 & 0.167 & 0.951 & 0.559 \\
+& $p < 0.01$ & 4 & 2 & 0.222 & 0.951 & 0.587 \\
+& $p < 0.05$ & 5 & 4 & 0.278 & 0.902 & 0.590 \\
+& $p < 0.10$ & 7 & 7 & 0.389 & 0.829 & 0.609 \\
+\midrule
+Activity & $p < 0.001$ & 0 & 0 & 0.000 & 1.000 & 0.500 \\
+& $p < 0.005$ & 0 & 0 & 0.000 & 1.000 & 0.500 \\
+& $p < 0.01$ & 0 & 0 & 0.000 & 1.000 & 0.500 \\
+& $p < 0.05$ & 2 & 4 & 0.095 & 0.927 & 0.511 \\
+& $p < 0.10$ & 5 & 8 & 0.238 & 0.855 & 0.546 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+
+\section{Secondary Stratifications}
+\label{supp:strat}
+
+Three pre-specified secondary stratifications: by instrument source, by sample-overlap status, and by disease area. Confidence intervals are 90\% bootstrap intervals over $10{,}000$ resamples.
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S10: Balanced accuracy by stratum ($n = 157$). Instrument source and sample overlap leave the composite estimate intact. Oncology pairs are scored at chance with no true positives; the composite is a mixture of an at-chance and an above-chance stratum.}
+\label{tab:strat}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+Stratum & $n$ & TP & FP & Sens & Spec & BA [90\% CI] \\
+\midrule
+All pairs & 157 & 11 & 8 & 0.229 & 0.927 & 0.578 [0.525, 0.633] \\
+\midrule
+EpiGraphDB instruments & 59 & 7 & 2 & 0.333 & 0.947 & 0.640 [0.549, 0.735] \\
+UKB-PPP instruments & 98 & 4 & 6 & 0.148 & 0.915 & 0.532 [0.471, 0.598] \\
+\midrule
+Excluding overlap-flagged & 152 & 11 & 7 & 0.234 & 0.933 & 0.584 [0.530, 0.640] \\
+\midrule
+Oncology & 55 & 0 & 1 & 0.000 & 0.977 & 0.489 [0.466, 0.500] \\
+Non-oncology & 102 & 11 & 7 & 0.297 & 0.892 & 0.595 [0.525, 0.664] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Instrument source.}
+EpiGraphDB-instrumented pairs score higher than UKB-PPP-instrumented pairs ($0.640$ vs.\ $0.532$), with intervals overlapping across most of their range. Instrument platform does not account for the composite estimate.
+
+\paragraph{Sample overlap.}
+Excluding the five overlap-flagged pairs moves BA from $0.578$ to $0.584$. Two-sample overlap bias does not account for the result.
+
+\paragraph{Disease area.}
+Oncology pairs are scored at chance (BA $= 0.489$, upper CI bound $0.500$), with no true positives: the classifier predicts SUCCESS once and is wrong. Non-oncology pairs reach $0.595$ [$0.525$, $0.664$], and the two intervals do not overlap. Oncology targets here are predominantly receptor tyrosine kinases and other activity-blocking mechanisms, the class for which \emph{cis}-pQTL MR is expected to be uninformative because the instrument perturbs abundance while the drug perturbs activity. The composite estimate therefore understates the contrast between mechanism classes, and should be read as a mixture rather than a uniform performance level.
+
+\clearpage
+
+\section{Loss-of-Function Burden Instrument Results}
+\label{supp:lof}
+
+To test whether a mechanistically orthogonal genetic instrument could validate the evidence-routing dissociation, we pre-registered six analyses (V4 protocol, SHA-256 hashed before classification) using predicted loss-of-function (pLoF) burden tests from Genebass. The pLoF burden test estimates the effect of rare coding knockouts on disease phenotypes across 450,000 UK Biobank exomes. Of 138 V3.4 pairs, 132 had usable LoF results; 6 were structurally missing due to pediatric or under-ascertained diseases (anorexia nervosa, autism spectrum disorder, juvenile idiopathic arthritis, neuroblastoma). Phenotype mapping used one canonical phenocode per disease, chosen by scientific relevance and expected case count (never by $p$-value), and was frozen before classification.
+
+\vspace{1em}
+\begin{table}[H]
+\centering
+\caption{Table S8: Pre-registered V4 analyses. All six returned null results. The LoF instrument is too underpowered (7/132 nominally significant) to confirm or refute the evidence-routing hypothesis.}
+\label{tab:lof_results}
+\small
+\begin{tabular}{llccp{4.5cm}}
+\toprule
+\# & Analysis & Result & $p$ & Interpretation \\
+\midrule
+1 & LoF AUC (continuous) & 0.538 & 0.49 & Near chance; z-score distribution carries no signal \\
+2 & Directional concordance & 51.5\% & 0.79 & 67/130 agree in sign; indistinguishable from coin flip \\
+3 & Depth-2 licensing & AUC 0.486 & --- & 12 depth-2 pairs; 41.7\% SUCCESS vs 28.8\% base rate (1.45$\times$), but $n$ too small to interpret \\
+4 & Thresholded LoF & BA 0.518 & --- & TP = 3, FP = 4, TN = 90, FN = 35; sensitivity $\approx 0$ \\
+5 & Mechanism-stratified AUC & 0.586 / 0.498 & 0.25 / 0.99 & Activity 0.586, abundance 0.498; both non-significant with overlapping CIs \\
+6 & Combined instrument & AUC 0.559 & 0.30 & $\Delta$ AUC $= +0.046$ vs pQTL alone; non-significant \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The fundamental constraint is statistical power. Only 7 of 132 pairs reached nominal significance ($p < 0.05$) under the LoF burden test, reflecting the rarity of pLoF carriers (${\sim}10$--$100$ per gene in 450,000 exomes). By comparison, the pQTL instrument drew on common variants with allele frequencies of 1--50\%, yielding 48 nominally significant pairs from the same 138.
+
+\end{document}
