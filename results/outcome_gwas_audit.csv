@@ -1,0 +1,24 @@
+code_label,accession,actual_trait,ncase,ncontrol,sample_size,population,year,author,verdict
+Alzheimers disease,ieu-b-2,Alzheimer's disease,21982,41944,63926,European,2019,Kunkle BW,ok
+Amyotrophic lateral sclerosis,ebi-a-GCST90027163,Amyotrophic lateral sclerosis,27205,110881,138086,European,2021,van Rheenen W,ok
+Anorexia nervosa,ieu-b-61,,,,,,,,NOT IN INDEX
+Autism spectrum disorder,ieu-b-87,Oral cavity and pharyngeal cancer,2342,2329,4671,European,2016,Lesseur,MISMATCH
+Bipolar disorder,ieu-b-41,bipolar disorder,20352,31358,51710,European,2019,"Stahl, E",ok
+Chronic kidney disease,ieu-b-4874,Bladder cancer,1279,372016,373295,European,2021,Burrows,MISMATCH
+Crohns disease,ieu-a-12,Crohn's disease,17897,33977,51874,European,2015,Liu,ok
+Glioma,ieu-b-4987,,,,,,,,NOT IN INDEX
+Hypercholesterolemia,ieu-a-300,LDL cholesterol,,,173082,Mixed,2013,Willer CJ,MISMATCH
+Inflammatory bowel disease,ieu-a-31,Inflammatory bowel disease,12882,21770,34652,European,2015,Liu,ok
+Lung cancer,ieu-a-984,Lung adenocarcinoma,11245,54619,65864,European,,NA,ok
+Major depressive disorder,ieu-b-102,Major depression,170756,329443,,European,2019,Howard DM,ok
+Melanoma,ieu-a-62,Waist circumference,,,134593,Mixed,2015,Shungin D,MISMATCH
+Multiple sclerosis,ieu-b-18,multiple sclerosis,47429,68374,115803,European,2019,Patsopoulos NA,ok
+Myocardial infarction,ieu-a-798,Myocardial infarction,43676,128199,171875,Mixed,2015,Nikpay,ok
+Ovarian cancer,ieu-a-1120,Ovarian cancer,25509,40941,66450,European,2017,Phelan,ok
+Pancreatic cancer,ieu-b-4866,,,,,,,,NOT IN INDEX
+Parkinsons disease,ieu-b-7,Parkinson's disease,33674,449056,482730,European,2019,Nalls MA,ok
+Rheumatoid arthritis,ieu-a-833,Rheumatoid arthritis,19234,61565,80799,Mixed,2014,Okada Y,ok
+Schizophrenia,ieu-b-5102,Schizophrenia,52017,75889,127906,European,2022,Trubetskoy V,ok
+Systemic lupus erythematosus,ieu-a-1073,Copper,,,2603,European,2013,Evans,MISMATCH
+Thyroid cancer,ieu-a-1082,Thyroid cancer,649,431,1080,European,2013,Kohler A,ok
+Ulcerative colitis,ieu-a-970,Ulcerative colitis,13768,33977,47745,European,2015,Liu,ok

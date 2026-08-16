@@ -1,0 +1,2 @@
+2b9173f8f0d3c2ca9a0a1d45be6cd99179fae1d381c0b9e2981cffb33fc4f84d  protocol/v7/PRESPEC_V7.md
+Frozen: 2026-08-16T22:54:16Z
