@@ -1,0 +1,291 @@
+{
+  "timestamp": "2026-07-14T00:42:40.253725+00:00",
+  "version": "V5",
+  "total_recovered": 23,
+  "recovery_by_step": {
+    "1": 3,
+    "2": 0,
+    "3": 13,
+    "4": 7
+  },
+  "n_v34": 138,
+  "n_v5": 161,
+  "n_evaluable": 157,
+  "primary_metrics": {
+    "n": 157,
+    "tp": 11,
+    "tn": 101,
+    "fp": 8,
+    "fn": 37,
+    "sensitivity": 0.22916666666666666,
+    "specificity": 0.926605504587156,
+    "balanced_accuracy": 0.5778860856269113,
+    "mcc": 0.22004291895676864
+  },
+  "primary_bootstrap": {
+    "ba_mean": 0.5776502704319657,
+    "ba_ci_lo": 0.5243589743589744,
+    "ba_ci_hi": 0.6327683615819208,
+    "n_boot": 10000
+  },
+  "mechanism_strat": {
+    "abundance_modulating": {
+      "metrics": {
+        "n": 72,
+        "tp": 8,
+        "tn": 42,
+        "fp": 4,
+        "fn": 18,
+        "sensitivity": 0.3076923076923077,
+        "specificity": 0.9130434782608695,
+        "balanced_accuracy": 0.6103678929765886,
+        "mcc": 0.28449333006152944
+      },
+      "bootstrap": {
+        "ba_mean": 0.6104751209772733,
+        "ba_ci_lo": 0.5297914597815293,
+        "ba_ci_hi": 0.6942724458204335,
+        "n_boot": 10000
+      }
+    },
+    "activity_blocking": {
+      "metrics": {
+        "n": 82,
+        "tp": 2,
+        "tn": 57,
+        "fp": 4,
+        "fn": 19,
+        "sensitivity": 0.09523809523809523,
+        "specificity": 0.9344262295081968,
+        "balanced_accuracy": 0.514832162373146,
+        "mcc": 0.049719483728122085
+      },
+      "bootstrap": {
+        "ba_mean": 0.5154387851928806,
+        "ba_ci_lo": 0.4603174603174603,
+        "ba_ci_hi": 0.5788446526151444,
+        "n_boot": 10000
+      }
+    }
+  },
+  "recovery_log": [
+    {
+      "pair_id": "CD80|Juvenile idiopathic arthritis",
+      "step": 1,
+      "method": "new_gwas",
+      "gwas_id": "ebi-a-GCST90018873",
+      "rsid": "rs16829980",
+      "mr_p": 0.37471391736082227
+    },
+    {
+      "pair_id": "IL17F|Juvenile idiopathic arthritis",
+      "step": 1,
+      "method": "new_gwas",
+      "gwas_id": "ebi-a-GCST90018873",
+      "rsid": "rs2397084",
+      "mr_p": 0.09745565839035059
+    },
+    {
+      "pair_id": "TNF|Juvenile idiopathic arthritis",
+      "step": 1,
+      "method": "new_gwas",
+      "gwas_id": "ebi-a-GCST90018873",
+      "rsid": "rs4645843",
+      "mr_p": 0.7743812706962915
+    },
+    {
+      "pair_id": "CACNB3|Major depressive disorder",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs7975385",
+      "proxy_rsid": "rs12319012",
+      "r2": 0.696958,
+      "gwas_id": "ieu-b-102",
+      "mr_p": 0.35448447687331186
+    },
+    {
+      "pair_id": "IL2RA|Multiple sclerosis",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs12722497",
+      "proxy_rsid": "rs12778662",
+      "r2": 0.703011,
+      "gwas_id": "ieu-b-18",
+      "mr_p": 1.3259356455821528e-05
+    },
+    {
+      "pair_id": "IL2RA|Neuroblastoma",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs12722497",
+      "proxy_rsid": "rs7911500",
+      "r2": 0.64062,
+      "gwas_id": "ieu-a-816",
+      "mr_p": 0.7165233247768268
+    },
+    {
+      "pair_id": "TOP2B|Neuroblastoma",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs3806631",
+      "proxy_rsid": "rs2164360",
+      "r2": 0.894655,
+      "gwas_id": "ieu-a-816",
+      "mr_p": 0.050693502523666036
+    },
+    {
+      "pair_id": "MUC16|Ovarian cancer",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs11673136",
+      "proxy_rsid": "rs73005873",
+      "r2": 0.787045,
+      "gwas_id": "ieu-a-1120",
+      "mr_p": 0.280153397131054
+    },
+    {
+      "pair_id": "ITGAV|Rheumatoid arthritis",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs2595391",
+      "proxy_rsid": "rs2682857",
+      "r2": 1.0,
+      "gwas_id": "ieu-a-833",
+      "mr_p": 0.36157514634259325
+    },
+    {
+      "pair_id": "ITGB5|Rheumatoid arthritis",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs17282078",
+      "proxy_rsid": "rs17843797",
+      "r2": 0.974096,
+      "gwas_id": "ieu-a-833",
+      "mr_p": 1.0
+    },
+    {
+      "pair_id": "IL2RA|Systemic lupus erythematosus",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs12722497",
+      "proxy_rsid": "rs7911500",
+      "r2": 0.64062,
+      "gwas_id": "ieu-a-1073",
+      "mr_p": 0.21672106217905207
+    },
+    {
+      "pair_id": "EPHA2|Thyroid cancer",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs924204",
+      "proxy_rsid": "rs6656611",
+      "r2": 0.879961,
+      "gwas_id": "ieu-a-1082",
+      "mr_p": 0.9192379902021715
+    },
+    {
+      "pair_id": "EPHA4|Thyroid cancer",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs10932916",
+      "proxy_rsid": "rs4613266",
+      "r2": 0.941265,
+      "gwas_id": "ieu-a-1082",
+      "mr_p": 0.08734466037302686
+    },
+    {
+      "pair_id": "EPHB4|Thyroid cancer",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs314361",
+      "proxy_rsid": "rs314346",
+      "r2": 0.94469,
+      "gwas_id": "ieu-a-1082",
+      "mr_p": 0.8889625390120763
+    },
+    {
+      "pair_id": "ERBB4|Thyroid cancer",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs6735267",
+      "proxy_rsid": "rs7599312",
+      "r2": 0.984731,
+      "gwas_id": "ieu-a-1082",
+      "mr_p": 0.21738964735343458
+    },
+    {
+      "pair_id": "MAP2K1|Thyroid cancer",
+      "step": 3,
+      "method": "ld_proxy",
+      "original_rsid": "rs77428206",
+      "proxy_rsid": "rs1432442",
+      "r2": 0.795316,
+      "gwas_id": "ieu-a-1082",
+      "mr_p": 0.05367425849797551
+    },
+    {
+      "pair_id": "PCSK9|Hypercholesterolemia",
+      "step": 4,
+      "method": "decode_cis_pqtl",
+      "rsid": "rs11591147",
+      "gwas_id": "ieu-a-300",
+      "decode_pval": 3.985e-117,
+      "mr_p": 8.184566017794845e-168
+    },
+    {
+      "pair_id": "PCSK9|Myocardial infarction",
+      "step": 4,
+      "method": "decode_cis_pqtl",
+      "rsid": "rs11591147",
+      "gwas_id": "ieu-a-798",
+      "decode_pval": 3.985e-117,
+      "mr_p": 2.3000448859586923e-07
+    },
+    {
+      "pair_id": "GHR|Chronic kidney disease",
+      "step": 4,
+      "method": "decode_cis_pqtl",
+      "rsid": "rs4610468",
+      "gwas_id": "ieu-b-4874",
+      "decode_pval": 2.363e-102,
+      "mr_p": 0.1319328705613854
+    },
+    {
+      "pair_id": "GHR|Juvenile idiopathic arthritis",
+      "step": 4,
+      "method": "decode_cis_pqtl",
+      "rsid": "rs4610468",
+      "gwas_id": "ebi-a-GCST90018873",
+      "decode_pval": 2.363e-102,
+      "mr_p": 0.44781226462269674
+    },
+    {
+      "pair_id": "CD86|Juvenile idiopathic arthritis",
+      "step": 4,
+      "method": "decode_cis_pqtl",
+      "rsid": "rs560975501",
+      "gwas_id": "ebi-a-GCST90018873",
+      "decode_pval": 3.133e-18,
+      "mr_p": 0.6922855853776857
+    },
+    {
+      "pair_id": "MIF|Rheumatoid arthritis",
+      "step": 4,
+      "method": "decode_cis_pqtl",
+      "rsid": "rs2739338",
+      "gwas_id": "ieu-a-833",
+      "decode_pval": 4.551e-18,
+      "mr_p": 0.8162748301773433
+    },
+    {
+      "pair_id": "TNFSF13B|Rheumatoid arthritis",
+      "step": 4,
+      "method": "decode_ld_proxy",
+      "original_rsid": "rs113469631",
+      "proxy_rsid": "rs73609093",
+      "r2": 0.902928,
+      "gwas_id": "ieu-a-833",
+      "mr_p": 0.9077126209898724
+    }
+  ]
+}
