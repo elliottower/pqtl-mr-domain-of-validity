@@ -1,0 +1,3 @@
+cec7cbe4f0fe9f6f582c8c17d9cda663446d67eb8350bfd5f0f3d87800c03126  protocol/v7/AMENDMENT_A.md
+Frozen: 2026-08-16T23:47:31Z
+Amends: PRESPEC_V7.md (2b9173f8f0d3c2ca9a0a1d45be6cd99179fae1d381c0b9e2981cffb33fc4f84d)
