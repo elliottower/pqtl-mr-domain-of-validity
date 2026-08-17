@@ -27,37 +27,14 @@ from scipy import stats
 from scipy.stats import binomtest
 from tqdm import tqdm
 
+# Outcome-GWAS accessions live in code/disease_gwas.py, the single source of
+# truth. Two divergent copies of this mapping previously existed here and in
+# the other script; see results/OUTCOME_GWAS_TRACE.md.
+from disease_gwas import DISEASE_GWAS
+
 HERE = Path(__file__).parent
 OUT_DIR = HERE / "results" / "v34"
 API = "https://api.opengwas.io/api"
-
-DISEASE_GWAS = {
-    "Alzheimers disease": "ieu-b-2",
-    "Amyotrophic lateral sclerosis": "ebi-a-GCST90027163",
-    "Anorexia nervosa": "ieu-b-61",
-    "Autism spectrum disorder": "ieu-b-87",
-    "Bipolar disorder": "ieu-b-41",
-    "Chronic kidney disease": "ieu-b-4874",
-    "Crohns disease": "ieu-a-12",
-    "Glioma": "ieu-b-4987",
-    "Hypercholesterolemia": "ieu-a-300",
-    "Inflammatory bowel disease": "ieu-a-31",
-    "Juvenile idiopathic arthritis": None,
-    "Lung cancer": "ieu-a-984",
-    "Major depressive disorder": "ieu-b-102",
-    "Melanoma": "ieu-a-62",
-    "Multiple sclerosis": "ieu-b-18",
-    "Myocardial infarction": "ieu-a-798",
-    "Neuroblastoma": None,
-    "Ovarian cancer": "ieu-a-1120",
-    "Pancreatic cancer": "ieu-b-4866",
-    "Parkinsons disease": "ieu-b-7",
-    "Rheumatoid arthritis": "ieu-a-833",
-    "Schizophrenia": "ieu-b-5102",
-    "Systemic lupus erythematosus": "ieu-a-1073",
-    "Thyroid cancer": "ieu-a-1082",
-    "Ulcerative colitis": "ieu-a-970",
-}
 
 GWAS_CACHE_FILE = OUT_DIR / "outcome_gwas_cache_v34.json"
 MR_RESULTS_FILE = OUT_DIR / "mr_results_v34.jsonl"
