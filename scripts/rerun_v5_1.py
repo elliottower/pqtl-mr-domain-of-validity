@@ -36,6 +36,12 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 OUT_DIR = REPO / "results" / "v5_1"
 CACHE = OUT_DIR / "outcome_gwas_cache_v5_1.json"
 API = "https://api.opengwas.io/api/associations"
+ENSEMBL_GRCH37 = "https://grch37.rest.ensembl.org"
+PROXY_CACHE = OUT_DIR / "ld_proxy_map_v5_1.json"
+
+# Verbatim from find_ld_proxy in code/expand_v5.py; frozen in CORRECTIONS_V5_2.md.
+LD_R2 = 0.6
+LD_WINDOW_KB = 500
 
 # The mapping as it stood when classification_v5.csv was produced, needed to tell which
 # diseases actually changed. Recorded in results/OUTCOME_GWAS_TRACE.md.
@@ -89,6 +95,46 @@ def query(rsids, gwas_id, tok):
         if snp:
             out[snp] = row
     return out
+
+
+def find_proxy(rsid, gwas_id, tok):
+    """LD-proxy recovery, parameters verbatim from find_ld_proxy in expand_v5.py.
+
+    ENSEMBL GRCh37, 1000GENOMES:phase_3:EUR, r2 >= 0.6, 500kb window. Considers the top 20
+    proxies by descending r2 and returns the highest-r2 one carrying an association in the
+    outcome GWAS.
+    """
+    url = (f"{ENSEMBL_GRCH37}/ld/human/{rsid}/1000GENOMES:phase_3:EUR"
+           f"?r2={LD_R2}&window_size={LD_WINDOW_KB}")
+    proc = subprocess.run(
+        ["curl", "-sL", "-m", "60", url, "-H", "Content-Type: application/json"],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0:
+        return None
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, list) or not data:
+        return None
+
+    ranked = sorted(data, key=lambda x: float(x.get("r2", 0)), reverse=True)
+    candidates = []
+    for p in ranked[:20]:
+        other = p.get("variation2") if p.get("variation1") == rsid else p.get("variation1")
+        if other and other.startswith("rs"):
+            candidates.append((other, float(p.get("r2", 0))))
+    if not candidates:
+        return None
+
+    assoc = query([c[0] for c in candidates], gwas_id, tok)
+    for proxy_rs, r2 in candidates:
+        hit = assoc.get(proxy_rs)
+        if hit and hit.get("beta") is not None and hit.get("se") is not None:
+            return {"proxy_rsid": proxy_rs, "r2": r2,
+                    "beta": float(hit["beta"]), "se": float(hit["se"])}
+    return None
 
 
 def metrics(rows):
@@ -171,6 +217,7 @@ def main():
     # --- recompute ---------------------------------------------------------------------
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     cache = json.loads(CACHE.read_text()) if CACHE.exists() else {}
+    proxies = json.loads(PROXY_CACHE.read_text()) if PROXY_CACHE.exists() else {}
     tok = token()
     by_disease = {}
     for r in recompute:
@@ -195,9 +242,20 @@ def main():
 
         for r in items:
             hit = cache.get(f"{r['mr_rsid']}_{gwas}")
+            r["_proxy"] = ""
             if not hit:
-                r["_status"] = "snp_absent_from_new_gwas"
-                continue
+                key = f"{r['mr_rsid']}_{gwas}"
+                if key not in proxies:
+                    proxies[key] = find_proxy(r["mr_rsid"], gwas, tok)
+                    PROXY_CACHE.write_text(json.dumps(proxies, indent=2))
+                    time.sleep(1.0)
+                px = proxies[key]
+                if not px:
+                    r["_status"] = "no_proxy_at_r2_0.6"
+                    continue
+                hit = {"beta": px["beta"], "se": px["se"]}
+                r["_proxy"] = f"{px['proxy_rsid']}@r2={px['r2']:.2f}"
+                print(f"      proxy {r['gene']:<10} {r['mr_rsid']} -> {r['_proxy']}")
             p = norm_p(hit["beta"], hit["se"])
             a = adj.get(r["pair_id"], {})
             be = a.get("sentinel_beta") or ""
@@ -211,7 +269,8 @@ def main():
             r["mr_causal"] = "True" if p < 0.05 else "False"
             r["mr_beta"] = f"{hit['beta'] / be:.10g}" if be else ""
             r["mr_se"] = f"{abs(hit['se'] / be):.10g}" if be else ""
-            r["mr_source"] = "v5_1_corrected"
+            r["mr_source"] = "v5_2_proxy" if r["_proxy"] else "v5_1_corrected"
+            r["proxy"] = r["_proxy"]
             r["_status"] = "recomputed"
 
     # --- assemble -----------------------------------------------------------------------
@@ -220,8 +279,8 @@ def main():
         if r["disease"] in dropped:
             lost.append((r["pair_id"], "disease dropped"))
             continue
-        if r.get("_status") == "snp_absent_from_new_gwas":
-            lost.append((r["pair_id"], "instrument SNP absent from corrected GWAS"))
+        if r.get("_status") == "no_proxy_at_r2_0.6":
+            lost.append((r["pair_id"], "sentinel absent and no LD proxy at r2>=0.6"))
             continue
         r["mr_causal"] = str(r["mr_causal"]).strip() == "True"
         r["below_floor"] = EFFECTIVE_N.get(r["disease"], 0) < EFFECTIVE_N_FLOOR
@@ -233,7 +292,7 @@ def main():
 
     cols = ["pair_id", "gene", "disease", "outcome", "mechanism_class", "disease_area",
             "instrument_source", "sample_overlap", "mr_beta", "mr_se", "mr_p",
-            "mr_causal", "mr_source", "mr_rsid", "below_floor"]
+            "mr_causal", "mr_source", "mr_rsid", "proxy", "below_floor"]
     path = OUT_DIR / "classification_v5_1.csv"
     with path.open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
