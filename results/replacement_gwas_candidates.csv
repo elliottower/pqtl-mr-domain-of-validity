@@ -1,0 +1,73 @@
+disease,expected_source,accession,trait,author,year,ncase,ncontrol,sample_size,population,consortium
+Autism spectrum disorder,iPSYCH-PGC,ebi-a-GCST90016614,Major depressive disorder vs autism spectrum disorder (ordinary least squares (OLS)),Peyrot WJ,2021,170756,18381,189137,NA,NA
+Autism spectrum disorder,iPSYCH-PGC,ebi-a-GCST90016620,Schizophrenia vs autism spectrum disorder (ordinary least squares (OLS)),Peyrot WJ,2021,40675,18381,59056,NA,NA
+Autism spectrum disorder,iPSYCH-PGC,ieu-a-1185,Autism Spectrum Disorder,NA,2017,18382,27969,46351,European,iPSYCH-PGC
+Autism spectrum disorder,iPSYCH-PGC,ebi-a-GCST90016606,Bipolar disorder vs autism spectrum disorder (ordinary least squares (OLS)),Peyrot WJ,2021,20352,18381,38733,NA,NA
+Autism spectrum disorder,iPSYCH-PGC,ebi-a-GCST90016596,ADHD vs autism spectrum disorder (ordinary least squares (OLS)),Peyrot WJ,2021,19099,18381,37480,NA,NA
+Autism spectrum disorder,iPSYCH-PGC,ebi-a-GCST90016599,Anorexia nervosa vs autism spectrum disorder (ordinary least squares (OLS)),Peyrot WJ,2021,16992,18381,35373,NA,NA
+Autism spectrum disorder,iPSYCH-PGC,ieu-a-802,Autism,Smoller JW,2013,14525,14890,29415,European,PGC
+Autism spectrum disorder,iPSYCH-PGC,ebi-a-GCST90016603,Autism spectrum disorder vs Tourette's syndrome and other tic disorders (ordinary least squares (OLS)),Peyrot WJ,2021,18381,4819,23200,NA,NA
+Autism spectrum disorder,iPSYCH-PGC,ebi-a-GCST90016602,Autism spectrum disorder vs obsessive compulsive disorder (ordinary least squares (OLS)),Peyrot WJ,2021,18381,2688,21069,NA,NA
+Autism spectrum disorder,iPSYCH-PGC,ieu-b-5151,MZ twin differences on autism spectrum disorder symptom score,Assary E,2025,,,12354,European,Within Families Consortium
+Autism spectrum disorder,iPSYCH-PGC,ieu-a-1184,Autism Spectrum Disorder,NA,2015,5305,5305,10610,European,PGC
+Autism spectrum disorder,iPSYCH-PGC,ieu-b-5153,MZ twin differences on autism spectrum disorder symptom score in children,Assary E,2025,,,10494,European,Within Families Consortium
+Chronic kidney disease,CKDGen (overlap-flagged),ebi-a-GCST90018904,Polycystic kidney disease,Sakaue S,2021,424,355431,355855,European,NA
+Chronic kidney disease,CKDGen (overlap-flagged),ebi-a-GCST90018684,Polycystic kidney disease,Sakaue S,2021,510,178216,178726,East Asian,NA
+Chronic kidney disease,CKDGen (overlap-flagged),ieu-a-1284,Estimated glomerular filtration rate (eGFR),Kanai,2018,,,143658,East Asian,Biobank Japan Project
+Chronic kidney disease,CKDGen (overlap-flagged),ieu-a-1105,Serum creatinine (eGFRcrea),Pattaro,2015,,,133814,Mixed,CKDGen
+Chronic kidney disease,CKDGen (overlap-flagged),ieu-a-1104,Serum creatinine (eGFRcrea),Pattaro,2015,,,118460,Mixed,CKDGen
+Chronic kidney disease,CKDGen (overlap-flagged),ieu-a-1102,Chronic kidney disease,Pattaro,2015,12385,104780,117165,Mixed,CKDGen
+Chronic kidney disease,CKDGen (overlap-flagged),ebi-a-GCST003374,Chronic kidney disease,Pattaro C,2016,12385,104780,117165,European,NA
+Chronic kidney disease,CKDGen (overlap-flagged),ieu-a-1106,Serum cystatin C (eGFRcys),Pattaro,2015,,,33152,Mixed,CKDGen
+Chronic kidney disease,CKDGen (overlap-flagged),ebi-a-GCST008026,Chronic kidney disease,Wojcik GL,2019,1533,1339,20920,Hispanic or Latin American,NA
+Chronic kidney disease,CKDGen (overlap-flagged),ieu-a-1099,Serum creatinine (eGFRcrea),Pattaro,2015,,,16474,African American or Afro-Caribbean,CKDGen
+Chronic kidney disease,CKDGen (overlap-flagged),ieu-a-1103,Serum creatinine (eGFRcrea),Pattaro,2015,,,11529,Mixed,CKDGen
+Chronic kidney disease,CKDGen (overlap-flagged),ebi-a-GCST90085790,VEGFR 3 plasma levels,Caron B,2022,,,400,European,NA
+Systemic lupus erythematosus,Bentham 2015,ebi-a-GCST90018917,Systemic lupus erythematosus,Sakaue S,2021,647,482264,482911,European,NA
+Systemic lupus erythematosus,Bentham 2015,ebi-a-GCST90018697,Systemic lupus erythematosus,Sakaue S,2021,317,175937,176254,East Asian,NA
+Systemic lupus erythematosus,Bentham 2015,ebi-a-GCST003156,Systemic lupus erythematosus,Bentham J,2015,5201,9066,14267,European,NA
+Systemic lupus erythematosus,Bentham 2015,ebi-a-GCST90011866,Systemic lupus erythematosus,Wang YF,2021,4222,8431,12653,East Asian,NA
+Systemic lupus erythematosus,Bentham 2015,prot-a-2842,Lupus La protein,Sun BB,2018,,,3301,European,NA
+Systemic lupus erythematosus,Bentham 2015,prot-a-2841,Lupus La protein,Sun BB,2018,,,3301,European,NA
+Systemic lupus erythematosus,Bentham 2015,ieu-a-815,Systemic lupus erythematosus,Hom G,2008,1311,1783,3094,European,NA
+Systemic lupus erythematosus,Bentham 2015,ebi-a-GCST90014238,Systemic lupus erythematosus,Song Q,2021,512,994,1506,East Asian,NA
+Systemic lupus erythematosus,Bentham 2015,finn-b-SLE_OTH,Other forms of systemic lupus erythematosus,NA,2021,123,218254,,European,NA
+Systemic lupus erythematosus,Bentham 2015,finn-b-SLE_NOS,"Systemic lupus erythematosus, unspecified",NA,2021,442,218254,,European,NA
+Systemic lupus erythematosus,Bentham 2015,finn-b-M13_SLE,Systemic lupus erythematosus,NA,2021,538,213145,,European,NA
+Systemic lupus erythematosus,Bentham 2015,finn-b-L12_LUPUS,Lupus erythematosus,NA,2021,321,207482,,European,NA
+Melanoma,GenoMEL,ukb-b-2750,"Type of cancer: ICD10: C43.7 Malignant melanoma of lower limb, including hip",Ben Elsworth,2018,1058,461952,463010,European,MRC-IEU
+Melanoma,GenoMEL,ukb-b-12915,"Cancer code, self-reported: malignant melanoma",Ben Elsworth,2018,3598,459335,462933,European,MRC-IEU
+Melanoma,GenoMEL,ieu-b-4959,Malignant non-melanoma skin cancer,Burrows,2021,23694,372016,395710,European,UK Biobank
+Melanoma,GenoMEL,ieu-b-4969,Melanoma skin cancer,Burrows,2021,3751,372016,375767,European,UK Biobank
+Melanoma,GenoMEL,ukb-d-C43,Diagnoses - main ICD10: C43 Malignant melanoma of skin,Neale lab,2018,1672,359522,361194,European,NA
+Melanoma,GenoMEL,ukb-d-C3_MELANOMA_SKIN,Malignant melanoma of skin,Neale lab,2018,2534,358660,361194,European,NA
+Melanoma,GenoMEL,ukb-a-58,Cancer code  self-reported: malignant melanoma,Neale,2017,2677,334482,337159,European,Neale Lab
+Melanoma,GenoMEL,prot-a-228,B melanoma antigen 3,Sun BB,2018,,,3301,European,NA
+Melanoma,GenoMEL,prot-a-227,B melanoma antigen 2,Sun BB,2018,,,3301,European,NA
+Melanoma,GenoMEL,prot-a-1827,Melanoma-associated antigen 10,Sun BB,2018,,,3301,European,NA
+Melanoma,GenoMEL,prot-a-1828,Melanoma-associated antigen 3,Sun BB,2018,,,3301,European,NA
+Melanoma,GenoMEL,prot-a-1829,Melanoma-associated antigen B10,Sun BB,2018,,,3301,European,NA
+Anorexia nervosa,PGC AN,ebi-a-GCST90016613,Major depressive disorder vs anorexia nervosa (ordinary least squares (OLS)),Peyrot WJ,2021,170756,16992,187748,NA,NA
+Anorexia nervosa,PGC AN,ebi-a-GCST90016619,Schizophrenia vs anorexia nervosa (ordinary least squares (OLS)),Peyrot WJ,2021,40675,16992,57667,NA,NA
+Anorexia nervosa,PGC AN,ebi-a-GCST90016605,Bipolar disorder vs anorexia nervosa (ordinary least squares (OLS)),Peyrot WJ,2021,20352,16992,37344,NA,NA
+Anorexia nervosa,PGC AN,ebi-a-GCST90016595,ADHD vs anorexia nervosa (ordinary least squares (OLS)),Peyrot WJ,2021,19099,16992,36091,NA,NA
+Anorexia nervosa,PGC AN,ebi-a-GCST90016599,Anorexia nervosa vs autism spectrum disorder (ordinary least squares (OLS)),Peyrot WJ,2021,16992,18381,35373,NA,NA
+Anorexia nervosa,PGC AN,ebi-a-GCST90016601,Anorexia nervosa vs Tourette's syndrome and other tic disorders (ordinary least squares (OLS)),Peyrot WJ,2021,16992,4819,21811,NA,NA
+Anorexia nervosa,PGC AN,ebi-a-GCST90016600,Anorexia nervosa vs obsessive compulsive disorder (ordinary least squares (OLS)),Peyrot WJ,2021,16992,2688,19680,NA,NA
+Anorexia nervosa,PGC AN,ieu-a-45,Anorexia nervosa,Boraska V,2014,2907,14860,17767,European,GCAN
+Anorexia nervosa,PGC AN,ieu-a-1186,Anorexia Nervosa,Duncan,2017,3495,10982,14477,European,PGC-ED
+Anorexia nervosa,PGC AN,finn-b-R18_ANOREXIA,Anorexia,NA,2021,243,218549,,European,NA
+Anorexia nervosa,PGC AN,finn-b-F5_ANOREX,Anorexia (incl.atypical),NA,2021,1039,213826,,European,NA
+Glioma,GICC,prot-a-1217,Glioma pathogenesis-related protein 1,Sun BB,2018,,,3301,European,NA
+Pancreatic cancer,PanScan,ebi-a-GCST90038622,"Liver, biliary or pancreas problem",D<U+00F6>nerta<U+015F> HM,2021,13495,471103,484598,NA,NA
+Pancreatic cancer,PanScan,ebi-a-GCST90018789,Acute pancreatitis,Sakaue S,2021,3798,476104,479902,European,NA
+Pancreatic cancer,PanScan,ebi-a-GCST90018821,Chronic pancreatitis,Sakaue S,2021,1424,476104,477528,European,NA
+Pancreatic cancer,PanScan,ebi-a-GCST90018893,Pancreatic cancer,Sakaue S,2021,1196,475049,476245,European,NA
+Pancreatic cancer,PanScan,ukb-b-676,Operative procedures - secondary OPCS: J43.9 Unspecified diagnostic endoscopic retrograde examination of bile duct and pancreatic duct,Ben Elsworth,2018,1029,461981,463010,European,MRC-IEU
+Pancreatic cancer,PanScan,ukb-b-19388,Diagnoses - main ICD10: K85 Acute pancreatitis,Ben Elsworth,2018,1215,461795,463010,European,MRC-IEU
+Pancreatic cancer,PanScan,ukb-b-16103,Operative procedures - main OPCS: J43.9 Unspecified diagnostic endoscopic retrograde examination of bile duct and pancreatic duct,Ben Elsworth,2018,1022,461988,463010,European,MRC-IEU
+Pancreatic cancer,PanScan,ukb-b-131,"Non-cancer illness code, self-reported: pancreatitis",Ben Elsworth,2018,1006,461927,462933,European,MRC-IEU
+Pancreatic cancer,PanScan,ukb-d-K11_GALLBILPANC,"Disorders of gallbladder, biliary tract and pancreas",Neale lab,2018,13922,347272,361194,European,NA
+Pancreatic cancer,PanScan,bbj-a-140,Pancreatic cancer,Ishigaki K,2019,442,195745,196187,East Asian,NA
+Pancreatic cancer,PanScan,ebi-a-GCST90018569,Acute pancreatitis,Sakaue S,2021,827,177471,178298,East Asian,NA
+Pancreatic cancer,PanScan,ebi-a-GCST90018601,Chronic pancreatitis,Sakaue S,2021,457,177471,177928,East Asian,NA
