@@ -231,3 +231,51 @@ same cis window of the same outcome GWAS, at genome-wide significance and separa
 p < 0.05. Compare against the sentinel-SNP classifier. Report discordant pairs with
 McNemar rather than ΔAUC, which will not resolve at this n. Approximately 143 cis-window
 queries.
+
+---
+
+## Venue, corrected
+
+**Drug Discovery Today is invitation-only for primary research.** Entry is a 100–200 word
+proposal and the article types are reviews, short reviews and perspectives. A perspective
+there — "what does cis-pQTL MR buy you, and for how many targets" — suits the reframe, but
+it is a separate document written as commentary, not this manuscript. Decide it
+deliberately or not at all.
+
+**Revised ladder.** HGG Advances first: fully open access, publishes across human genetics
+and genomics, has a Brief Communication format, and its editors explicitly welcome
+presubmission inquiries. After three desk rejections, a journal that invites scope-checking
+is worth more than a nominally higher-profile one that does not. Then PLOS ONE with a fee
+waiver. A Drug Discovery Today proposal is optional and separate.
+
+**Article type is settled by the inquiry, not in advance.** Brief Communication versus full
+article determines how much of the reduced-form audit reaches the main text. The inquiry is
+the instrument for that question; put both options in it.
+
+The argument for the full article: the compressible material is the credibility, not the
+padding — seven frozen protocols, eight corrected accessions that did not move the answer,
+a documented failed prediction, and the confound decomposition are what make a modest
+positive result trustworthy. The argument against: the positive content is a PPV on 17
+calls from 5 genes, and a full article with thin positives and heavy negatives reads as
+padded. An editor knows which way that lands at their journal.
+
+## Two remaining overclaims to fix in the drafting
+
+**The 1.9× lift** carries its interval every time it appears, with the gene count named in
+the same sentence. Nelson and King are large, replicated, prospectively validated; this is
+a small-sample echo. "Consistent with" — never "confirms" or "replicates" — and state that
+the concordance is with an established benchmark rather than independent corroboration.
+
+**"Reduces to outcome-GWAS association"** is 134 of 139 pairs, not a general claim. Write
+the fraction, name the five catalog exceptions and their different standard error, and put
+the algebra in Methods as a known property of single-instrument Wald ratios with
+first-order standard errors.
+
+## The null at triage
+
+Reporting a failed pre-registered prediction is an asset in Results, Discussion and the
+cover letter, and a liability in the title and abstract. Desk rejection turns on perceived
+significance in the first minute, and an abstract whose most salient content is a failed
+hypothesis hands the editor the rejection. The abstract leads with the applicability
+ceiling and the benchmark-level lift. The null is reported once, cleanly, with its interval
+and the power ceiling. Nothing is hidden; it simply is not the hook.
