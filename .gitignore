@@ -25,3 +25,7 @@ paper/cover_letter.out
 
 # Submission tracking — private (public repo; keep rejection history out of git)
 submissions/
+
+# Zenodo build output (sources live in zenodo/)
+zenodo_export/
+zenodo_export.zip

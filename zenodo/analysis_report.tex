@@ -1,0 +1,152 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage[hidelinks]{hyperref}
+\usepackage{parskip}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+
+\title{\emph{Cis}-pQTL Mendelian Randomization and Phase~III Drug-Target Outcomes:\\
+Corrected Analysis Report}
+\author{Elliot Tower\\ \texttt{elliot@elliottower.ai}}
+\date{17 August 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+This report accompanies the deposited analysis archive. It states the corrected results for
+a pre-registered evaluation of \emph{cis}-pQTL Mendelian randomization as a predictor of
+Phase~III trial success, records the outcome-GWAS corrections applied to the underlying
+data, and reports the test of the registered mechanism hypothesis. The classifier
+discriminates above chance overall, with a positive predictive value of 0.588 against a
+base rate of 0.308. The registered prediction that performance differs by drug mechanism is
+not supported at this sample size, and the design cannot resolve it at any sample size the
+instrument universe permits. No manuscript accompanies this deposit.
+\end{abstract}
+
+\section{Scope}
+
+The evaluation covers 143 drug-target-indication pairs across 91 genes and 24 diseases.
+Trial outcomes were adjudicated from FDA and EMA approval records and ClinicalTrials.gov
+before any Mendelian randomization estimate was computed, under the staged architecture
+recorded in \texttt{protocol/DEVIATION\_LOG.md}. The candidate set was frozen and hashed at
+that point; \texttt{data/frozen\_candidates\_v34.csv} hashes to \texttt{c428c733\ldots},
+matching the value recorded in the deviation log.
+
+The classifier is a single-SNP Wald ratio on a sentinel \emph{cis}-pQTL, with $p < 0.05$
+predicting SUCCESS. It has no tunable parameters and was fixed in protocol V3.1.
+
+\section{Results}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrrrl}
+\toprule
+Stratum & $n$ & Balanced accuracy & 90\% CI & Criterion \\
+\midrule
+Primary & 143 & 0.5783 & [0.5223, 0.6364] & met \\
+Effective $N \geq 2{,}000$ & 134 & 0.5810 & [0.5243, 0.6415] & met \\
+Abundance-modulating & 65 & 0.6165 & [0.5309, 0.7040] & met \\
+Activity-blocking & 75 & 0.5136 & [0.4554, 0.5826] & not met \\
+\bottomrule
+\end{tabular}
+\caption{Balanced accuracy by stratum, with 90\% bootstrap intervals over 10{,}000
+resamples. The pre-registered falsification criterion is a lower bound above 0.50.
+Base rate 0.308 SUCCESS.}
+\end{table}
+
+\vspace{-0.5em}
+Sensitivity is 0.227 and specificity 0.929. The classifier fires on 17 of 143 pairs and is
+correct on 10 of those, giving a positive predictive value of 0.588 against a base rate of
+0.308, a 1.9-fold lift. That figure rests on 17 positive calls drawn from a small number of
+genes and is reported with that caveat throughout. It is consistent with the roughly
+two-fold lift for genetically supported targets reported by Nelson et al. (2015) and King
+et al. (2019), which are large replicated estimates; the agreement here is concordance with
+an established benchmark rather than independent corroboration of it.
+
+The negative predictive value is 0.730 against a failure base rate of 0.692, a lift of
+1.05. A positive result carries information; a null result carries almost none.
+
+\section{The mechanism hypothesis}
+
+Protocol V3.4 registered the prediction that the classifier performs better for
+abundance-modulating targets, where the drug acts on the circulating protein the assay
+measures, than for activity-blocking targets, where it does not.
+
+The observed difference is $+0.1028$. Gene-clustered permutation of the mechanism label
+over 20{,}000 iterations gives $p = 0.2144$; a gene-clustered bootstrap on the difference
+gives a 90\% interval of $[-0.0198, +0.2262]$. Genes are the resampling unit because pairs
+sharing a gene share an exposure GWAS and an instrument. \textbf{The prediction is not
+supported at this sample size.}
+
+The difference is also sensitive to specification. It falls to $+0.0400$ among the 100
+pairs whose outcome GWAS can be identified, to $+0.0148$ outside immune-mediated disease,
+and reverses to $-0.0349$ within UKB-PPP instruments. Two further stratifications registered
+in the same protocol produce differences of comparable size and comparable
+non-significance: disease area $+0.0941$ ($p = 0.281$) and instrument source $+0.0757$
+($p = 0.385$).
+
+Detecting a difference of the observed size at 80\% power requires approximately 345 to 435
+analyzed pairs. The applicability funnel places the entire universe of Phase~III
+drug-target pairs carrying a plasma \emph{cis}-pQTL instrument at 211. The hypothesis is
+not resolvable with data that currently exist.
+
+\section{Outcome-GWAS corrections}
+
+An audit of every accession found eight errors. Five pointed at an unrelated trait: chronic
+kidney disease to a bladder cancer GWAS, systemic lupus erythematosus to serum copper,
+autism spectrum disorder to oral and pharyngeal cancer, melanoma to waist circumference,
+and hypercholesterolemia to an LDL cholesterol GWAS against an LDL-lowering endpoint. Three
+had been withdrawn from the OpenGWAS index after they were queried.
+
+A separate \texttt{DISEASE\_GWAS} mapping in \texttt{code/expand\_v5.py} supplied two
+further diseases and had never been audited. Juvenile idiopathic arthritis used a 216-case
+substitute where the deviation log pre-specified a 2{,}816-case source, and the
+substitute's controls include UK Biobank participants while five of the six pairs use
+UKB-PPP instruments, contrary to the overlap policy in force.
+
+Every correction restores a source named in the deviation log, with one exception: no
+glioma GWAS matching the pre-specified consortium exists in OpenGWAS, and the pre-declared
+FinnGen fallback was used. The two mappings are now a single shared constant.
+
+\textbf{The corrections did not change the conclusion.} The mechanism difference was
+$+0.0955$ before correction, $+0.1028$ after, and $+0.1029$ after LD-proxy recovery was
+applied symmetrically to both the original and the corrected accessions. What changed the
+conclusion was testing the difference rather than inferring it from two intervals.
+
+\section{Limits on provenance}
+
+Forty of the 143 pairs take their estimate from the EpiGraphDB MR-EvE catalog. The catalog
+records source, method, SNP count and rsID, and does not record which outcome GWAS was
+used. For those pairs the outcome phenotype, its case and control counts, and any sample
+overlap with the exposure cohort cannot be verified. They reproduce exactly from the
+deposited catalog file, which is included here and had not previously been public.
+
+After LD-proxy recovery, thirteen pairs remain unrecovered because their instrument is
+absent from the corrected outcome GWAS and has no proxy at $r^2 \geq 0.6$. Those
+instruments have a median minor allele frequency of 0.100 against 0.215 for retained pairs,
+on nine and eighty-nine observations respectively. The analyzed set is depleted of
+low-frequency instruments in pancreatic cancer, chronic kidney disease and juvenile
+idiopathic arthritis.
+
+The sample-overlap sensitivity analysis is not evaluable. One flagged pair survives the
+corrections, and a comparison against a single-pair stratum estimates nothing.
+
+\section{Archive contents}
+
+The deposit holds the pre-registration chain V1 through V7 with amendments and freeze
+records, the corrected analysis and its caches, the prior uncorrected analyzed set for
+comparison, the frozen candidate and adjudication data, the EpiGraphDB catalog, the
+analysis code and the correction harness, and a SHA-256 manifest.
+
+Protocols V1 and V3 do not verify against their recorded hashes. Both hash files name
+pre-rename filenames and both documents entered the repository already renamed, so those
+records describe files that never existed under those names. Both are superseded.
+
+No manuscript is deposited. The current draft asserts a mechanism-dependent difference that
+these data do not support.
+
+\end{document}

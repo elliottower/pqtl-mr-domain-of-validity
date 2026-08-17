@@ -1,7 +1,7 @@
 {
   "title": "The Domain of Validity of Cis-pQTL Mendelian Randomization for Drug-Target Prioritization",
-  "upload_type": "software",
-  "description": "Pre-registered mechanism-stratified evaluation of cis-pQTL MR for drug-target prioritization against 195 Phase III drug-target pairs across 24 diseases.",
+  "upload_type": "dataset",
+  "description": "Pre-registered evaluation of cis-pQTL Mendelian randomization as a predictor of Phase III trial success, across 143 drug-target-indication pairs spanning 91 genes and 24 diseases. Includes the corrected analysis, the full pre-registration chain V1-V7 with SHA-256 freeze records, an audit and correction of eight erroneous outcome-GWAS accessions, and the EpiGraphDB catalog files needed to regenerate 40 of the pairs. The classifier discriminates above chance (balanced accuracy 0.5783, 90% CI [0.5223, 0.6364]) with a positive predictive value of 0.588 against a base rate of 0.308. The registered prediction that performance differs by drug mechanism is not supported at this sample size (gene-clustered permutation p = 0.2144).",
   "creators": [
     {
       "name": "Tower, Elliot",
@@ -13,7 +13,9 @@
     "Mendelian randomization",
     "pQTL",
     "drug target",
-    "domain of validity",
+    "Phase III",
+    "pre-registration",
+    "null result",
     "pharmacology"
   ],
   "related_identifiers": [
