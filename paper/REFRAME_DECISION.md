@@ -177,3 +177,57 @@ it is.
 4. Run once.
 5. Choose a title from what survives. Noun phrase, no verdict.
 6. Then draft.
+
+---
+
+## Novelty and scope check — outcome
+
+**C is not novel as algebra and must never be written as one.** The cancellation is a known
+property of the single-instrument Wald ratio with a first-order standard error, and it is
+why the cis-MR methods literature works with multi-SNP, correlated-instrument and cML
+estimators rather than sentinel-SNP ratios. State it in Methods as known, with a citation.
+
+The contribution is the empirical consequence: a corpus of canonical cis-pQTL MR
+drug-target findings reproduces under a plain outcome-GWAS sentinel lookup, so the protein
+contributes locus selection and not inference. That is an audit of practice, not a claim
+about the estimator.
+
+**A is partly pre-empted and needs a citation.** Zheng et al. report the complementary
+coverage number — 682 of 1,002 instrumentable proteins overlap the druggable genome — and
+name the inability to instrument the proteome as a limitation. The distinction here is the
+denominator: not what fraction of instrumentable proteins are druggable, but what fraction
+of actual Phase III targets are instrumentable, scored against trial outcomes. Keep the
+funnel, cite Zheng as prior art, state the distinction in one sentence.
+
+**B lands on the Nelson 2015 / King 2019 anchor, and that cuts both ways.** A 1.9× lift is
+instantly legible. It also invites the question of whether cis-pQTL MR adds anything over
+the cheaper genetic-support signal, particularly since King found the >2× lift where causal
+genes are clear through coding variants, which is close to what a cis-pQTL sentinel picks.
+
+### The B–C tension, and how it is resolved
+
+If C holds, B's lift is attributable to outcome-GWAS association at a druggable locus
+rather than to anything proteomic. Written as separate sections, the first referee to
+notice reads a contradiction. Written as one argument, there is none:
+
+> cis-pQTL MR's rule-in value is real and sits at the known genetic-support benchmark. It
+> reduces to outcome-GWAS association at a pQTL-selected locus. The set of targets where it
+> applies at all is small.
+
+### The comparison: run it as an audit, not as an increment
+
+Asking "does MR beat genetic support" at 17 positive calls is underpowered, and a null
+reads as a failed test. Asking "what does the pQTL contribute" is the same computation, and
+a null is the result.
+
+The increment is not zero by construction, which is why the comparison is worth running.
+The MR classifier tests one pre-specified SNP at p < 0.05; generic genetic support asks
+whether any variant in the locus reaches genome-wide significance. The pQTL converts a
+multiple-testing problem across the cis window into a single pre-specified test, which is a
+real mechanism for increment.
+
+**Baseline to pre-specify:** for each pair, the most strongly associated variant in the
+same cis window of the same outcome GWAS, at genome-wide significance and separately at
+p < 0.05. Compare against the sentinel-SNP classifier. Report discordant pairs with
+McNemar rather than ΔAUC, which will not resolve at this n. Approximately 143 cis-window
+queries.
