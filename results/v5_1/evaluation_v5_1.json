@@ -1,0 +1,176 @@
+{
+  "n_analysed_before": 157,
+  "n_retained": 138,
+  "lost": [
+    {
+      "pair_id": "CD80|Chronic kidney disease",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "DPP4|Chronic kidney disease",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "EGLN1|Chronic kidney disease",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "ELN|Chronic kidney disease",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "MME|Chronic kidney disease",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "EGFR|Pancreatic cancer",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "FGFR3|Pancreatic cancer",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "FLT4|Pancreatic cancer",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "KDR|Pancreatic cancer",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "KIT|Pancreatic cancer",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "PDGFRA|Pancreatic cancer",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "PDGFRB|Pancreatic cancer",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "RET|Pancreatic cancer",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "SERPINC1|Pancreatic cancer",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "TNF|Juvenile idiopathic arthritis",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "PCSK9|Hypercholesterolemia",
+      "reason": "disease dropped"
+    },
+    {
+      "pair_id": "GHR|Chronic kidney disease",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "GHR|Juvenile idiopathic arthritis",
+      "reason": "instrument SNP absent from corrected GWAS"
+    },
+    {
+      "pair_id": "CD86|Juvenile idiopathic arthritis",
+      "reason": "instrument SNP absent from corrected GWAS"
+    }
+  ],
+  "effective_n_floor": 2000,
+  "strata": {
+    "PRIMARY \u2014 all retained pairs": {
+      "n": 138,
+      "tp": 10,
+      "fp": 6,
+      "tn": 89,
+      "fn": 33,
+      "sens": 0.23255813953488372,
+      "spec": 0.9368421052631579,
+      "ba": 0.5847001223990208,
+      "ba_ci_lo": 0.5293015788065293,
+      "ba_ci_hi": 0.6427402384849193,
+      "criterion": "PASS"
+    },
+    "SENSITIVITY \u2014 effective N >= 2000": {
+      "n": 129,
+      "tp": 10,
+      "fp": 6,
+      "tn": 82,
+      "fn": 31,
+      "sens": 0.24390243902439024,
+      "spec": 0.9318181818181818,
+      "ba": 0.5878603104212861,
+      "ba_ci_lo": 0.5293560606060606,
+      "ba_ci_hi": 0.6483544303797468,
+      "criterion": "PASS"
+    },
+    "SENSITIVITY \u2014 sample_overlap == clean": {
+      "n": 138,
+      "tp": 10,
+      "fp": 6,
+      "tn": 89,
+      "fn": 33,
+      "sens": 0.23255813953488372,
+      "spec": 0.9368421052631579,
+      "ba": 0.5847001223990208,
+      "ba_ci_lo": 0.5282738095238095,
+      "ba_ci_hi": 0.6435755594669349,
+      "criterion": "PASS"
+    },
+    "MECHANISM \u2014 abundance_modulating": {
+      "n": 64,
+      "tp": 7,
+      "fp": 3,
+      "tn": 39,
+      "fn": 15,
+      "sens": 0.3181818181818182,
+      "spec": 0.9285714285714286,
+      "ba": 0.6233766233766234,
+      "ba_ci_lo": 0.5365448504983389,
+      "ba_ci_hi": 0.7146198830409357,
+      "criterion": "PASS"
+    },
+    "MECHANISM \u2014 abundance_modulating, effective N >= 2000": {
+      "n": 63,
+      "tp": 7,
+      "fp": 3,
+      "tn": 38,
+      "fn": 15,
+      "sens": 0.3181818181818182,
+      "spec": 0.926829268292683,
+      "ba": 0.6225055432372506,
+      "ba_ci_lo": 0.5342105263157895,
+      "ba_ci_hi": 0.7145030425963489,
+      "criterion": "PASS"
+    },
+    "MECHANISM \u2014 activity_blocking": {
+      "n": 71,
+      "tp": 2,
+      "fp": 3,
+      "tn": 48,
+      "fn": 18,
+      "sens": 0.1,
+      "spec": 0.9411764705882353,
+      "ba": 0.5205882352941177,
+      "ba_ci_lo": 0.4636363636363636,
+      "ba_ci_hi": 0.5878623188405797,
+      "criterion": "fail"
+    },
+    "MECHANISM \u2014 activity_blocking, effective N >= 2000": {
+      "n": 63,
+      "tp": 2,
+      "fp": 3,
+      "tn": 42,
+      "fn": 16,
+      "sens": 0.1111111111111111,
+      "spec": 0.9333333333333333,
+      "ba": 0.5222222222222223,
+      "ba_ci_lo": 0.4583333333333333,
+      "ba_ci_hi": 0.5959079283887468,
+      "criterion": "fail"
+    }
+  }
+}

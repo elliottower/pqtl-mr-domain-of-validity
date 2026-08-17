@@ -23,6 +23,7 @@ import csv
 import json
 import math
 import pathlib
+import random
 import re
 import subprocess
 import sys
@@ -101,14 +102,32 @@ def metrics(rows):
             "sens": sens, "spec": spec, "ba": (sens + spec) / 2}
 
 
-def report(title, rows):
+def bootstrap_ba(rows, n_boot=10000):
+    """Percentile 90% interval. No seed is set; n_boot is large enough to be stable."""
+    rnd = random.Random()
+    draws = []
+    for _ in range(n_boot):
+        sample = [rows[rnd.randrange(len(rows))] for _ in range(len(rows))]
+        m = metrics(sample)
+        if not (math.isnan(m["sens"]) or math.isnan(m["spec"])):
+            draws.append(m["ba"])
+    draws.sort()
+    return draws[int(0.05 * len(draws))], draws[int(0.95 * len(draws))]
+
+
+def report(title, rows, results):
     if len(rows) < 2:
         print(f"\n{title}: n={len(rows)}, not estimable")
         return
     m = metrics(rows)
+    lo, hi = bootstrap_ba(rows)
+    verdict = "PASS" if lo > 0.50 else "fail"
     print(f"\n{title}")
     print(f"   n={m['n']}  TP={m['tp']} FP={m['fp']} TN={m['tn']} FN={m['fn']}")
     print(f"   sensitivity={m['sens']:.3f}  specificity={m['spec']:.3f}  BA={m['ba']:.4f}")
+    print(f"   bootstrap 90% CI [{lo:.4f}, {hi:.4f}]   "
+          f"pre-registered criterion (lower > 0.50): {verdict}")
+    results[title] = {**m, "ba_ci_lo": lo, "ba_ci_hi": hi, "criterion": verdict}
 
 
 def main():
@@ -226,14 +245,22 @@ def main():
     print("\n" + "=" * 78)
     print("  V5.1 RESULTS")
     print("=" * 78)
-    report("PRIMARY — all retained pairs", final)
+    results = {}
+    report("PRIMARY — all retained pairs", final, results)
     above = [r for r in final if not r["below_floor"]]
-    report(f"SENSITIVITY — effective N >= {EFFECTIVE_N_FLOOR}", above)
-    report("SENSITIVITY — sample_overlap == clean", [r for r in final if r["sample_overlap"] == "clean"])
+    report(f"SENSITIVITY — effective N >= {EFFECTIVE_N_FLOOR}", above, results)
+    report("SENSITIVITY — sample_overlap == clean", [r for r in final if r["sample_overlap"] == "clean"], results)
     for mech in ("abundance_modulating", "activity_blocking"):
-        report(f"MECHANISM — {mech}", [r for r in final if r["mechanism_class"] == mech])
+        report(f"MECHANISM — {mech}", [r for r in final if r["mechanism_class"] == mech], results)
         report(f"MECHANISM — {mech}, effective N >= {EFFECTIVE_N_FLOOR}",
-               [r for r in above if r["mechanism_class"] == mech])
+               [r for r in above if r["mechanism_class"] == mech], results)
+
+    summary = OUT_DIR / "evaluation_v5_1.json"
+    summary.write_text(json.dumps(
+        {"n_analysed_before": len(rows), "n_retained": len(final),
+         "lost": [{"pair_id": p, "reason": w} for p, w in lost],
+         "effective_n_floor": EFFECTIVE_N_FLOOR, "strata": results}, indent=2))
+    print(f"\nwrote {summary}")
 
 
 if __name__ == "__main__":
