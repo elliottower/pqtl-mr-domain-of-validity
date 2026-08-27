@@ -29,3 +29,16 @@ submissions/
 # Zenodo build output (sources live in zenodo/)
 zenodo_export/
 zenodo_export.zip
+
+# Submission materials — never tracked (private journal correspondence)
+SUBMISSION_STATUS.md
+SUBMISSION.md
+SUBMISSION_TODO.md
+submission/
+submissions/
+cover_letter*
+cover-letter*
+COVER_LETTER*
+fee_waiver*
+fee-waiver*
+*_submission.zip
