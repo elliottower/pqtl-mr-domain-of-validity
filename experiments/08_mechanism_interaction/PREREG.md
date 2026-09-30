@@ -1,6 +1,9 @@
 # Does drug mechanism change the association between cis-pQTL evidence and clinical advancement?
 
-**Status:** DRAFT — not frozen.
+**Status:** FROZEN at `b946087070e4`
+**Plan sha256:** `6cbba0840b213f586ef455b33e569a84a94fc676103b74adef6c46e2e0e70040`
+**Log:** 12 entries, head `d1aa4a36`
+**Frozen:** 2026-09-30
 
 Sections use the [OSF Preregistration](https://osf.io/prereg/) question titles verbatim, so
 this maps onto a registration without being rewritten. A question that does not apply is
@@ -923,4 +926,6 @@ decide which word to use: `nothing run`, `no results seen`, `results not opened`
 2026-09-30  draft revised for round 4: H1 sole primary confirmatory test, H4 in fixed sequence after H1, H2 key secondary; power reworded as size-corrected surrogate-test planning power and limited exact-model validation, representative exact-model cells specified (results pending, placeholder in Sample size); H4 stratum renamed neurologic or psychiatric with three-way decomposition (table 13) and psychiatric-excluded sensitivity S22; one specificity_rank for the related-indication rule and S12; two-level estimability/reliability gate; marginal quantities integrated over the random-effect distribution; prior-dominance identification rule; pre-stage amendment list   nothing run
 2026-09-30  round-4 representative exact-model cells (1,040 NUTS fits on simulated data) run and read; table inserted in Sample size; simulation only, no study data   nothing run
 2026-09-30  correction to the previous line: the representative exact-model table covers 1,300 simulated datasets (600 no-effect, 700 with an effect), one fit each, no reruns; 260 came from the earlier validation and 1,040 were new. Draft revised for round 5: reduced model after persistent sampler failure is descriptive only; post-freeze amendment rule with frozen failure consequences; meaning of confirmatory (no familywise error claim; fixed-sequence bound in checked configurations); multiple-membership term in marginal predictions; H3 20/20 labelled pragmatic   nothing run
+2026-09-30  frozen at b946087070e4                nothing run  ·072508c4
+2026-09-30  osf draft 6abd60246cf9e1ded2dbef1b of plan 6cbba0840b213f58  nothing run  ·d1aa4a36
 ```
