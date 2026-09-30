@@ -1,0 +1,125 @@
+slug: doi-10-1038-s41588-021-00913-z
+title: Large-scale cis- and trans-eQTL analyses identify thousands of genetic loci and polygenic scores
+  that regulate blood gene expression
+authors:
+- Võsa, Urmo
+- Claringbould, Annique
+- Westra, Harm-Jan
+- Bonder, Marc Jan
+- Deelen, Patrick
+- Zeng, Biao
+- Kirsten, Holger
+- Saha, Ashis
+- Kreuzhuber, Roman
+- Yazar, Seyhan
+- Brugge, Harm
+- Oelen, Roy
+- de Vries, Dylan H.
+- van der Wijst, Monique G. P.
+- Kasela, Silva
+- Pervjakova, Natalia
+- Alves, Isabel
+- Favé, Marie-Julie
+- Agbessi, Mawussé
+- Christiansen, Mark W.
+- Jansen, Rick
+- Seppälä, Ilkka
+- Tong, Lin
+- Teumer, Alexander
+- Schramm, Katharina
+- Hemani, Gibran
+- Verlouw, Joost
+- Yaghootkar, Hanieh
+- Sönmez Flitman, Reyhan
+- Brown, Andrew
+- Kukushkina, Viktorija
+- Kalnapenkis, Anette
+- Rüeger, Sina
+- Porcu, Eleonora
+- Kronberg, Jaanika
+- Kettunen, Johannes
+- Lee, Bernett
+- Zhang, Futao
+- Qi, Ting
+- Hernandez, Jose Alquicira
+- Arindrarto, Wibowo
+- Beutner, Frank
+- BIOS Consortium
+- i2QTL Consortium
+- Dmitrieva, Julia
+- Elansary, Mahmoud
+- Fairfax, Benjamin P.
+- Georges, Michel
+- Heijmans, Bastiaan T.
+- Hewitt, Alex W.
+- Kähönen, Mika
+- Kim, Yungil
+- Knight, Julian C.
+- Kovacs, Peter
+- Krohn, Knut
+- Li, Shuang
+- Loeffler, Markus
+- Marigorta, Urko M.
+- Mei, Hailang
+- Momozawa, Yukihide
+- Müller-Nurasyid, Martina
+- Nauck, Matthias
+- Nivard, Michel G.
+- Penninx, Brenda W. J. H.
+- Pritchard, Jonathan K.
+- Raitakari, Olli T.
+- Rotzschke, Olaf
+- Slagboom, Eline P.
+- Stehouwer, Coen D. A.
+- Stumvoll, Michael
+- Sullivan, Patrick
+- '''t Hoen, Peter A. C.'
+- Thiery, Joachim
+- Tönjes, Anke
+- van Dongen, Jenny
+- van Iterson, Maarten
+- Veldink, Jan H.
+- Völker, Uwe
+- Warmerdam, Robert
+- Wijmenga, Cisca
+- Swertz, Morris
+- Andiappan, Anand
+- Montgomery, Grant W.
+- Ripatti, Samuli
+- Perola, Markus
+- Kutalik, Zoltan
+- Dermitzakis, Emmanouil
+- Bergmann, Sven
+- Frayling, Timothy
+- van Meurs, Joyce
+- Prokisch, Holger
+- Ahsan, Habibul
+- Pierce, Brandon L.
+- Lehtimäki, Terho
+- Boomsma, Dorret I.
+- Psaty, Bruce M.
+- Gharib, Sina A.
+- Awadalla, Philip
+- Milani, Lili
+- Ouwehand, Willem H.
+- Downes, Kate
+- Stegle, Oliver
+- Battle, Alexis
+- Visscher, Peter M.
+- Yang, Jian
+- Scholz, Markus
+- Powell, Joseph
+- Gibson, Greg
+- Esko, Tõnu
+- Franke, Lude
+year: '2021'
+venue: Nature Genetics
+doi: 10.1038/s41588-021-00913-z
+arxiv: ''
+et_al: false
+url: ''
+sha256: ''
+local: ''
+cited_by:
+  pqtl-mr-v8-mechanism-interaction:
+    key: vosa2021eqtlgen

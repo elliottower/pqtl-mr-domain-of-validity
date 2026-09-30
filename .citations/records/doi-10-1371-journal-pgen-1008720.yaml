@@ -1,0 +1,15 @@
+slug: doi-10-1371-journal-pgen-1008720
+title: Eliciting priors and relaxing the single causal variant assumption in colocalisation analyses
+authors:
+- Wallace, Chris
+year: '2020'
+venue: PLoS Genetics
+doi: 10.1371/journal.pgen.1008720
+arxiv: ''
+et_al: false
+url: ''
+sha256: ''
+local: ''
+cited_by:
+  pqtl-mr-v8-mechanism-interaction:
+    key: wallace2020coloc

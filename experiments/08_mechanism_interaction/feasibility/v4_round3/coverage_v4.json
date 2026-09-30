@@ -1,0 +1,2842 @@
+{
+  "experiment": "08_mechanism_interaction feasibility v4: round-3 rules, outcome-blind",
+  "date": "2026-09-30",
+  "run_timestamp_utc": "2026-09-30T14:53:04.294238+00:00",
+  "script": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v4_round3/count_v4.py",
+  "script_sha256": "b155509948f7877a8c34263aa98a0c23b7976b66360d37b910224604ab0006bb",
+  "v2_script_sha256": "5086b83747356056ce985a32616ce71812f13304f81bc7098224abf9be27edb1",
+  "v3_script_sha256": "b9180951618e9378e7aced68030151be48dfec08d2de5ebbe8f353c084da5bfe",
+  "seed": null,
+  "prereg": {
+    "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/PREREG.md",
+    "sha256": "69ee306263f5bb575bc77f585dfad103558df24ffa41f48b8898f62de5ebee17"
+  },
+  "blinding": "- clinical_indication is read with drugId, diseaseId, maxClinicalStage; maxClinicalStage is\n  converted at once to a boolean Phase II+ flag and dropped. No phase value is kept, written\n  or printed.\n- drug_mechanism_of_action: mechanismOfAction, actionType, chemblIds, targets, targetType.\n- drug_molecule: id, drugType, parentId.\n- classification_v5*.csv: gene, disease only. frozen_candidates_v34.csv: disease,\n  ot_disease_id only (the Open Targets disease name used by count_coverage.py).\n- feasibility/coverage_counts.json is never opened. The pilot label -> ID map is rebuilt\n  offline from frozen_candidates_v34.csv names by exact name match in the OT 26.09 disease\n  index, with the multiple-sclerosis override of count_coverage.py.\n- No MR, colocalization, disease-association, outcome or approval value is read.\n- Instrument metadata: Olink map columns Assay, UniProt, UniProt2, HGNC.symbol, ensembl_id;\n  deCODE ST01 SeqId, Gene, UniProt, Ensembl.Gene.ID, Included in analysis; ST02 gene, UniProt,\n  SeqId, cis/trans; Sun 2018 ST4 UniProt, cis/trans; EpiGraphDB catalog gene_symbol only.\n- The membership CSVs carry opaque integers only (no names, phase, outcome or evidence). IDs\n  are ranks of sha256(ID_SALT + key) so their order carries no alphabetical information; the\n  key is not written.",
+  "definitions": {
+    "hypothesis": "gene (HGNC symbol of OT MoA target) + OT diseaseId + intervention direction + mechanism class, over Phase II+ drug rows",
+    "phase2plus": [
+      "APPROVAL",
+      "PHASE_2",
+      "PHASE_2_3",
+      "PHASE_3",
+      "PREAPPROVAL"
+    ],
+    "indication_rule": "prefix in ['EFO', 'MONDO', 'Orphanet']; in OT 26.09 disease index; ontology.isTherapeuticArea false; therapeuticAreas minus ['EFO_0000651', 'EFO_0001444', 'EFO_0002571', 'GO_0008150', 'MONDO_0005583'] non-empty",
+    "blood_secreted": "HPA 'Secretome location' == 'Secreted to blood' for the MoA target Ensembl ID",
+    "mechanism_class_row": "PREREG table, first matching row, per MoA row; neutralizing BINDING AGENT treated as INHIBITOR",
+    "mechanism_class_drug_target": "exact duplicate exploded MoA rows (mechanismOfAction, actionType, drug, target, targetType) collapsed; per (canonical program, gene) the distinct (class, direction) of rows with non-ambiguous direction; one value -> that class and direction; none or several -> other/ambiguous",
+    "program": "drug_molecule.parentId of the clinical_indication drugId where present, else the drugId",
+    "instruments_strict": "UKB-PPP: list entry is an Olink assay with one HGNC symbol and one UniProt accession (isoform suffix stripped; UniProt2 used where UniProt holds a label); deCODE: ST02 cis rows whose SeqId has one Gene, one UniProt, <=1 Ensembl ID in ST01 (included in analysis); INTERVAL: ST4 cis rows with one UniProt mapping to one HGNC symbol; EpiGraphDB list not counted",
+    "instruments_inclusive": "UKB-PPP: every gene of every list entry (multi-gene assays split); deCODE: every ST02 cis gene and every ST01 gene/Ensembl ID of its SeqId; INTERVAL: every HGNC symbol of every UniProt on ST4 cis rows, plus the EpiGraphDB gene list",
+    "instruments_v3": "the lists of count_all_indications.py / v3_strict",
+    "outcome_selection": "as v3: per source in order UKB-PPP, deCODE, INTERVAL; tier, overlap no<unknown<yes, larger Neff, GWAS Catalog<FinnGen<OpenGWAS, lower accession; deCODE instrument excludes includes_iceland == yes",
+    "related_indication_rule": "within gene x direction x class, most specific first (fewest OT descendants); X dropped if every program of X is a program of a retained hypothesis on an OT descendant of X; after the overlap step, before held-out",
+    "heldout": "(gene, diseaseId) absent from classification_v5.csv and classification_v5_1.csv (labels mapped as in v3)",
+    "S4": "S1 plus tier-1 overlap-unknown hypotheses retained by the related rule on the no+unknown pool, held out",
+    "S12": "within gene, S1 hypotheses by ontology depth descending (longest path to a root along OT parents), then indication ID, then lowest program ID; kept if none of its programs is already kept",
+    "cns": "OT therapeuticAreas of the indication contains one of ['MONDO_0002025', 'MONDO_0005071']",
+    "H1_secreted_only": "H1 hypotheses whose target is HPA blood-secreted (aligned hypotheses are blood-secreted by the class rule)",
+    "crossover_genes": "genes with at least one aligned and one blocking hypothesis in the set",
+    "membership_ids": "opaque integers: rank of sha256('exp08-v4-membership:' + key); hypothesis key gene|diseaseId|direction|class; shared by both CSVs"
+  },
+  "releases": {
+    "open_targets": "26.09",
+    "gwas_catalog": "r2026-09-13",
+    "hpa": {
+      "version": "25.1",
+      "basis": "proteinatlas.org/about/releases lists version 25.1 (release date 2026.05.25) as current; the zip entry is dated 2026-06-03 and the live download's Last-Modified and Content-Length are checked below",
+      "zip_entry_date": [
+        2026,
+        6,
+        3,
+        13,
+        6,
+        48
+      ],
+      "live_download_head": {
+        "last_modified": "Wed, 03 Jun 2026 11:06:49 GMT",
+        "content_length": "7460135",
+        "local_bytes": 7460135
+      },
+      "secreted_to_blood_genes": 785
+    },
+    "finngen": [
+      "FINNGEN_R12"
+    ]
+  },
+  "universe_meta": {
+    "clinical_indication_rows": 86451,
+    "phase2plus_hypotheses": 84549
+  },
+  "crosscheck_v2": {
+    "seen_keys_here": 161,
+    "seen_keys_v2": 161,
+    "eligible_pairs_here": 79248,
+    "eligible_pairs_v2": 79248,
+    "v2_final_heldout_reproduced": {
+      "pairs": 6853,
+      "genes": 389,
+      "indications": 692
+    },
+    "v2_final_heldout_reported": {
+      "pairs": 6853,
+      "genes": 389,
+      "indications": 692
+    },
+    "label_map_problems": {}
+  },
+  "instrument_lists": {
+    "sizes": {
+      "strict": {
+        "ukbppp": {
+          "symbols": 1949,
+          "ensembl": 1940
+        },
+        "decode": {
+          "symbols": 1810,
+          "ensembl": 1785
+        },
+        "interval": {
+          "symbols": 539,
+          "ensembl": 0
+        }
+      },
+      "v3": {
+        "ukbppp": {
+          "symbols": 1941,
+          "ensembl": 1932
+        },
+        "decode": {
+          "symbols": 1809,
+          "ensembl": 1785
+        },
+        "interval": {
+          "symbols": 842,
+          "ensembl": 0
+        }
+      },
+      "inclusive": {
+        "ukbppp": {
+          "symbols": 1976,
+          "ensembl": 1967
+        },
+        "decode": {
+          "symbols": 1810,
+          "ensembl": 1785
+        },
+        "interval": {
+          "symbols": 850,
+          "ensembl": 0
+        }
+      }
+    },
+    "ukbppp": {
+      "list_entries": 1954,
+      "entries_in_olink_map": 1954,
+      "strict_assays": 1941,
+      "dropped_assays": {
+        "AMY1A_AMY1B_AMY1C": {
+          "n_symbols": 3,
+          "n_accessions": 3
+        },
+        "BOLA2_BOLA2B": {
+          "n_symbols": 2,
+          "n_accessions": 1
+        },
+        "CGB3_CGB5_CGB8": {
+          "n_symbols": 3,
+          "n_accessions": 1
+        },
+        "CKMT1A_CKMT1B": {
+          "n_symbols": 2,
+          "n_accessions": 1
+        },
+        "DEFA1_DEFA1B": {
+          "n_symbols": 2,
+          "n_accessions": 1
+        },
+        "DEFB104A_DEFB104B": {
+          "n_symbols": 2,
+          "n_accessions": 1
+        },
+        "DEFB4A_DEFB4B": {
+          "n_symbols": 2,
+          "n_accessions": 1
+        },
+        "EBI3_IL27": {
+          "n_symbols": 2,
+          "n_accessions": 2
+        },
+        "FUT3_FUT5": {
+          "n_symbols": 2,
+          "n_accessions": 2
+        },
+        "IL12A_IL12B": {
+          "n_symbols": 2,
+          "n_accessions": 2
+        },
+        "LGALS7_LGALS7B": {
+          "n_symbols": 2,
+          "n_accessions": 1
+        },
+        "MICB_MICA": {
+          "n_symbols": 2,
+          "n_accessions": 2
+        },
+        "SPACA5_SPACA5B": {
+          "n_symbols": 2,
+          "n_accessions": 1
+        }
+      },
+      "entries_absent_from_olink_map": []
+    },
+    "decode": {
+      "cis_seqids": 1881,
+      "strict_seqids": 1881,
+      "dropped_seqids": {}
+    },
+    "interval": {
+      "cis_rows": 589,
+      "single_uniprot_rows_not_one_symbol": 3,
+      "multi_uniprot_rows": 8,
+      "st4_strict_genes": 539,
+      "epigraphdb_genes": 777,
+      "epigraphdb_genes_not_in_st4_strict": 301
+    },
+    "genes_lost_list_level": {
+      "inclusive": {
+        "ukbppp": {
+          "list_symbols_removed": 27,
+          "indication_rule_genes_losing_source": 1,
+          "of_which_left_with_no_strict_source": 1
+        },
+        "decode": {
+          "list_symbols_removed": 0,
+          "indication_rule_genes_losing_source": 0,
+          "of_which_left_with_no_strict_source": 0
+        },
+        "interval": {
+          "list_symbols_removed": 311,
+          "indication_rule_genes_losing_source": 56,
+          "of_which_left_with_no_strict_source": 4
+        }
+      },
+      "v3": {
+        "ukbppp": {
+          "list_symbols_removed": 0,
+          "indication_rule_genes_losing_source": 0,
+          "of_which_left_with_no_strict_source": 0
+        },
+        "decode": {
+          "list_symbols_removed": 0,
+          "indication_rule_genes_losing_source": 0,
+          "of_which_left_with_no_strict_source": 0
+        },
+        "interval": {
+          "list_symbols_removed": 303,
+          "indication_rule_genes_losing_source": 52,
+          "of_which_left_with_no_strict_source": 1
+        }
+      }
+    }
+  },
+  "mechanism_rows": {
+    "moa_rows_after_explode": 14718,
+    "exact_duplicate_moa_rows_collapsed": 0,
+    "drug_targets_phase2plus_universe": 9650,
+    "drug_targets_with_more_than_one_distinct_class_direction_row": 38,
+    "drug_targets_conflicted_informative_rows": 26,
+    "drug_targets_no_informative_row": 925,
+    "drug_targets_conflicted_if_all_rows_count": 38,
+    "drug_targets_in_strict_S1": 1515,
+    "conflicted_drug_targets_in_strict_S1": 1,
+    "drug_target_indication_rows_conflicted_universe": 623,
+    "drug_target_indication_rows_conflicted_strict_S1": 11,
+    "conflicted_by_row_classes": {
+      "blocking/decrease|other/decrease": 26
+    }
+  },
+  "programs": {
+    "raw_drugIds": 4193,
+    "programs": 3510,
+    "drugIds_mapped_to_a_parent": 750,
+    "parent_of_parent_chains_in_drug_molecule": 0
+  },
+  "counts": {
+    "strict": {
+      "S1": {
+        "hypotheses": 5064,
+        "pairs": 4778,
+        "genes": 384,
+        "indications": 493,
+        "pairs_per_gene": {
+          "n_genes": 384,
+          "min": 1,
+          "median": 5.0,
+          "mean": 12.443,
+          "p90": 38.0,
+          "max": 81,
+          "histogram": {
+            "1": 38,
+            "2": 63,
+            "3-5": 102,
+            "6-10": 55,
+            "11-20": 53,
+            ">20": 73
+          }
+        },
+        "hypotheses_per_gene": {
+          "n_genes": 384,
+          "min": 1,
+          "median": 5.0,
+          "mean": 13.188,
+          "p90": 39.0,
+          "max": 86,
+          "histogram": {
+            "1": 36,
+            "2": 64,
+            "3-5": 98,
+            "6-10": 59,
+            "11-20": 52,
+            ">20": 75
+          }
+        },
+        "by_class": {
+          "aligned": {
+            "hypotheses": 582,
+            "genes": 69,
+            "pairs": 582,
+            "indications": 241,
+            "direction": {
+              "decrease": 582
+            }
+          },
+          "blocking": {
+            "hypotheses": 2671,
+            "genes": 170,
+            "pairs": 2671,
+            "indications": 359,
+            "direction": {
+              "decrease": 2671
+            }
+          },
+          "other": {
+            "hypotheses": 1811,
+            "genes": 222,
+            "pairs": 1697,
+            "indications": 340,
+            "direction": {
+              "increase": 498,
+              "decrease": 718,
+              "ambiguous": 595
+            }
+          }
+        },
+        "shares_program": 4884,
+        "selected_instrument_source": {
+          "ukbppp": 4004,
+          "decode": 1052,
+          "interval": 8
+        },
+        "selected_outcome_source": {
+          "gwas_catalog": 2546,
+          "opengwas": 195,
+          "finngen": 2323
+        },
+        "any_single_protein_moa": {
+          "hypotheses": 3354,
+          "pairs": 3135,
+          "genes": 279,
+          "indications": 454
+        },
+        "pilot_indication_flag": 389,
+        "secreted_target": {
+          "hypotheses": 1292,
+          "pairs": 1208,
+          "genes": 118,
+          "indications": 325
+        },
+        "indication_id_prefixes": {
+          "EFO": 54,
+          "MONDO": 438,
+          "Orphanet": 1
+        }
+      },
+      "S4": {
+        "hypotheses": 5355,
+        "pairs": 5049,
+        "genes": 386,
+        "indications": 510,
+        "by_class": {
+          "aligned": {
+            "hypotheses": 613,
+            "genes": 70,
+            "pairs": 613,
+            "indications": 254,
+            "direction": {
+              "decrease": 613
+            }
+          },
+          "blocking": {
+            "hypotheses": 2844,
+            "genes": 172,
+            "pairs": 2844,
+            "indications": 371,
+            "direction": {
+              "decrease": 2844
+            }
+          },
+          "other": {
+            "hypotheses": 1898,
+            "genes": 222,
+            "pairs": 1778,
+            "indications": 358,
+            "direction": {
+              "increase": 521,
+              "decrease": 759,
+              "ambiguous": 618
+            }
+          }
+        },
+        "overlap_unknown_added": {
+          "hypotheses": 291,
+          "pairs": 271,
+          "genes": 110,
+          "indications": 24
+        }
+      },
+      "H1_eligible": {
+        "hypotheses": 3253,
+        "pairs": 3211,
+        "genes": 228,
+        "indications": 424,
+        "pairs_per_gene": {
+          "n_genes": 228,
+          "min": 1,
+          "median": 5.0,
+          "mean": 14.083,
+          "p90": 43.30000000000001,
+          "max": 76,
+          "histogram": {
+            "1": 21,
+            "2": 34,
+            "3-5": 65,
+            "6-10": 26,
+            "11-20": 28,
+            ">20": 54
+          }
+        },
+        "aligned": {
+          "hypotheses": 582,
+          "genes": 69,
+          "pairs": 582,
+          "indications": 241,
+          "direction": {
+            "decrease": 582
+          }
+        },
+        "blocking": {
+          "hypotheses": 2671,
+          "genes": 170,
+          "pairs": 2671,
+          "indications": 359,
+          "direction": {
+            "decrease": 2671
+          }
+        },
+        "other_excluded": {
+          "hypotheses": 1811,
+          "genes": 222,
+          "pairs": 1697,
+          "indications": 340,
+          "direction": {
+            "increase": 498,
+            "decrease": 718,
+            "ambiguous": 595
+          }
+        },
+        "crossover_genes": 11
+      },
+      "CNS": {
+        "S1": {
+          "hypotheses": 698,
+          "pairs": 669,
+          "genes": 168,
+          "indications": 105,
+          "by_class": {
+            "aligned": {
+              "hypotheses": 78,
+              "genes": 27,
+              "pairs": 78,
+              "indications": 38,
+              "direction": {
+                "decrease": 78
+              }
+            },
+            "blocking": {
+              "hypotheses": 327,
+              "genes": 81,
+              "pairs": 327,
+              "indications": 70,
+              "direction": {
+                "decrease": 327
+              }
+            },
+            "other": {
+              "hypotheses": 293,
+              "genes": 84,
+              "pairs": 280,
+              "indications": 78,
+              "direction": {
+                "increase": 62,
+                "decrease": 70,
+                "ambiguous": 161
+              }
+            }
+          }
+        },
+        "S1_non_cns": {
+          "hypotheses": 4366,
+          "pairs": 4109,
+          "genes": 372,
+          "indications": 388
+        },
+        "H1": {
+          "hypotheses": 405,
+          "pairs": 403,
+          "genes": 104,
+          "indications": 82,
+          "aligned": {
+            "hypotheses": 78,
+            "pairs": 78,
+            "genes": 27,
+            "indications": 38
+          },
+          "blocking": {
+            "hypotheses": 327,
+            "pairs": 327,
+            "genes": 81,
+            "indications": 70
+          },
+          "crossover_genes": 4
+        },
+        "H1_non_cns": {
+          "aligned": {
+            "hypotheses": 504,
+            "pairs": 504,
+            "genes": 68,
+            "indications": 203
+          },
+          "blocking": {
+            "hypotheses": 2344,
+            "pairs": 2344,
+            "genes": 165,
+            "indications": 289
+          }
+        }
+      },
+      "H1_secreted_only": {
+        "hypotheses": 990,
+        "pairs": 948,
+        "genes": 88,
+        "indications": 296,
+        "aligned": {
+          "hypotheses": 582,
+          "pairs": 582,
+          "genes": 69,
+          "indications": 241
+        },
+        "blocking": {
+          "hypotheses": 408,
+          "pairs": 408,
+          "genes": 30,
+          "indications": 167
+        },
+        "crossover_genes": 11,
+        "aligned_not_secreted_check": 0
+      },
+      "S12_one_per_program": {
+        "hypotheses": 903,
+        "pairs": 873,
+        "genes": 384,
+        "indications": 217,
+        "by_class": {
+          "aligned": {
+            "hypotheses": 115,
+            "genes": 69,
+            "pairs": 115,
+            "indications": 65,
+            "direction": {
+              "decrease": 115
+            }
+          },
+          "blocking": {
+            "hypotheses": 399,
+            "genes": 170,
+            "pairs": 399,
+            "indications": 144,
+            "direction": {
+              "decrease": 399
+            }
+          },
+          "other": {
+            "hypotheses": 389,
+            "genes": 222,
+            "pairs": 377,
+            "indications": 125,
+            "direction": {
+              "increase": 79,
+              "decrease": 176,
+              "ambiguous": 134
+            }
+          }
+        },
+        "H1_classes": {
+          "hypotheses": 514,
+          "pairs": 511,
+          "genes": 228,
+          "indications": 171
+        },
+        "crossover_genes": 11
+      },
+      "alternatives": {
+        "S1_related_rule_with_raw_drugIds": {
+          "hypotheses": 5126,
+          "pairs": 4838,
+          "genes": 384,
+          "indications": 495
+        },
+        "S1_related_rule_applied_after_heldout": {
+          "hypotheses": 5072,
+          "pairs": 4783,
+          "genes": 384,
+          "indications": 494
+        },
+        "S4_related_rule_rerun_on_no_plus_unknown_pool": {
+          "hypotheses": 5294,
+          "pairs": 4993,
+          "genes": 386,
+          "indications": 507
+        },
+        "fallback_first_source_not_tier1_no_but_tier1_unknown_on_later_source": 1
+      },
+      "funnel": [
+        {
+          "step": "phase2plus_hypotheses",
+          "remaining": {
+            "hypotheses": 84549,
+            "pairs": 79248,
+            "genes": 1475,
+            "indications": 2715
+          }
+        },
+        {
+          "step": "indication_rule",
+          "reason": "{\"prefix_not_mondo_efo_orphanet\": 7290, \"therapeutic_area_root\": 534, \"no_disease_therapeutic_area\": 2652}",
+          "dropped": {
+            "hypotheses": 10476,
+            "pairs": 10050,
+            "genes": 873,
+            "indications": 469
+          },
+          "remaining": {
+            "hypotheses": 74073,
+            "pairs": 69198,
+            "genes": 1461,
+            "indications": 2246
+          }
+        },
+        {
+          "step": "cis_pqtl_instrument",
+          "reason": "no gene on the variant's UKB-PPP, deCODE or INTERVAL list",
+          "dropped": {
+            "hypotheses": 61009,
+            "pairs": 56804,
+            "genes": 1058,
+            "indications": 2051
+          },
+          "remaining": {
+            "hypotheses": 13064,
+            "pairs": 12394,
+            "genes": 403,
+            "indications": 1489
+          }
+        },
+        {
+          "step": "selected_outcome_gwas_tier1",
+          "reason": "{\"tier3\": 5064, \"tier2\": 1011, \"none\": 19}",
+          "dropped": {
+            "hypotheses": 6094,
+            "pairs": 5850,
+            "genes": 337,
+            "indications": 916
+          },
+          "remaining": {
+            "hypotheses": 6970,
+            "pairs": 6544,
+            "genes": 387,
+            "indications": 573
+          }
+        },
+        {
+          "step": "selected_overlap_no",
+          "reason": "{\"yes\": 122, \"unknown\": 408}",
+          "dropped": {
+            "hypotheses": 530,
+            "pairs": 492,
+            "genes": 158,
+            "indications": 66
+          },
+          "remaining": {
+            "hypotheses": 6440,
+            "pairs": 6052,
+            "genes": 385,
+            "indications": 540
+          }
+        },
+        {
+          "step": "related_indication_rule",
+          "reason": "ontology ancestor whose Phase II+ programs (canonical parent molecules) are all on retained descendants",
+          "dropped": {
+            "hypotheses": 1256,
+            "pairs": 1207,
+            "genes": 220,
+            "indications": 153
+          },
+          "remaining": {
+            "hypotheses": 5184,
+            "pairs": 4890,
+            "genes": 385,
+            "indications": 493
+          }
+        },
+        {
+          "step": "heldout",
+          "reason": "gene+indication key in classification_v5/v5_1",
+          "dropped": {
+            "hypotheses": 120,
+            "pairs": 112,
+            "genes": 73,
+            "indications": 18
+          },
+          "remaining": {
+            "hypotheses": 5064,
+            "pairs": 4778,
+            "genes": 384,
+            "indications": 493
+          }
+        }
+      ]
+    },
+    "v3": {
+      "S1": {
+        "hypotheses": 5072,
+        "pairs": 4786,
+        "genes": 385,
+        "indications": 494,
+        "pairs_per_gene": {
+          "n_genes": 385,
+          "min": 1,
+          "median": 5.0,
+          "mean": 12.431,
+          "p90": 38.0,
+          "max": 81,
+          "histogram": {
+            "1": 38,
+            "2": 63,
+            "3-5": 103,
+            "6-10": 55,
+            "11-20": 53,
+            ">20": 73
+          }
+        },
+        "hypotheses_per_gene": {
+          "n_genes": 385,
+          "min": 1,
+          "median": 5.0,
+          "mean": 13.174,
+          "p90": 39.0,
+          "max": 86,
+          "histogram": {
+            "1": 36,
+            "2": 64,
+            "3-5": 99,
+            "6-10": 59,
+            "11-20": 52,
+            ">20": 75
+          }
+        },
+        "by_class": {
+          "aligned": {
+            "hypotheses": 582,
+            "genes": 69,
+            "pairs": 582,
+            "indications": 242,
+            "direction": {
+              "decrease": 582
+            }
+          },
+          "blocking": {
+            "hypotheses": 2675,
+            "genes": 170,
+            "pairs": 2675,
+            "indications": 361,
+            "direction": {
+              "decrease": 2675
+            }
+          },
+          "other": {
+            "hypotheses": 1815,
+            "genes": 223,
+            "pairs": 1701,
+            "indications": 341,
+            "direction": {
+              "increase": 498,
+              "decrease": 722,
+              "ambiguous": 595
+            }
+          }
+        },
+        "shares_program": 4892,
+        "selected_instrument_source": {
+          "ukbppp": 4000,
+          "decode": 1052,
+          "interval": 20
+        },
+        "selected_outcome_source": {
+          "gwas_catalog": 2556,
+          "opengwas": 195,
+          "finngen": 2321
+        },
+        "any_single_protein_moa": {
+          "hypotheses": 3362,
+          "pairs": 3143,
+          "genes": 280,
+          "indications": 455
+        },
+        "pilot_indication_flag": 389,
+        "secreted_target": {
+          "hypotheses": 1292,
+          "pairs": 1208,
+          "genes": 118,
+          "indications": 326
+        },
+        "indication_id_prefixes": {
+          "EFO": 55,
+          "MONDO": 438,
+          "Orphanet": 1
+        }
+      },
+      "S4": {
+        "hypotheses": 5358,
+        "pairs": 5052,
+        "genes": 387,
+        "indications": 511,
+        "by_class": {
+          "aligned": {
+            "hypotheses": 612,
+            "genes": 70,
+            "pairs": 612,
+            "indications": 254,
+            "direction": {
+              "decrease": 612
+            }
+          },
+          "blocking": {
+            "hypotheses": 2845,
+            "genes": 172,
+            "pairs": 2845,
+            "indications": 373,
+            "direction": {
+              "decrease": 2845
+            }
+          },
+          "other": {
+            "hypotheses": 1901,
+            "genes": 223,
+            "pairs": 1781,
+            "indications": 358,
+            "direction": {
+              "increase": 521,
+              "decrease": 762,
+              "ambiguous": 618
+            }
+          }
+        },
+        "overlap_unknown_added": {
+          "hypotheses": 286,
+          "pairs": 266,
+          "genes": 109,
+          "indications": 24
+        }
+      },
+      "H1_eligible": {
+        "hypotheses": 3257,
+        "pairs": 3215,
+        "genes": 228,
+        "indications": 426,
+        "pairs_per_gene": {
+          "n_genes": 228,
+          "min": 1,
+          "median": 5.0,
+          "mean": 14.101,
+          "p90": 43.30000000000001,
+          "max": 76,
+          "histogram": {
+            "1": 21,
+            "2": 34,
+            "3-5": 65,
+            "6-10": 26,
+            "11-20": 28,
+            ">20": 54
+          }
+        },
+        "aligned": {
+          "hypotheses": 582,
+          "genes": 69,
+          "pairs": 582,
+          "indications": 242,
+          "direction": {
+            "decrease": 582
+          }
+        },
+        "blocking": {
+          "hypotheses": 2675,
+          "genes": 170,
+          "pairs": 2675,
+          "indications": 361,
+          "direction": {
+            "decrease": 2675
+          }
+        },
+        "other_excluded": {
+          "hypotheses": 1815,
+          "genes": 223,
+          "pairs": 1701,
+          "indications": 341,
+          "direction": {
+            "increase": 498,
+            "decrease": 722,
+            "ambiguous": 595
+          }
+        },
+        "crossover_genes": 11
+      },
+      "CNS": {
+        "S1": {
+          "hypotheses": 699,
+          "pairs": 670,
+          "genes": 168,
+          "indications": 105,
+          "by_class": {
+            "aligned": {
+              "hypotheses": 78,
+              "genes": 27,
+              "pairs": 78,
+              "indications": 38,
+              "direction": {
+                "decrease": 78
+              }
+            },
+            "blocking": {
+              "hypotheses": 328,
+              "genes": 81,
+              "pairs": 328,
+              "indications": 71,
+              "direction": {
+                "decrease": 328
+              }
+            },
+            "other": {
+              "hypotheses": 293,
+              "genes": 84,
+              "pairs": 280,
+              "indications": 78,
+              "direction": {
+                "increase": 62,
+                "decrease": 70,
+                "ambiguous": 161
+              }
+            }
+          }
+        },
+        "S1_non_cns": {
+          "hypotheses": 4373,
+          "pairs": 4116,
+          "genes": 373,
+          "indications": 389
+        },
+        "H1": {
+          "hypotheses": 406,
+          "pairs": 404,
+          "genes": 104,
+          "indications": 83,
+          "aligned": {
+            "hypotheses": 78,
+            "pairs": 78,
+            "genes": 27,
+            "indications": 38
+          },
+          "blocking": {
+            "hypotheses": 328,
+            "pairs": 328,
+            "genes": 81,
+            "indications": 71
+          },
+          "crossover_genes": 4
+        },
+        "H1_non_cns": {
+          "aligned": {
+            "hypotheses": 504,
+            "pairs": 504,
+            "genes": 68,
+            "indications": 204
+          },
+          "blocking": {
+            "hypotheses": 2347,
+            "pairs": 2347,
+            "genes": 165,
+            "indications": 290
+          }
+        }
+      },
+      "H1_secreted_only": {
+        "hypotheses": 990,
+        "pairs": 948,
+        "genes": 88,
+        "indications": 297,
+        "aligned": {
+          "hypotheses": 582,
+          "pairs": 582,
+          "genes": 69,
+          "indications": 242
+        },
+        "blocking": {
+          "hypotheses": 408,
+          "pairs": 408,
+          "genes": 30,
+          "indications": 167
+        },
+        "crossover_genes": 11,
+        "aligned_not_secreted_check": 0
+      },
+      "S12_one_per_program": {
+        "hypotheses": 904,
+        "pairs": 874,
+        "genes": 385,
+        "indications": 218,
+        "by_class": {
+          "aligned": {
+            "hypotheses": 115,
+            "genes": 69,
+            "pairs": 115,
+            "indications": 66,
+            "direction": {
+              "decrease": 115
+            }
+          },
+          "blocking": {
+            "hypotheses": 399,
+            "genes": 170,
+            "pairs": 399,
+            "indications": 145,
+            "direction": {
+              "decrease": 399
+            }
+          },
+          "other": {
+            "hypotheses": 390,
+            "genes": 223,
+            "pairs": 378,
+            "indications": 125,
+            "direction": {
+              "increase": 79,
+              "decrease": 177,
+              "ambiguous": 134
+            }
+          }
+        },
+        "H1_classes": {
+          "hypotheses": 514,
+          "pairs": 511,
+          "genes": 228,
+          "indications": 172
+        },
+        "crossover_genes": 11
+      },
+      "alternatives": {
+        "S1_related_rule_with_raw_drugIds": {
+          "hypotheses": 5134,
+          "pairs": 4846,
+          "genes": 385,
+          "indications": 496
+        },
+        "S1_related_rule_applied_after_heldout": {
+          "hypotheses": 5080,
+          "pairs": 4791,
+          "genes": 385,
+          "indications": 495
+        },
+        "S4_related_rule_rerun_on_no_plus_unknown_pool": {
+          "hypotheses": 5300,
+          "pairs": 4999,
+          "genes": 387,
+          "indications": 508
+        },
+        "fallback_first_source_not_tier1_no_but_tier1_unknown_on_later_source": 1
+      },
+      "funnel": [
+        {
+          "step": "phase2plus_hypotheses",
+          "remaining": {
+            "hypotheses": 84549,
+            "pairs": 79248,
+            "genes": 1475,
+            "indications": 2715
+          }
+        },
+        {
+          "step": "indication_rule",
+          "reason": "{\"prefix_not_mondo_efo_orphanet\": 7290, \"therapeutic_area_root\": 534, \"no_disease_therapeutic_area\": 2652}",
+          "dropped": {
+            "hypotheses": 10476,
+            "pairs": 10050,
+            "genes": 873,
+            "indications": 469
+          },
+          "remaining": {
+            "hypotheses": 74073,
+            "pairs": 69198,
+            "genes": 1461,
+            "indications": 2246
+          }
+        },
+        {
+          "step": "cis_pqtl_instrument",
+          "reason": "no gene on the variant's UKB-PPP, deCODE or INTERVAL list",
+          "dropped": {
+            "hypotheses": 61000,
+            "pairs": 56795,
+            "genes": 1057,
+            "indications": 2051
+          },
+          "remaining": {
+            "hypotheses": 13073,
+            "pairs": 12403,
+            "genes": 404,
+            "indications": 1489
+          }
+        },
+        {
+          "step": "selected_outcome_gwas_tier1",
+          "reason": "{\"tier3\": 5066, \"tier2\": 1012, \"none\": 19}",
+          "dropped": {
+            "hypotheses": 6097,
+            "pairs": 5853,
+            "genes": 338,
+            "indications": 916
+          },
+          "remaining": {
+            "hypotheses": 6976,
+            "pairs": 6550,
+            "genes": 388,
+            "indications": 573
+          }
+        },
+        {
+          "step": "selected_overlap_no",
+          "reason": "{\"unknown\": 402, \"yes\": 118}",
+          "dropped": {
+            "hypotheses": 520,
+            "pairs": 482,
+            "genes": 155,
+            "indications": 65
+          },
+          "remaining": {
+            "hypotheses": 6456,
+            "pairs": 6068,
+            "genes": 386,
+            "indications": 541
+          }
+        },
+        {
+          "step": "related_indication_rule",
+          "reason": "ontology ancestor whose Phase II+ programs (canonical parent molecules) are all on retained descendants",
+          "dropped": {
+            "hypotheses": 1264,
+            "pairs": 1215,
+            "genes": 222,
+            "indications": 154
+          },
+          "remaining": {
+            "hypotheses": 5192,
+            "pairs": 4898,
+            "genes": 386,
+            "indications": 494
+          }
+        },
+        {
+          "step": "heldout",
+          "reason": "gene+indication key in classification_v5/v5_1",
+          "dropped": {
+            "hypotheses": 120,
+            "pairs": 112,
+            "genes": 73,
+            "indications": 18
+          },
+          "remaining": {
+            "hypotheses": 5072,
+            "pairs": 4786,
+            "genes": 385,
+            "indications": 494
+          }
+        }
+      ]
+    },
+    "inclusive": {
+      "S1": {
+        "hypotheses": 5120,
+        "pairs": 4834,
+        "genes": 389,
+        "indications": 494,
+        "pairs_per_gene": {
+          "n_genes": 389,
+          "min": 1,
+          "median": 5.0,
+          "mean": 12.427,
+          "p90": 38.0,
+          "max": 81,
+          "histogram": {
+            "1": 38,
+            "2": 63,
+            "3-5": 105,
+            "6-10": 55,
+            "11-20": 54,
+            ">20": 74
+          }
+        },
+        "hypotheses_per_gene": {
+          "n_genes": 389,
+          "min": 1,
+          "median": 5.0,
+          "mean": 13.162,
+          "p90": 39.0,
+          "max": 86,
+          "histogram": {
+            "1": 36,
+            "2": 64,
+            "3-5": 101,
+            "6-10": 59,
+            "11-20": 53,
+            ">20": 76
+          }
+        },
+        "by_class": {
+          "aligned": {
+            "hypotheses": 624,
+            "genes": 71,
+            "pairs": 624,
+            "indications": 242,
+            "direction": {
+              "decrease": 624
+            }
+          },
+          "blocking": {
+            "hypotheses": 2675,
+            "genes": 170,
+            "pairs": 2675,
+            "indications": 361,
+            "direction": {
+              "decrease": 2675
+            }
+          },
+          "other": {
+            "hypotheses": 1821,
+            "genes": 225,
+            "pairs": 1707,
+            "indications": 341,
+            "direction": {
+              "increase": 498,
+              "decrease": 722,
+              "ambiguous": 601
+            }
+          }
+        },
+        "shares_program": 4940,
+        "selected_instrument_source": {
+          "ukbppp": 4019,
+          "decode": 1052,
+          "interval": 49
+        },
+        "selected_outcome_source": {
+          "gwas_catalog": 2574,
+          "opengwas": 195,
+          "finngen": 2351
+        },
+        "any_single_protein_moa": {
+          "hypotheses": 3362,
+          "pairs": 3143,
+          "genes": 280,
+          "indications": 455
+        },
+        "pilot_indication_flag": 397,
+        "secreted_target": {
+          "hypotheses": 1334,
+          "pairs": 1250,
+          "genes": 120,
+          "indications": 326
+        },
+        "indication_id_prefixes": {
+          "EFO": 55,
+          "MONDO": 438,
+          "Orphanet": 1
+        }
+      },
+      "S4": {
+        "hypotheses": 5406,
+        "pairs": 5100,
+        "genes": 391,
+        "indications": 511,
+        "by_class": {
+          "aligned": {
+            "hypotheses": 654,
+            "genes": 72,
+            "pairs": 654,
+            "indications": 254,
+            "direction": {
+              "decrease": 654
+            }
+          },
+          "blocking": {
+            "hypotheses": 2845,
+            "genes": 172,
+            "pairs": 2845,
+            "indications": 373,
+            "direction": {
+              "decrease": 2845
+            }
+          },
+          "other": {
+            "hypotheses": 1907,
+            "genes": 225,
+            "pairs": 1787,
+            "indications": 358,
+            "direction": {
+              "increase": 521,
+              "decrease": 762,
+              "ambiguous": 624
+            }
+          }
+        },
+        "overlap_unknown_added": {
+          "hypotheses": 286,
+          "pairs": 266,
+          "genes": 109,
+          "indications": 24
+        }
+      },
+      "H1_eligible": {
+        "hypotheses": 3299,
+        "pairs": 3257,
+        "genes": 230,
+        "indications": 426,
+        "pairs_per_gene": {
+          "n_genes": 230,
+          "min": 1,
+          "median": 5.0,
+          "mean": 14.161,
+          "p90": 43.099999999999994,
+          "max": 76,
+          "histogram": {
+            "1": 21,
+            "2": 34,
+            "3-5": 65,
+            "6-10": 26,
+            "11-20": 29,
+            ">20": 55
+          }
+        },
+        "aligned": {
+          "hypotheses": 624,
+          "genes": 71,
+          "pairs": 624,
+          "indications": 242,
+          "direction": {
+            "decrease": 624
+          }
+        },
+        "blocking": {
+          "hypotheses": 2675,
+          "genes": 170,
+          "pairs": 2675,
+          "indications": 361,
+          "direction": {
+            "decrease": 2675
+          }
+        },
+        "other_excluded": {
+          "hypotheses": 1821,
+          "genes": 225,
+          "pairs": 1707,
+          "indications": 341,
+          "direction": {
+            "increase": 498,
+            "decrease": 722,
+            "ambiguous": 601
+          }
+        },
+        "crossover_genes": 11
+      },
+      "CNS": {
+        "S1": {
+          "hypotheses": 709,
+          "pairs": 680,
+          "genes": 172,
+          "indications": 105,
+          "by_class": {
+            "aligned": {
+              "hypotheses": 82,
+              "genes": 29,
+              "pairs": 82,
+              "indications": 38,
+              "direction": {
+                "decrease": 82
+              }
+            },
+            "blocking": {
+              "hypotheses": 328,
+              "genes": 81,
+              "pairs": 328,
+              "indications": 71,
+              "direction": {
+                "decrease": 328
+              }
+            },
+            "other": {
+              "hypotheses": 299,
+              "genes": 86,
+              "pairs": 286,
+              "indications": 78,
+              "direction": {
+                "increase": 62,
+                "decrease": 70,
+                "ambiguous": 167
+              }
+            }
+          }
+        },
+        "S1_non_cns": {
+          "hypotheses": 4411,
+          "pairs": 4154,
+          "genes": 375,
+          "indications": 389
+        },
+        "H1": {
+          "hypotheses": 410,
+          "pairs": 408,
+          "genes": 106,
+          "indications": 83,
+          "aligned": {
+            "hypotheses": 82,
+            "pairs": 82,
+            "genes": 29,
+            "indications": 38
+          },
+          "blocking": {
+            "hypotheses": 328,
+            "pairs": 328,
+            "genes": 81,
+            "indications": 71
+          },
+          "crossover_genes": 4
+        },
+        "H1_non_cns": {
+          "aligned": {
+            "hypotheses": 542,
+            "pairs": 542,
+            "genes": 70,
+            "indications": 204
+          },
+          "blocking": {
+            "hypotheses": 2347,
+            "pairs": 2347,
+            "genes": 165,
+            "indications": 290
+          }
+        }
+      },
+      "H1_secreted_only": {
+        "hypotheses": 1032,
+        "pairs": 990,
+        "genes": 90,
+        "indications": 297,
+        "aligned": {
+          "hypotheses": 624,
+          "pairs": 624,
+          "genes": 71,
+          "indications": 242
+        },
+        "blocking": {
+          "hypotheses": 408,
+          "pairs": 408,
+          "genes": 30,
+          "indications": 167
+        },
+        "crossover_genes": 11,
+        "aligned_not_secreted_check": 0
+      },
+      "S12_one_per_program": {
+        "hypotheses": 909,
+        "pairs": 879,
+        "genes": 389,
+        "indications": 218,
+        "by_class": {
+          "aligned": {
+            "hypotheses": 118,
+            "genes": 71,
+            "pairs": 118,
+            "indications": 66,
+            "direction": {
+              "decrease": 118
+            }
+          },
+          "blocking": {
+            "hypotheses": 399,
+            "genes": 170,
+            "pairs": 399,
+            "indications": 145,
+            "direction": {
+              "decrease": 399
+            }
+          },
+          "other": {
+            "hypotheses": 392,
+            "genes": 225,
+            "pairs": 380,
+            "indications": 125,
+            "direction": {
+              "increase": 79,
+              "decrease": 177,
+              "ambiguous": 136
+            }
+          }
+        },
+        "H1_classes": {
+          "hypotheses": 517,
+          "pairs": 514,
+          "genes": 230,
+          "indications": 172
+        },
+        "crossover_genes": 11
+      },
+      "alternatives": {
+        "S1_related_rule_with_raw_drugIds": {
+          "hypotheses": 5182,
+          "pairs": 4894,
+          "genes": 389,
+          "indications": 496
+        },
+        "S1_related_rule_applied_after_heldout": {
+          "hypotheses": 5128,
+          "pairs": 4839,
+          "genes": 389,
+          "indications": 495
+        },
+        "S4_related_rule_rerun_on_no_plus_unknown_pool": {
+          "hypotheses": 5348,
+          "pairs": 5047,
+          "genes": 391,
+          "indications": 508
+        },
+        "fallback_first_source_not_tier1_no_but_tier1_unknown_on_later_source": 1
+      },
+      "funnel": [
+        {
+          "step": "phase2plus_hypotheses",
+          "remaining": {
+            "hypotheses": 84549,
+            "pairs": 79248,
+            "genes": 1475,
+            "indications": 2715
+          }
+        },
+        {
+          "step": "indication_rule",
+          "reason": "{\"prefix_not_mondo_efo_orphanet\": 7290, \"therapeutic_area_root\": 534, \"no_disease_therapeutic_area\": 2652}",
+          "dropped": {
+            "hypotheses": 10476,
+            "pairs": 10050,
+            "genes": 873,
+            "indications": 469
+          },
+          "remaining": {
+            "hypotheses": 74073,
+            "pairs": 69198,
+            "genes": 1461,
+            "indications": 2246
+          }
+        },
+        {
+          "step": "cis_pqtl_instrument",
+          "reason": "no gene on the variant's UKB-PPP, deCODE or INTERVAL list",
+          "dropped": {
+            "hypotheses": 60910,
+            "pairs": 56705,
+            "genes": 1053,
+            "indications": 2050
+          },
+          "remaining": {
+            "hypotheses": 13163,
+            "pairs": 12493,
+            "genes": 408,
+            "indications": 1489
+          }
+        },
+        {
+          "step": "selected_outcome_gwas_tier1",
+          "reason": "{\"tier3\": 5087, \"tier2\": 1017, \"none\": 19}",
+          "dropped": {
+            "hypotheses": 6123,
+            "pairs": 5879,
+            "genes": 342,
+            "indications": 916
+          },
+          "remaining": {
+            "hypotheses": 7040,
+            "pairs": 6614,
+            "genes": 392,
+            "indications": 573
+          }
+        },
+        {
+          "step": "selected_overlap_no",
+          "reason": "{\"unknown\": 402, \"yes\": 118}",
+          "dropped": {
+            "hypotheses": 520,
+            "pairs": 482,
+            "genes": 155,
+            "indications": 65
+          },
+          "remaining": {
+            "hypotheses": 6520,
+            "pairs": 6132,
+            "genes": 390,
+            "indications": 541
+          }
+        },
+        {
+          "step": "related_indication_rule",
+          "reason": "ontology ancestor whose Phase II+ programs (canonical parent molecules) are all on retained descendants",
+          "dropped": {
+            "hypotheses": 1280,
+            "pairs": 1231,
+            "genes": 226,
+            "indications": 154
+          },
+          "remaining": {
+            "hypotheses": 5240,
+            "pairs": 4946,
+            "genes": 390,
+            "indications": 494
+          }
+        },
+        {
+          "step": "heldout",
+          "reason": "gene+indication key in classification_v5/v5_1",
+          "dropped": {
+            "hypotheses": 120,
+            "pairs": 112,
+            "genes": 73,
+            "indications": 18
+          },
+          "remaining": {
+            "hypotheses": 5120,
+            "pairs": 4834,
+            "genes": 389,
+            "indications": 494
+          }
+        }
+      ]
+    }
+  },
+  "lost_by_source": {
+    "inclusive_to_strict": {
+      "S1": {
+        "lost": {
+          "hypotheses": 60,
+          "pairs": 60,
+          "genes": 11,
+          "indications": 35,
+          "hypotheses_by_sources_lost": {
+            "interval": 41,
+            "ukbppp": 19
+          },
+          "genes_by_sources_lost": {
+            "interval": 10,
+            "ukbppp": 1
+          },
+          "genes_absent_entirely": 5,
+          "by_class": {
+            "aligned": 43,
+            "blocking": 6,
+            "other": 11
+          }
+        },
+        "gained": {
+          "hypotheses": 4,
+          "pairs": 4,
+          "genes": 3,
+          "indications": 4,
+          "hypotheses_by_class": {
+            "other": 1,
+            "aligned": 1,
+            "blocking": 2
+          }
+        }
+      },
+      "H1": {
+        "lost": {
+          "hypotheses": 49,
+          "pairs": 49,
+          "genes": 7,
+          "indications": 30,
+          "hypotheses_by_sources_lost": {
+            "interval": 30,
+            "ukbppp": 19
+          },
+          "genes_by_sources_lost": {
+            "interval": 6,
+            "ukbppp": 1
+          },
+          "genes_absent_entirely": 2,
+          "by_class": {
+            "aligned": 43,
+            "blocking": 6,
+            "other": 0
+          }
+        },
+        "gained": {
+          "hypotheses": 3,
+          "pairs": 3,
+          "genes": 2,
+          "indications": 3,
+          "hypotheses_by_class": {
+            "aligned": 1,
+            "blocking": 2
+          }
+        }
+      }
+    },
+    "v3_to_strict": {
+      "S1": {
+        "lost": {
+          "hypotheses": 12,
+          "pairs": 12,
+          "genes": 7,
+          "indications": 11,
+          "hypotheses_by_sources_lost": {
+            "interval": 12
+          },
+          "genes_by_sources_lost": {
+            "interval": 7
+          },
+          "genes_absent_entirely": 1,
+          "by_class": {
+            "aligned": 1,
+            "blocking": 6,
+            "other": 5
+          }
+        },
+        "gained": {
+          "hypotheses": 4,
+          "pairs": 4,
+          "genes": 3,
+          "indications": 4,
+          "hypotheses_by_class": {
+            "other": 1,
+            "aligned": 1,
+            "blocking": 2
+          }
+        }
+      },
+      "H1": {
+        "lost": {
+          "hypotheses": 7,
+          "pairs": 7,
+          "genes": 5,
+          "indications": 7,
+          "hypotheses_by_sources_lost": {
+            "interval": 7
+          },
+          "genes_by_sources_lost": {
+            "interval": 5
+          },
+          "genes_absent_entirely": 0,
+          "by_class": {
+            "aligned": 1,
+            "blocking": 6,
+            "other": 0
+          }
+        },
+        "gained": {
+          "hypotheses": 3,
+          "pairs": 3,
+          "genes": 2,
+          "indications": 3,
+          "hypotheses_by_class": {
+            "aligned": 1,
+            "blocking": 2
+          }
+        }
+      }
+    }
+  },
+  "alternative_conflict_rule_all_rows": {
+    "S1": {
+      "hypotheses": 5064,
+      "pairs": 4778,
+      "genes": 384,
+      "indications": 493
+    },
+    "H1": {
+      "hypotheses": 3253,
+      "pairs": 3211,
+      "genes": 228,
+      "indications": 424,
+      "by_class": {
+        "aligned": {
+          "hypotheses": 582,
+          "genes": 69,
+          "pairs": 582,
+          "indications": 241,
+          "direction": {
+            "decrease": 582
+          }
+        },
+        "blocking": {
+          "hypotheses": 2671,
+          "genes": 170,
+          "pairs": 2671,
+          "indications": 359,
+          "direction": {
+            "decrease": 2671
+          }
+        },
+        "other": {
+          "hypotheses": 1811,
+          "genes": 222,
+          "pairs": 1697,
+          "indications": 340,
+          "direction": {
+            "increase": 498,
+            "decrease": 718,
+            "ambiguous": 595
+          }
+        }
+      }
+    }
+  },
+  "class_input_crosstab_strict_S1": [
+    {
+      "drug_type": "Antibody",
+      "actionType": "AGONIST",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 29
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "AGONIST",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 4
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "ANTAGONIST",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 224
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "ANTAGONIST",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "aligned",
+      "class_dt": "aligned",
+      "conflict": false,
+      "drug_target_indication_rows": 78
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "BINDING AGENT",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 40
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "BINDING AGENT",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 6
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "BLOCKER",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 3
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "CROSS-LINKING AGENT",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 2
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "CROSS-LINKING AGENT",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 3
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 717
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "aligned",
+      "class_dt": "aligned",
+      "conflict": false,
+      "drug_target_indication_rows": 539
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "NEGATIVE ALLOSTERIC MODULATOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "aligned",
+      "class_dt": "aligned",
+      "conflict": false,
+      "drug_target_indication_rows": 1
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "OTHER",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 38
+    },
+    {
+      "drug_type": "Antibody",
+      "actionType": "STABILISER",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 2
+    },
+    {
+      "drug_type": "Antibody drug conjugate",
+      "actionType": "BINDING AGENT",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 108
+    },
+    {
+      "drug_type": "Antibody drug conjugate",
+      "actionType": "BINDING AGENT",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 11
+    },
+    {
+      "drug_type": "Antibody drug conjugate",
+      "actionType": "INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 2
+    },
+    {
+      "drug_type": "Enzyme",
+      "actionType": "ACTIVATOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 6
+    },
+    {
+      "drug_type": "Enzyme",
+      "actionType": "EXOGENOUS PROTEIN",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 32
+    },
+    {
+      "drug_type": "Enzyme",
+      "actionType": "HYDROLYTIC ENZYME",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 104
+    },
+    {
+      "drug_type": "Enzyme",
+      "actionType": "HYDROLYTIC ENZYME",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 4
+    },
+    {
+      "drug_type": "Enzyme",
+      "actionType": "PROTEOLYTIC ENZYME",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 1
+    },
+    {
+      "drug_type": "Gene",
+      "actionType": "AGONIST",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 1
+    },
+    {
+      "drug_type": "Gene",
+      "actionType": "BINDING AGENT",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 2
+    },
+    {
+      "drug_type": "Gene",
+      "actionType": "EXOGENOUS GENE",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 3
+    },
+    {
+      "drug_type": "Gene",
+      "actionType": "VACCINE ANTIGEN",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 3
+    },
+    {
+      "drug_type": "Oligonucleotide",
+      "actionType": "ACTIVATOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 1
+    },
+    {
+      "drug_type": "Oligonucleotide",
+      "actionType": "ANTISENSE INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 22
+    },
+    {
+      "drug_type": "Oligonucleotide",
+      "actionType": "ANTISENSE INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "aligned",
+      "class_dt": "aligned",
+      "conflict": false,
+      "drug_target_indication_rows": 32
+    },
+    {
+      "drug_type": "Oligonucleotide",
+      "actionType": "BINDING AGENT",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 4
+    },
+    {
+      "drug_type": "Oligonucleotide",
+      "actionType": "RNAI INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "aligned",
+      "class_dt": "aligned",
+      "conflict": false,
+      "drug_target_indication_rows": 20
+    },
+    {
+      "drug_type": "Oligosaccharide",
+      "actionType": "ACTIVATOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 96
+    },
+    {
+      "drug_type": "Oligosaccharide",
+      "actionType": "INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 5
+    },
+    {
+      "drug_type": "Oligosaccharide",
+      "actionType": "INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 13
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "ACTIVATOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 11
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "AGONIST",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 555
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "AGONIST",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 29
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "ANTAGONIST",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 14
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "ANTAGONIST",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "aligned",
+      "class_dt": "aligned",
+      "conflict": false,
+      "drug_target_indication_rows": 40
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "BINDING AGENT",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 36
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "BINDING AGENT",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 17
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "EXOGENOUS PROTEIN",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 21
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "HYDROLYTIC ENZYME",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 71
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 58
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": true,
+      "drug_target_indication_rows": 11
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "aligned",
+      "class_dt": "aligned",
+      "conflict": false,
+      "drug_target_indication_rows": 148
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "POSITIVE MODULATOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 11
+    },
+    {
+      "drug_type": "Protein",
+      "actionType": "PROTEOLYTIC ENZYME",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 3
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "ACTIVATOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 7
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "ACTIVATOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 1
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "AGONIST",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 2
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "ANTAGONIST",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "blocking",
+      "class_dt": "blocking",
+      "conflict": false,
+      "drug_target_indication_rows": 46
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "ANTAGONIST",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "blocking",
+      "class_dt": "blocking",
+      "conflict": false,
+      "drug_target_indication_rows": 5
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "CROSS-LINKING AGENT",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 1
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "blocking",
+      "class_dt": "blocking",
+      "conflict": false,
+      "drug_target_indication_rows": 4953
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "blocking",
+      "class_dt": "blocking",
+      "conflict": false,
+      "drug_target_indication_rows": 1513
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "MODULATOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 138
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "NEGATIVE ALLOSTERIC MODULATOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "blocking",
+      "class_dt": "blocking",
+      "conflict": false,
+      "drug_target_indication_rows": 3
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "OTHER",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 3
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "STABILISER",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 3
+    },
+    {
+      "drug_type": "Small molecule",
+      "actionType": "STABILISER",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 8
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "ACTIVATOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 2
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "AGONIST",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 28
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "AGONIST",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 6
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "ANTAGONIST",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 1
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "ANTAGONIST",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 4
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "BINDING AGENT",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 5
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "BINDING AGENT",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 8
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "EXOGENOUS PROTEIN",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 11
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "HYDROLYTIC ENZYME",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 13
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "HYDROLYTIC ENZYME",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 5
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 115
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 80
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "MODULATOR",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 2
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "OTHER",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 1
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "PROTEOLYTIC ENZYME",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 1
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "RNAI INHIBITOR",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 1
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "VACCINE ANTIGEN",
+      "neutralizing_ba": false,
+      "blood": false,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 2
+    },
+    {
+      "drug_type": "Unknown",
+      "actionType": "VACCINE ANTIGEN",
+      "neutralizing_ba": false,
+      "blood": true,
+      "class_row": "other",
+      "class_dt": "other",
+      "conflict": false,
+      "drug_target_indication_rows": 1
+    }
+  ],
+  "actionType_to_direction": {
+    "ACTIVATOR": "increase",
+    "AGONIST": "increase",
+    "ALLOSTERIC ANTAGONIST": "decrease",
+    "ANTAGONIST": "decrease",
+    "ANTISENSE INHIBITOR": "decrease",
+    "BINDING AGENT": "ambiguous",
+    "BLOCKER": "decrease",
+    "CROSS-LINKING AGENT": "ambiguous",
+    "DEGRADER": "decrease",
+    "DISRUPTING AGENT": "decrease",
+    "EXOGENOUS GENE": "ambiguous",
+    "EXOGENOUS PROTEIN": "ambiguous",
+    "GENE EDITING NEGATIVE MODULATOR": "ambiguous",
+    "HYDROLYTIC ENZYME": "ambiguous",
+    "INHIBITOR": "decrease",
+    "INVERSE AGONIST": "decrease",
+    "MODULATOR": "ambiguous",
+    "NEGATIVE ALLOSTERIC MODULATOR": "decrease",
+    "NEGATIVE MODULATOR": "ambiguous",
+    "OPENER": "increase",
+    "OTHER": "ambiguous",
+    "PARTIAL AGONIST": "increase",
+    "POSITIVE ALLOSTERIC MODULATOR": "increase",
+    "POSITIVE MODULATOR": "ambiguous",
+    "PROTEOLYTIC ENZYME": "ambiguous",
+    "RELEASING AGENT": "increase",
+    "RNAI INHIBITOR": "decrease",
+    "STABILISER": "increase",
+    "SUBSTRATE": "ambiguous",
+    "VACCINE ANTIGEN": "ambiguous"
+  },
+  "outputs": {
+    "h1_membership": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v4_round3/h1_membership.csv",
+      "sha256": "c7375fcbf94807c87f7c44ea1fcdc2239b667886015256a9cc51057d8275facb",
+      "bytes": 107067,
+      "note": "H1 (strict) membership, opaque IDs"
+    },
+    "s1_membership": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v4_round3/s1_membership.csv",
+      "sha256": "52e361912675d62f34a1c78f35a00cebfee58595cc793a604c2786d8c50e0b9b",
+      "bytes": 158133,
+      "note": "S1 (strict) membership, opaque IDs"
+    }
+  },
+  "inputs": {
+    "prereg": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/PREREG.md",
+      "sha256": "69ee306263f5bb575bc77f585dfad103558df24ffa41f48b8898f62de5ebee17",
+      "bytes": 45226,
+      "note": "rules"
+    },
+    "adjudication": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/planning/perplexity_v8_design/01_ADJUDICATION.md",
+      "sha256": "68720b049b62f1e7db5191840fb2f3fc109905e1aa83054126e3dff00f3e4203",
+      "bytes": 11833,
+      "note": "Round 3 rules"
+    },
+    "v2_script": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/count_all_indications.py",
+      "sha256": "5086b83747356056ce985a32616ce71812f13304f81bc7098224abf9be27edb1",
+      "bytes": 51449,
+      "note": "functions for candidates, tiers, symbol maps"
+    },
+    "v3_script": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v3_strict/count_strict.py",
+      "sha256": "b9180951618e9378e7aced68030151be48dfec08d2de5ebbe8f353c084da5bfe",
+      "bytes": 29495,
+      "note": "copied and edited into this script"
+    },
+    "v2_json": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/coverage_all_indications.json",
+      "sha256": "06b805367890f8cca5bc5b65737d3e9d18e9167740f366e8afc49d13a9916e99",
+      "bytes": 4779567,
+      "note": "seen_sets.keys, counts.pairs.eligible and final_heldout for cross-check only"
+    },
+    "frozen_candidates_v34": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/data/frozen_candidates_v34.csv",
+      "sha256": "c428c733aa66cbdb45ae4761424871f4dfa93e173f56ccd56f101b0dc33ebe62",
+      "bytes": 34918,
+      "note": "usecols disease, ot_disease_id"
+    },
+    "classification_v5": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/results/v5/classification_v5.csv",
+      "sha256": "4e9d132ab7a75733989d5a278e04cce877eea9d916512e24d74e6542f3573100",
+      "bytes": 31999,
+      "note": "usecols gene, disease"
+    },
+    "classification_v5_1": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/results/v5_1/classification_v5_1.csv",
+      "sha256": "14a43f3fca4105612a6e816fd7336739296a879a020c62f82b1cbed65eae15d1",
+      "bytes": 27128,
+      "note": "usecols gene, disease"
+    },
+    "epigraphdb_catalog": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/zenodo_export/data/epigraphdb/v34_mr_catalog.csv",
+      "sha256": "e50f9b3824ebad7c7ee6ae13fd812f8f4f9afff267f18ed60b1aca5c483ddf70",
+      "bytes": 2553816,
+      "note": "usecols gene_symbol"
+    },
+    "ukbppp_cis_genes": {
+      "path": "/Users/elliottower/Documents/GitHub/transport-wrapper/DRUGS_EXPANDED/pqtl_sources/ukbppp_cis_pqtl_genes.json",
+      "sha256": "d40fa2f56ebc0b49100cc7e4d7d96cf4a7b000951210174300ccae7a3a9ec1d7",
+      "bytes": 17723,
+      "note": "UKB-PPP cis-pQTL gene list"
+    },
+    "olink_protein_map_3k": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/planning/perplexity_v8_design/F_data_readmes/olink_protein_map_3k_v1.tsv",
+      "sha256": "2bc9668e56f43818e2a61558fcdd0b5384b4919602bc61c9faaed2622aefe6aa",
+      "bytes": 479829,
+      "note": "usecols Assay, UniProt, UniProt2, HGNC.symbol, ensembl_id"
+    },
+    "decode_supplementary": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/inputs/ferkingstad2021_MOESM4_ESM.xlsx",
+      "sha256": "e3f907a11b452f979db8241ed852c1542d00ed5373c39b53c6a79702f8b80ef6",
+      "bytes": 44366108,
+      "note": "Ferkingstad 2021 ST01 (ids), ST02 (gene, SeqId, cis/trans)"
+    },
+    "sun2018_supplementary": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/interval/sun2018_MOESM4_ESM.xlsx",
+      "sha256": "d7bfada3eab1e2be15fdde9bc5a62e2d2563c111db5b2e7f242dfb9ea492b9d5",
+      "bytes": 2219218,
+      "note": "sheet ST4 only (UniProt, cis/trans)",
+      "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-018-0175-2/MediaObjects/41586_2018_175_MOESM4_ESM.xlsx"
+    },
+    "hgnc": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/hgnc/hgnc_complete_set.txt",
+      "sha256": "91d0ad20c34f26fb12c8cce3f80a65a6fc694f3a508040b19f6bfa29ae0d889e",
+      "bytes": 16953545,
+      "note": "symbol, status, ensembl_gene_id, uniprot_ids",
+      "url": "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"
+    },
+    "hpa": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/hpa/proteinatlas.tsv.zip",
+      "sha256": "ad401f8519ecdee5b67b0ad3bf28175d402d1ea0ad6c542b90fcab2bee39b470",
+      "bytes": 7460135,
+      "note": "Gene, Ensembl, Secretome location",
+      "url": "https://www.proteinatlas.org/download/proteinatlas.tsv.zip"
+    },
+    "opengwas_gwasinfo": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/opengwas/gwasinfo_all.json",
+      "sha256": "382c5b4cab3c7a342bfdf4bb506356e2c600d1b0fc8fd9fb90d9cb431e845b62",
+      "bytes": 20917306,
+      "note": "full gwasinfo listing",
+      "url": "https://api.opengwas.io/api/gwasinfo"
+    },
+    "ot_clinical_indication": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/clinical_indication.parquet",
+      "sha256": "e10ced7ce09495cd3fa6e7cb94e81e083aed78ee399424730d567243b49a38d8",
+      "bytes": 4989955,
+      "note": "",
+      "url": "https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/26.09/output/clinical_indication/00000000.parquet"
+    },
+    "ot_drug_mechanism_of_action": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/drug_mechanism_of_action.parquet",
+      "sha256": "8484accd3383837e0eaac2164eed89991daf58dc93f0a599072fb7e5ef4f6c28",
+      "bytes": 322830,
+      "note": "",
+      "url": "https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/26.09/output/drug_mechanism_of_action/00000000.parquet"
+    },
+    "ot_drug_molecule": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/drug_molecule.parquet",
+      "sha256": "be65749aa1dbcc68d0930f8ac18126cec5c2bc2c0f232f11e8530dad4ba0585c",
+      "bytes": 6867467,
+      "note": "",
+      "url": "https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/26.09/output/drug_molecule/00000000.parquet"
+    },
+    "ot_disease": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/disease.parquet",
+      "sha256": "a89b8b8b89bad168016e6ff8302d2bcc8d9b7f9cbb35c459ef847c36a4f17aed",
+      "bytes": 6346458,
+      "note": "",
+      "url": "https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/26.09/output/disease/00000000.parquet"
+    },
+    "ot_study": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/study.parquet",
+      "sha256": "158296ab630ae2dbedc14d5a7c0393f92837d99ba59fd76d3c2f363327e48d40",
+      "bytes": 97748879,
+      "note": "",
+      "url": "https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/26.09/output/study/part-00000-90d9a8f0-e00a-492e-b961-40b56a21dbd0-c000.zstd.parquet"
+    },
+    "gwas_catalog_gwas-catalog-v1.0.3.1-studies-r2026-09-13.tsv": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-studies-r2026-09-13.tsv",
+      "sha256": "8b5aa02a1da7ff72b3d4e7f9d45375486016bf6070014bfb5d0b248834f56f21",
+      "bytes": 129219103,
+      "note": "",
+      "url": "https://www.ebi.ac.uk/gwas/api/search/downloads/studies/v1.0.3.1"
+    },
+    "gwas_catalog_gwas-catalog-v1.0.3.1-ancestries-r2026-09-13.tsv": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-ancestries-r2026-09-13.tsv",
+      "sha256": "bc55cd544f6e928c440c8e4c79de53168c0f5a85d03b401e21d2b5603b6d35a7",
+      "bytes": 53445127,
+      "note": "",
+      "url": "https://www.ebi.ac.uk/gwas/api/search/downloads/ancestries/v1.0.3.1"
+    },
+    "gwas_catalog_gwas-catalog-v1.0.3.1-unpublished-studies-r2026-09-13.tsv": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-unpublished-studies-r2026-09-13.tsv",
+      "sha256": "81fee11f6d0c19719ffb23d86324d046202b869a47b2fb9d7da45934e82fd1d1",
+      "bytes": 8150250,
+      "note": "",
+      "url": "https://www.ebi.ac.uk/gwas/api/search/downloads/unpublished_studies/v1.0.3.1"
+    },
+    "gwas_catalog_gwas-catalog-v1.0.3.1-unpublished-ancestries-r2026-09-13.tsv": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-unpublished-ancestries-r2026-09-13.tsv",
+      "sha256": "398e0935b51c2f4bab7c09376c282d83147de1cdba59b32765f5b1bbec3cf919",
+      "bytes": 6820024,
+      "note": "",
+      "url": "https://www.ebi.ac.uk/gwas/api/search/downloads/unpublished_ancestries/v1.0.3.1"
+    }
+  }
+}

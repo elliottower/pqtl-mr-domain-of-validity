@@ -1,0 +1,26 @@
+{
+  "label": "h2_null",
+  "mode": "h2",
+  "scenario": {
+    "scenario_id": 9100,
+    "re_sd": 0.7,
+    "slope_sd": 0.7,
+    "p_support": 0.06,
+    "aligned_support_mult": 1.0,
+    "or_blocking": 1.0,
+    "or_ratio": 1.0,
+    "base_advance": 0.3,
+    "cns_ratio": 0.6666666666666666
+  },
+  "rep": 22,
+  "fast_z": 1.0637118844374278,
+  "fast_reject_nominal": false,
+  "exact": {
+    "pr_gt0": 0.2595,
+    "pr_gt_sesoi": 0.003,
+    "median": -0.1392398020033161,
+    "divergences": 0
+  },
+  "exact_reject": false,
+  "n_supportive": 310
+}

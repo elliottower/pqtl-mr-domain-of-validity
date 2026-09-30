@@ -1,0 +1,47 @@
+slug: doi-10-1038-s41586-023-06563-x
+title: Large-scale plasma proteomics comparisons through genetics and disease associations
+authors:
+- Eldjarn, Grimur Hjorleifsson
+- Ferkingstad, Egil
+- Lund, Sigrun H.
+- Helgason, Hannes
+- Magnusson, Olafur Th.
+- Gunnarsdottir, Kristbjorg
+- Olafsdottir, Thorunn A.
+- Halldorsson, Bjarni V.
+- Olason, Pall I.
+- Zink, Florian
+- Gudjonsson, Sigurjon A.
+- Sveinbjornsson, Gardar
+- Magnusson, Magnus I.
+- Helgason, Agnar
+- Oddsson, Asmundur
+- Halldorsson, Gisli H.
+- Magnusson, Magnus K.
+- Saevarsdottir, Saedis
+- Eiriksdottir, Thjodbjorg
+- Masson, Gisli
+- Stefansson, Hreinn
+- Jonsdottir, Ingileif
+- Holm, Hilma
+- Rafnar, Thorunn
+- Melsted, Pall
+- Saemundsdottir, Jona
+- Norddahl, Gudmundur L.
+- Thorleifsson, Gudmar
+- Ulfarsson, Magnus O.
+- Gudbjartsson, Daniel F.
+- Thorsteinsdottir, Unnur
+- Sulem, Patrick
+- Stefansson, Kari
+year: '2023'
+venue: Nature
+doi: 10.1038/s41586-023-06563-x
+arxiv: ''
+et_al: false
+url: ''
+sha256: ''
+local: ''
+cited_by:
+  pqtl-mr-v8-mechanism-interaction:
+    key: eldjarn2023proteomics

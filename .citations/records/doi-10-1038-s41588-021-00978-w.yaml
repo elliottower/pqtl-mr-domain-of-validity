@@ -1,0 +1,54 @@
+slug: doi-10-1038-s41588-021-00978-w
+title: Large-scale integration of the plasma proteome with genetics and disease
+authors:
+- Ferkingstad, Egil
+- Sulem, Patrick
+- Atlason, Bjarni A.
+- Sveinbjornsson, Gardar
+- Magnusson, Magnus I.
+- Styrmisdottir, Edda L.
+- Gunnarsdottir, Kristbjorg
+- Helgason, Agnar
+- Oddsson, Asmundur
+- Halldorsson, Bjarni V.
+- Jensson, Brynjar O.
+- Zink, Florian
+- Halldorsson, Gisli H.
+- Masson, Gisli
+- Arnadottir, Gudny A.
+- Katrinardottir, Hildigunnur
+- Juliusson, Kristinn
+- Magnusson, Magnus K.
+- Magnusson, Olafur Th.
+- Fridriksdottir, Run
+- Saevarsdottir, Saedis
+- Gudjonsson, Sigurjon A.
+- Stacey, Simon N.
+- Rognvaldsson, Solvi
+- Eiriksdottir, Thjodbjorg
+- Olafsdottir, Thorunn A.
+- Steinthorsdottir, Valgerdur
+- Tragante, Vinicius
+- Ulfarsson, Magnus O.
+- Stefansson, Hreinn
+- Jonsdottir, Ingileif
+- Holm, Hilma
+- Rafnar, Thorunn
+- Melsted, Pall
+- Saemundsdottir, Jona
+- Norddahl, Gudmundur L.
+- Lund, Sigrun H.
+- Gudbjartsson, Daniel F.
+- Thorsteinsdottir, Unnur
+- Stefansson, Kari
+year: '2021'
+venue: Nature Genetics
+doi: 10.1038/s41588-021-00978-w
+arxiv: ''
+et_al: false
+url: ''
+sha256: ''
+local: ''
+cited_by:
+  pqtl-mr-v8-mechanism-interaction:
+    key: ferkingstad2021decode

@@ -1,0 +1,25 @@
+slug: doi-10-64898-2026-02-19-26346536
+title: Retrospective evaluation of human genetic evidence for clinical trial success using Mendelian randomization
+  and machine learning
+authors:
+- Ravarani, Charles N. J.
+- Arend, Marius
+- Baukmann, Hannes A.
+- Cope, Justin L.
+- Lamparter, Margaretha R. J.
+- Sullivan, James K.
+- Fudim, Roman
+- Bender, Andreas
+- Mälarstig, Anders
+- Schmidt, Marco F.
+year: '2026'
+venue: medRxiv
+doi: 10.64898/2026.02.19.26346536
+arxiv: ''
+et_al: false
+url: https://www.medrxiv.org/content/10.64898/2026.02.19.26346536v2
+sha256: ''
+local: ''
+cited_by:
+  pqtl-mr-v8-mechanism-interaction:
+    key: ravarani2026retrospective

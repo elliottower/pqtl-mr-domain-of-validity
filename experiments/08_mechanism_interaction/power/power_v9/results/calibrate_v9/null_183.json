@@ -1,0 +1,25 @@
+{
+  "label": "null",
+  "scenario": {
+    "scenario_id": 9001,
+    "re_sd": 0.7,
+    "slope_sd": 0.7,
+    "p_support": 0.06,
+    "aligned_support_mult": 1.0,
+    "or_blocking": 1.0,
+    "or_ratio": 1.0,
+    "base_advance": 0.3,
+    "cns_ratio": 0.6666666666666666
+  },
+  "rep": 183,
+  "fast_z": -1.1418792110948612,
+  "fast_reject_nominal": false,
+  "exact": {
+    "pr_gt0": 0.06975,
+    "pr_gt_sesoi": 0.013,
+    "median": -0.796823843447005,
+    "divergences": 0
+  },
+  "exact_reject": false,
+  "n_supportive": 205
+}

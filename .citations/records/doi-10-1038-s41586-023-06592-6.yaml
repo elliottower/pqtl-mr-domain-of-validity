@@ -1,0 +1,78 @@
+slug: doi-10-1038-s41586-023-06592-6
+title: Plasma proteomic associations with genetics and health in the UK Biobank
+authors:
+- Sun, Benjamin B.
+- Chiou, Joshua
+- Traylor, Matthew
+- Benner, Christian
+- Hsu, Yi-Hsiang
+- Richardson, Tom G.
+- Surendran, Praveen
+- Mahajan, Anubha
+- Robins, Chloe
+- Vasquez-Grinnell, Steven G.
+- Hou, Liping
+- Kvikstad, Erika M.
+- Burren, Oliver S.
+- Davitte, Jonathan
+- Ferber, Kyle L.
+- Gillies, Christopher E.
+- Hedman, Åsa K.
+- Hu, Sile
+- Lin, Tinchi
+- Mikkilineni, Rajesh
+- Pendergrass, Rion K.
+- Pickering, Corran
+- Prins, Bram
+- Baird, Denis
+- Chen, Chia-Yen
+- Ward, Lucas D.
+- Deaton, Aimee M.
+- Welsh, Samantha
+- Willis, Carissa M.
+- Lehner, Nick
+- Arnold, Matthias
+- Wörheide, Maria A.
+- Suhre, Karsten
+- Kastenmüller, Gabi
+- Sethi, Anurag
+- Cule, Madeleine
+- Raj, Anil
+- Alnylam Human Genetics
+- AstraZeneca Genomics Initiative
+- Biogen Biobank Team
+- Bristol Myers Squibb
+- Genentech Human Genetics
+- GlaxoSmithKline Genomic Sciences
+- Pfizer Integrative Biology
+- Population Analytics of Janssen Data Sciences
+- Regeneron Genetics Center
+- Burkitt-Gray, Lucy
+- Melamud, Eugene
+- Black, Mary Helen
+- Fauman, Eric B.
+- Howson, Joanna M. M.
+- Kang, Hyun Min
+- McCarthy, Mark I.
+- Nioi, Paul
+- Petrovski, Slavé
+- Scott, Robert A.
+- Smith, Erin N.
+- Szalma, Sándor
+- Waterworth, Dawn M.
+- Mitnaul, Lyndon J.
+- Szustakowski, Joseph D.
+- Gibson, Bradford W.
+- Miller, Melissa R.
+- Whelan, Christopher D.
+year: '2023'
+venue: Nature
+doi: 10.1038/s41586-023-06592-6
+arxiv: ''
+et_al: false
+url: ''
+sha256: ''
+local: ''
+cited_by:
+  pqtl-mr-v8-mechanism-interaction:
+    key: sun2023ukbppp

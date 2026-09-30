@@ -1,0 +1,106 @@
+{
+  "source": "Perplexity executed power/power_v8.py in its own sandbox during round-2 review, 2026-09-30; output reported in chat, not produced on this machine. Per-scenario rows were not provided; only the summary below.",
+  "script": "power/power_v8.py",
+  "study_data_used": false,
+  "n_scenarios_reported": 54,
+  "h1_interaction_power_range": [
+    0.022,
+    0.667
+  ],
+  "h1_any_scenario_reaching_0.80": false,
+  "h2_power_range": [
+    0.139,
+    0.83
+  ],
+  "h1_by_n_and_supportive_rate": [
+    {
+      "h1_n": 200,
+      "supportive_rate": 0.05,
+      "expected_supportive_aligned_n": 4.0,
+      "power_range": [
+        0.022,
+        0.068
+      ]
+    },
+    {
+      "h1_n": 200,
+      "supportive_rate": 0.08,
+      "expected_supportive_aligned_n": 6.4,
+      "power_range": [
+        0.073,
+        0.234
+      ]
+    },
+    {
+      "h1_n": 200,
+      "supportive_rate": 0.12,
+      "expected_supportive_aligned_n": 9.6,
+      "power_range": [
+        0.119,
+        0.401
+      ]
+    },
+    {
+      "h1_n": 275,
+      "supportive_rate": 0.05,
+      "expected_supportive_aligned_n": 5.5,
+      "power_range": [
+        0.033,
+        0.153
+      ]
+    },
+    {
+      "h1_n": 275,
+      "supportive_rate": 0.08,
+      "expected_supportive_aligned_n": 8.8,
+      "power_range": [
+        0.119,
+        0.37
+      ]
+    },
+    {
+      "h1_n": 275,
+      "supportive_rate": 0.12,
+      "expected_supportive_aligned_n": 13.2,
+      "power_range": [
+        0.179,
+        0.541
+      ]
+    },
+    {
+      "h1_n": 350,
+      "supportive_rate": 0.05,
+      "expected_supportive_aligned_n": 7.0,
+      "power_range": [
+        0.078,
+        0.274
+      ]
+    },
+    {
+      "h1_n": 350,
+      "supportive_rate": 0.08,
+      "expected_supportive_aligned_n": 11.2,
+      "power_range": [
+        0.156,
+        0.485
+      ]
+    },
+    {
+      "h1_n": 350,
+      "supportive_rate": 0.12,
+      "expected_supportive_aligned_n": 16.8,
+      "power_range": [
+        0.193,
+        0.667
+      ]
+    }
+  ],
+  "failed_fits_note": "n=200, supportive rate 0.05: approximately 36-45% failed H1 fits in some conditions; counted as non-rejections.",
+  "reviewer_caveats": [
+    "clustered ordinary logistic, not the crossed hierarchical model",
+    "no covariates, no indication random effect",
+    "supportive status independent of mechanism",
+    "H2 effect set as sqrt(OR_aligned)"
+  ],
+  "recorded": "2026-09-30"
+}

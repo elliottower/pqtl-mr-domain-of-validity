@@ -1,0 +1,175 @@
+{
+  "source": "results/calibrate_v9/*.json (exact NUTS H1 model, 4 chains x 1000 draws after 1000 tuning)",
+  "cells": {
+    "null": {
+      "n": 200,
+      "or_ratio": 1.0,
+      "p_support": 0.06,
+      "re_sd": 0.7,
+      "slope_sd": 0.7,
+      "exact_reject_rate": 0.04,
+      "exact_95ci": [
+        0.01742480899482101,
+        0.07729196822601603
+      ],
+      "fast_nominal_reject_rate": 0.075,
+      "agreement_with_fast_nominal": 0.955,
+      "divergences_total": 0,
+      "exact_pr_gt_sesoi_rate": 0.005,
+      "fits_with_divergences": 0
+    },
+    "null_ps03": {
+      "n": 200,
+      "or_ratio": 1.0,
+      "p_support": 0.03,
+      "re_sd": 0.7,
+      "slope_sd": 0.7,
+      "exact_reject_rate": 0.02,
+      "exact_95ci": [
+        0.005475565879556445,
+        0.050413609089896255
+      ],
+      "fast_nominal_reject_rate": 0.045,
+      "agreement_with_fast_nominal": 0.975,
+      "divergences_total": 0,
+      "exact_pr_gt_sesoi_rate": 0.005,
+      "fits_with_divergences": 0
+    },
+    "null_highhet": {
+      "n": 200,
+      "or_ratio": 1.0,
+      "p_support": 0.06,
+      "re_sd": 1.0,
+      "slope_sd": 0.7,
+      "exact_reject_rate": 0.03,
+      "exact_95ci": [
+        0.011087455672203695,
+        0.06415062670502639
+      ],
+      "fast_nominal_reject_rate": 0.085,
+      "agreement_with_fast_nominal": 0.935,
+      "divergences_total": 0,
+      "exact_pr_gt_sesoi_rate": 0.005,
+      "fits_with_divergences": 0
+    },
+    "or1p5": {
+      "n": 100,
+      "or_ratio": 1.5,
+      "p_support": 0.06,
+      "re_sd": 0.7,
+      "slope_sd": 0.7,
+      "exact_reject_rate": 0.18,
+      "exact_95ci": [
+        0.11031122915371105,
+        0.2694770859669012
+      ],
+      "fast_nominal_reject_rate": 0.22,
+      "agreement_with_fast_nominal": 0.92,
+      "divergences_total": 4,
+      "exact_pr_gt_sesoi_rate": 0.05,
+      "fits_with_divergences": 1
+    },
+    "or2": {
+      "n": 100,
+      "or_ratio": 2.0,
+      "p_support": 0.06,
+      "re_sd": 0.7,
+      "slope_sd": 0.7,
+      "exact_reject_rate": 0.37,
+      "exact_95ci": [
+        0.27556657961453906,
+        0.4723516405516859
+      ],
+      "fast_nominal_reject_rate": 0.43,
+      "agreement_with_fast_nominal": 0.9,
+      "divergences_total": 0,
+      "exact_pr_gt_sesoi_rate": 0.11,
+      "fits_with_divergences": 0
+    },
+    "or3": {
+      "n": 100,
+      "or_ratio": 3.0,
+      "p_support": 0.06,
+      "re_sd": 0.7,
+      "slope_sd": 0.7,
+      "exact_reject_rate": 0.74,
+      "exact_95ci": [
+        0.6426879368998966,
+        0.8226055621323475
+      ],
+      "fast_nominal_reject_rate": 0.74,
+      "agreement_with_fast_nominal": 0.88,
+      "divergences_total": 0,
+      "exact_pr_gt_sesoi_rate": 0.37,
+      "fits_with_divergences": 0
+    },
+    "or3_ps03": {
+      "n": 100,
+      "or_ratio": 3.0,
+      "p_support": 0.03,
+      "re_sd": 0.7,
+      "slope_sd": 0.7,
+      "exact_reject_rate": 0.43,
+      "exact_95ci": [
+        0.33139101663138787,
+        0.5328662616751538
+      ],
+      "fast_nominal_reject_rate": 0.52,
+      "agreement_with_fast_nominal": 0.85,
+      "divergences_total": 0,
+      "exact_pr_gt_sesoi_rate": 0.19,
+      "fits_with_divergences": 0
+    },
+    "or3_ps10": {
+      "n": 100,
+      "or_ratio": 3.0,
+      "p_support": 0.1,
+      "re_sd": 0.7,
+      "slope_sd": 0.7,
+      "exact_reject_rate": 0.83,
+      "exact_95ci": [
+        0.7418245893678491,
+        0.8977350899644719
+      ],
+      "fast_nominal_reject_rate": 0.83,
+      "agreement_with_fast_nominal": 0.88,
+      "divergences_total": 0,
+      "exact_pr_gt_sesoi_rate": 0.45,
+      "fits_with_divergences": 0
+    },
+    "or3_lowhet": {
+      "n": 100,
+      "or_ratio": 3.0,
+      "p_support": 0.06,
+      "re_sd": 0.3,
+      "slope_sd": 0.3,
+      "exact_reject_rate": 0.8,
+      "exact_95ci": [
+        0.7081573109113719,
+        0.873344447898044
+      ],
+      "fast_nominal_reject_rate": 0.86,
+      "agreement_with_fast_nominal": 0.88,
+      "divergences_total": 12,
+      "exact_pr_gt_sesoi_rate": 0.4,
+      "fits_with_divergences": 2
+    },
+    "or3_highhet": {
+      "n": 100,
+      "or_ratio": 3.0,
+      "p_support": 0.06,
+      "re_sd": 1.0,
+      "slope_sd": 0.7,
+      "exact_reject_rate": 0.55,
+      "exact_95ci": [
+        0.44728018877394987,
+        0.649679770760328
+      ],
+      "fast_nominal_reject_rate": 0.57,
+      "agreement_with_fast_nominal": 0.86,
+      "divergences_total": 0,
+      "exact_pr_gt_sesoi_rate": 0.23,
+      "fits_with_divergences": 0
+    }
+  }
+}

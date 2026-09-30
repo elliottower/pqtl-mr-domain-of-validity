@@ -1,0 +1,21 @@
+slug: doi-10-1371-journal-pgen-1004383
+title: Bayesian test for colocalisation between pairs of genetic association studies using summary statistics
+authors:
+- Giambartolomei, Claudia
+- Vukcevic, Damjan
+- Schadt, Eric E.
+- Franke, Lude
+- Hingorani, Aroon D.
+- Wallace, Chris
+- Plagnol, Vincent
+year: '2014'
+venue: PLoS Genetics
+doi: 10.1371/journal.pgen.1004383
+arxiv: ''
+et_al: false
+url: ''
+sha256: ''
+local: ''
+cited_by:
+  pqtl-mr-v8-mechanism-interaction:
+    key: giambartolomei2014coloc

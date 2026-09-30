@@ -1,0 +1,46 @@
+slug: doi-10-1093-nar-gkaa1027
+title: 'Open Targets Platform: supporting systematic drug-target identification and prioritisation'
+authors:
+- Ochoa, David
+- Hercules, Andrew
+- Carmona, Miguel
+- Suveges, Daniel
+- Gonzalez-Uriarte, Asier
+- Malangone, Cinzia
+- Miranda, Alfredo
+- Fumis, Luca
+- Carvalho-Silva, Denise
+- Spitzer, Michaela
+- Baker, Jarrod
+- Ferrer, Javier
+- Raies, Arwa
+- Razuvayevskaya, Olesya
+- Faulconbridge, Adam
+- Petsalaki, Eirini
+- Mutowo, Prudence
+- Machlitt-Northen, Sandra
+- Peat, Gareth
+- McAuley, Elaine
+- Ong, Chuang Kee
+- Mountjoy, Edward
+- Ghoussaini, Maya
+- Pierleoni, Andrea
+- Papa, Eliseo
+- Pignatelli, Miguel
+- Koscielny, Gautier
+- Karim, Mohd
+- Schwartzentruber, Jeremy
+- Hulcoop, David G.
+- Dunham, Ian
+- McDonagh, Ellen M.
+year: '2021'
+venue: Nucleic Acids Research
+doi: 10.1093/nar/gkaa1027
+arxiv: ''
+et_al: false
+url: ''
+sha256: ''
+local: ''
+cited_by:
+  pqtl-mr-v8-mechanism-interaction:
+    key: ochoa2021opentargets

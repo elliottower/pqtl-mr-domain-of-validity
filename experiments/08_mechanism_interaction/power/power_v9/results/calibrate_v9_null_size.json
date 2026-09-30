@@ -1,0 +1,16 @@
+{
+  "n_null_datasets": 200,
+  "exact_false_positive_rate": 0.04,
+  "exact_fp_95ci": [
+    0.01742480899482101,
+    0.07729196822601603
+  ],
+  "fast_nominal_false_positive_rate": 0.075,
+  "fast_fp_95ci": [
+    0.042582803737036705,
+    0.12068422539966135
+  ],
+  "posterior_cutoff_for_5pct_under_null": 0.9433625,
+  "divergences_total": 0,
+  "binomtest_p_vs_0.05": 0.786695297215297
+}

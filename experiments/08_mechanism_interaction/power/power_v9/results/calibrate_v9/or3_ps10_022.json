@@ -1,0 +1,26 @@
+{
+  "label": "or3_ps10",
+  "mode": "h1",
+  "scenario": {
+    "scenario_id": 9006,
+    "re_sd": 0.7,
+    "slope_sd": 0.7,
+    "p_support": 0.1,
+    "aligned_support_mult": 1.0,
+    "or_blocking": 1.0,
+    "or_ratio": 3.0,
+    "base_advance": 0.3,
+    "cns_ratio": 0.6666666666666666
+  },
+  "rep": 22,
+  "fast_z": 3.1810731624036888,
+  "fast_reject_nominal": true,
+  "exact": {
+    "pr_gt0": 0.99975,
+    "pr_gt_sesoi": 0.9955,
+    "median": 1.333262707208673,
+    "divergences": 0
+  },
+  "exact_reject": true,
+  "n_supportive": 320
+}

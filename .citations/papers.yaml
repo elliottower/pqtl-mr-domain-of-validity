@@ -1,0 +1,5 @@
+# Papers that cite into this library, and where their bibliographies live.
+# Paths are relative to this directory.
+papers:
+  pqtl-mr-v8-mechanism-interaction:
+    bib: ../experiments/08_mechanism_interaction/references.bib

@@ -1,0 +1,15 @@
+# artifacts, not records. Copyright usually forbids redistributing them
+pdfs/
+
+# secrets
+.env
+
+# Sidecars from provenance_core.locking. One appears beside a file two commands could write at
+# once; it holds nothing, since the kernel releases a lock when its holder exits.
+*.provenance-lock
+*.provenance-tmp
+
+__pycache__/
+*.pyc
+.DS_Store
+.audit-cache/

@@ -42,3 +42,15 @@ COVER_LETTER*
 fee_waiver*
 fee-waiver*
 *_submission.zip
+
+# Working plans and review packets — never tracked
+planning/
+
+# Large downloaded inputs for feasibility counts (deCODE supp tables, eQTLGen, OT cache)
+experiments/08_mechanism_interaction/feasibility/inputs/
+
+# V8 raw inputs (never committed; sha256 in the manifest)
+experiments/08_mechanism_interaction/inputs/
+
+# V8 all-indications feasibility count inputs (OT, GWAS Catalog, OpenGWAS, FinnGen, HPA, UniProt)
+experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/

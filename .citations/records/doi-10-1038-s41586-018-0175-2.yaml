@@ -1,0 +1,47 @@
+slug: doi-10-1038-s41586-018-0175-2
+title: Genomic atlas of the human plasma proteome
+authors:
+- Sun, Benjamin B.
+- Maranville, Joseph C.
+- Peters, James E.
+- Stacey, David
+- Staley, James R.
+- Blackshaw, James
+- Burgess, Stephen
+- Jiang, Tao
+- Paige, Ellie
+- Surendran, Praveen
+- Oliver-Williams, Clare
+- Kamat, Mihir A.
+- Prins, Bram P.
+- Wilcox, Sheri K.
+- Zimmerman, Erik S.
+- Chi, An
+- Bansal, Narinder
+- Spain, Sarah L.
+- Wood, Angela M.
+- Morrell, Nicholas W.
+- Bradley, John R.
+- Janjic, Nebojsa
+- Roberts, David J.
+- Ouwehand, Willem H.
+- Todd, John A.
+- Soranzo, Nicole
+- Suhre, Karsten
+- Paul, Dirk S.
+- Fox, Caroline S.
+- Plenge, Robert M.
+- Danesh, John
+- Runz, Heiko
+- Butterworth, Adam S.
+year: '2018'
+venue: Nature
+doi: 10.1038/s41586-018-0175-2
+arxiv: ''
+et_al: false
+url: ''
+sha256: ''
+local: ''
+cited_by:
+  pqtl-mr-v8-mechanism-interaction:
+    key: sun2018interval

@@ -1,0 +1,1228 @@
+{
+  "experiment": "08_mechanism_interaction feasibility v3: strict registered rules, outcome-blind",
+  "date": "2026-09-30",
+  "run_timestamp_utc": "2026-09-30T13:41:29.597396+00:00",
+  "script": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v3_strict/count_strict_b.py",
+  "script_sha256": "b72bf3b50bd8f8ed480abbcdeadea4ff3b5e3cdfff16416ecfee44c2129b8cb8",
+  "v2_script_sha256": "5086b83747356056ce985a32616ce71812f13304f81bc7098224abf9be27edb1",
+  "seed": null,
+  "prereg": {
+    "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/PREREG.md",
+    "sha256": "35fec0611960de07577cea288f3f435e4d66770fe423c85689086f0fba866d9a"
+  },
+  "blinding": "- clinical_indication is read with drugId, diseaseId, maxClinicalStage; maxClinicalStage is\n  converted at once to a boolean Phase II+ flag and dropped. No phase value is kept, written\n  or printed.\n- drug_mechanism_of_action: mechanismOfAction, actionType, chemblIds, targets, targetType.\n- drug_molecule: id, drugType, parentId.\n- classification_v5*.csv: gene, disease only. frozen_candidates_v34.csv: disease,\n  ot_disease_id only (the Open Targets disease name used by count_coverage.py).\n- feasibility/coverage_counts.json is never opened. The pilot label -> ID map is rebuilt\n  offline from frozen_candidates_v34.csv names by exact name match in the OT 26.09 disease\n  index, with the multiple-sclerosis override of count_coverage.py.\n- No MR, colocalization, disease-association, outcome or approval value is read.",
+  "definitions": {
+    "hypothesis": "gene (HGNC symbol of OT MoA target) + OT diseaseId + intervention direction + mechanism class, over Phase II+ drug rows",
+    "phase2plus": [
+      "APPROVAL",
+      "PHASE_2",
+      "PHASE_2_3",
+      "PHASE_3",
+      "PREAPPROVAL"
+    ],
+    "indication_rule": "prefix in ['EFO', 'MONDO', 'Orphanet']; in OT 26.09 disease index; ontology.isTherapeuticArea false; therapeuticAreas minus ['EFO_0000651', 'EFO_0001444', 'EFO_0002571', 'GO_0008150', 'MONDO_0005583'] non-empty",
+    "blood_secreted": "HPA 'Secretome location' == 'Secreted to blood' for the MoA target Ensembl ID",
+    "mechanism_class": "PREREG table, first matching row, per drug-target row; neutralizing BINDING AGENT (mechanismOfAction text contains inhibitor/antagonist/blocker/neutraliz/neutralis/sequestr) treated as INHIBITOR",
+    "direction": "PREREG_direction_concordance.md \u00a73.3 tiers on the (effective) actionType of each row",
+    "outcome_selection": "per source in order UKB-PPP, deCODE, INTERVAL (those with the gene): first candidate by tier, overlap no<unknown<yes for that source's cohort, larger Neff, GWAS Catalog<FinnGen<OpenGWAS, lower accession; deCODE instrument excludes candidates with includes_iceland == yes; first source with tier1+no used, else first source's selection",
+    "related_indication_rule": "within gene x direction x class, most specific first (fewest OT descendants); X dropped if every Phase II+ drugId of X is a drugId of a retained hypothesis on an OT descendant of X; applied after the overlap step and before the held-out filter",
+    "heldout": "(gene, diseaseId) absent from classification_v5.csv and classification_v5_1.csv; labels mapped through frozen_candidates_v34.csv ot_disease_id names by exact name match in OT 26.09 (multiple sclerosis -> EFO_0803536)",
+    "S4": "S1 plus hypotheses whose selected candidate is tier 1 with overlap unknown, retained by the related rule run on the tier-1 no+unknown pool, held out"
+  },
+  "releases": {
+    "open_targets": "26.09",
+    "gwas_catalog": "r2026-09-13",
+    "hpa": {
+      "version": "25.1",
+      "basis": "proteinatlas.org/about/releases lists version 25.1 (release date 2026.05.25) as current; the zip entry is dated 2026-06-03 and the live download's Last-Modified and Content-Length are checked below",
+      "zip_entry_date": [
+        2026,
+        6,
+        3,
+        13,
+        6,
+        48
+      ],
+      "live_download_head": {
+        "last_modified": "Wed, 03 Jun 2026 11:06:49 GMT",
+        "content_length": "7460135",
+        "local_bytes": 7460135
+      },
+      "secreted_to_blood_genes": 785
+    },
+    "finngen": [
+      "FINNGEN_R12"
+    ]
+  },
+  "universe_meta": {
+    "clinical_indication_rows": 86451
+  },
+  "crosscheck_v2": {
+    "seen_keys_here": 161,
+    "seen_keys_v2": 161,
+    "eligible_pairs_here": 79248,
+    "eligible_pairs_v2": 79248,
+    "v2_final_heldout_reproduced": {
+      "pairs": 6853,
+      "genes": 389,
+      "indications": 692
+    },
+    "v2_final_heldout_reported": {
+      "pairs": 6853,
+      "genes": 389,
+      "indications": 692
+    },
+    "label_map_problems": {}
+  },
+  "funnel": [
+    {
+      "step": "phase2plus_hypotheses",
+      "remaining": {
+        "hypotheses": 85007,
+        "pairs": 79248,
+        "genes": 1475,
+        "indications": 2715
+      }
+    },
+    {
+      "step": "indication_rule",
+      "reason": "{\"prefix_not_mondo_efo_orphanet\": 7319, \"therapeutic_area_root\": 538, \"no_disease_therapeutic_area\": 2673}",
+      "dropped": {
+        "hypotheses": 10530,
+        "pairs": 10050,
+        "genes": 873,
+        "indications": 469
+      },
+      "remaining": {
+        "hypotheses": 74477,
+        "pairs": 69198,
+        "genes": 1461,
+        "indications": 2246
+      }
+    },
+    {
+      "step": "cis_pqtl_instrument",
+      "reason": "no cis-pQTL gene in UKB-PPP, deCODE ST02 or INTERVAL lists",
+      "dropped": {
+        "hypotheses": 61404,
+        "pairs": 56795,
+        "genes": 1057,
+        "indications": 2051
+      },
+      "remaining": {
+        "hypotheses": 13073,
+        "pairs": 12403,
+        "genes": 404,
+        "indications": 1489
+      }
+    },
+    {
+      "step": "selected_outcome_gwas_tier1",
+      "reason": "{\"tier3\": 5066, \"tier2\": 1012, \"none\": 19}",
+      "dropped": {
+        "hypotheses": 6097,
+        "pairs": 5853,
+        "genes": 338,
+        "indications": 916
+      },
+      "remaining": {
+        "hypotheses": 6976,
+        "pairs": 6550,
+        "genes": 388,
+        "indications": 573
+      }
+    },
+    {
+      "step": "selected_overlap_no",
+      "reason": "{\"unknown\": 402, \"yes\": 118}",
+      "dropped": {
+        "hypotheses": 520,
+        "pairs": 482,
+        "genes": 155,
+        "indications": 65
+      },
+      "remaining": {
+        "hypotheses": 6456,
+        "pairs": 6068,
+        "genes": 386,
+        "indications": 541
+      }
+    },
+    {
+      "step": "related_indication_rule",
+      "reason": "ontology ancestor whose Phase II+ drugs are all on retained descendants",
+      "dropped": {
+        "hypotheses": 1201,
+        "pairs": 1155,
+        "genes": 218,
+        "indications": 149
+      },
+      "remaining": {
+        "hypotheses": 5255,
+        "pairs": 4959,
+        "genes": 386,
+        "indications": 496
+      }
+    },
+    {
+      "step": "heldout",
+      "reason": "gene+indication key in classification_v5/v5_1",
+      "dropped": {
+        "hypotheses": 121,
+        "pairs": 113,
+        "genes": 73,
+        "indications": 18
+      },
+      "remaining": {
+        "hypotheses": 5134,
+        "pairs": 4846,
+        "genes": 385,
+        "indications": 496
+      }
+    }
+  ],
+  "counts": {
+    "S1": {
+      "hypotheses": 5134,
+      "pairs": 4846,
+      "genes": 385,
+      "indications": 496,
+      "pairs_per_gene": {
+        "n_genes": 385,
+        "min": 1,
+        "median": 5.0,
+        "mean": 12.587,
+        "p90": 38.0,
+        "max": 81,
+        "histogram": {
+          "1": 38,
+          "2": 63,
+          "3-5": 102,
+          "6-10": 56,
+          "11-20": 52,
+          ">20": 74
+        }
+      },
+      "hypotheses_per_gene": {
+        "n_genes": 385,
+        "min": 1,
+        "median": 5.0,
+        "mean": 13.335,
+        "p90": 39.0,
+        "max": 89,
+        "histogram": {
+          "1": 36,
+          "2": 64,
+          "3-5": 98,
+          "6-10": 60,
+          "11-20": 52,
+          ">20": 75
+        }
+      },
+      "by_class": {
+        "aligned": {
+          "hypotheses": 584,
+          "genes": 69,
+          "pairs": 584,
+          "indications": 242,
+          "direction": {
+            "decrease": 584
+          }
+        },
+        "blocking": {
+          "hypotheses": 2734,
+          "genes": 170,
+          "pairs": 2734,
+          "indications": 364,
+          "direction": {
+            "decrease": 2734
+          }
+        },
+        "other": {
+          "hypotheses": 1816,
+          "genes": 223,
+          "pairs": 1702,
+          "indications": 341,
+          "direction": {
+            "increase": 499,
+            "decrease": 731,
+            "ambiguous": 586
+          }
+        }
+      },
+      "shares_program": 4945,
+      "selected_instrument_source": {
+        "ukbppp": 4055,
+        "decode": 1059,
+        "interval": 20
+      },
+      "selected_outcome_source": {
+        "gwas_catalog": 2593,
+        "opengwas": 196,
+        "finngen": 2345
+      },
+      "any_single_protein_moa": {
+        "hypotheses": 3407,
+        "pairs": 3186,
+        "genes": 280,
+        "indications": 457
+      },
+      "pilot_indication_flag": 393,
+      "indication_id_prefixes": {
+        "EFO": 55,
+        "MONDO": 440,
+        "Orphanet": 1
+      }
+    },
+    "S4": {
+      "hypotheses": 5422,
+      "pairs": 5114,
+      "genes": 387,
+      "indications": 513,
+      "pairs_per_gene": {
+        "n_genes": 387,
+        "min": 1,
+        "median": 5.0,
+        "mean": 13.214,
+        "p90": 39.0,
+        "max": 85,
+        "histogram": {
+          "1": 37,
+          "2": 60,
+          "3-5": 102,
+          "6-10": 60,
+          "11-20": 50,
+          ">20": 78
+        }
+      },
+      "by_class": {
+        "aligned": {
+          "hypotheses": 614,
+          "genes": 70,
+          "pairs": 614,
+          "indications": 254,
+          "direction": {
+            "decrease": 614
+          }
+        },
+        "blocking": {
+          "hypotheses": 2906,
+          "genes": 172,
+          "pairs": 2906,
+          "indications": 376,
+          "direction": {
+            "decrease": 2906
+          }
+        },
+        "other": {
+          "hypotheses": 1902,
+          "genes": 223,
+          "pairs": 1782,
+          "indications": 358,
+          "direction": {
+            "increase": 522,
+            "decrease": 771,
+            "ambiguous": 609
+          }
+        }
+      },
+      "overlap_unknown_added": {
+        "hypotheses": 288,
+        "pairs": 268,
+        "genes": 109,
+        "indications": 24
+      },
+      "alt_related_rule_rerun_on_no_plus_unknown_pool": {
+        "hypotheses": 5365,
+        "pairs": 5062,
+        "genes": 387,
+        "indications": 511
+      }
+    },
+    "H1_eligible": {
+      "hypotheses": 3318,
+      "pairs": 3275,
+      "genes": 228,
+      "indications": 429,
+      "pairs_per_gene": {
+        "n_genes": 228,
+        "min": 1,
+        "median": 5.0,
+        "mean": 14.364,
+        "p90": 44.200000000000045,
+        "max": 76,
+        "histogram": {
+          "1": 21,
+          "2": 34,
+          "3-5": 64,
+          "6-10": 27,
+          "11-20": 28,
+          ">20": 54
+        }
+      },
+      "aligned": {
+        "hypotheses": 584,
+        "genes": 69,
+        "pairs": 584,
+        "indications": 242,
+        "direction": {
+          "decrease": 584
+        }
+      },
+      "blocking": {
+        "hypotheses": 2734,
+        "genes": 170,
+        "pairs": 2734,
+        "indications": 364,
+        "direction": {
+          "decrease": 2734
+        }
+      },
+      "other_excluded": {
+        "hypotheses": 1816,
+        "genes": 223,
+        "pairs": 1702,
+        "indications": 341,
+        "direction": {
+          "increase": 499,
+          "decrease": 731,
+          "ambiguous": 586
+        }
+      },
+      "genes_in_both_classes": 11
+    },
+    "alternatives": {
+      "S1_related_rule_applied_after_heldout": {
+        "hypotheses": 5140,
+        "pairs": 4849,
+        "genes": 385,
+        "indications": 497
+      },
+      "S1_related_rule_with_parent_molecule_ids": {
+        "hypotheses": 5072,
+        "pairs": 4786,
+        "genes": 385,
+        "indications": 494
+      },
+      "tier1_no_pool_before_related_and_heldout": {
+        "hypotheses": 6456,
+        "pairs": 6068,
+        "genes": 386,
+        "indications": 541
+      },
+      "fallback_first_source_not_tier1_no_but_tier1_unknown_on_later_source": 1
+    },
+    "drug_gene_indication_with_multiple_class_direction": 606,
+    "class_input_crosstab_S1": [
+      {
+        "drug_type": "Antibody",
+        "actionType": "AGONIST",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 29
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "AGONIST",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 4
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "ANTAGONIST",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 224
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "ANTAGONIST",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "aligned",
+        "drug_target_indication_rows": 78
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "BINDING AGENT",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 40
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "BINDING AGENT",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 6
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "BLOCKER",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 3
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "CROSS-LINKING AGENT",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 2
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "CROSS-LINKING AGENT",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 3
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 718
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "aligned",
+        "drug_target_indication_rows": 543
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "NEGATIVE ALLOSTERIC MODULATOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "aligned",
+        "drug_target_indication_rows": 1
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "OTHER",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 38
+      },
+      {
+        "drug_type": "Antibody",
+        "actionType": "STABILISER",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 2
+      },
+      {
+        "drug_type": "Antibody drug conjugate",
+        "actionType": "BINDING AGENT",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 108
+      },
+      {
+        "drug_type": "Antibody drug conjugate",
+        "actionType": "BINDING AGENT",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 11
+      },
+      {
+        "drug_type": "Antibody drug conjugate",
+        "actionType": "INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 2
+      },
+      {
+        "drug_type": "Enzyme",
+        "actionType": "ACTIVATOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 6
+      },
+      {
+        "drug_type": "Enzyme",
+        "actionType": "EXOGENOUS PROTEIN",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 32
+      },
+      {
+        "drug_type": "Enzyme",
+        "actionType": "HYDROLYTIC ENZYME",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 104
+      },
+      {
+        "drug_type": "Enzyme",
+        "actionType": "HYDROLYTIC ENZYME",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 4
+      },
+      {
+        "drug_type": "Enzyme",
+        "actionType": "PROTEOLYTIC ENZYME",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 1
+      },
+      {
+        "drug_type": "Gene",
+        "actionType": "AGONIST",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 1
+      },
+      {
+        "drug_type": "Gene",
+        "actionType": "BINDING AGENT",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 2
+      },
+      {
+        "drug_type": "Gene",
+        "actionType": "EXOGENOUS GENE",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 3
+      },
+      {
+        "drug_type": "Gene",
+        "actionType": "VACCINE ANTIGEN",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 3
+      },
+      {
+        "drug_type": "Oligonucleotide",
+        "actionType": "ACTIVATOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 3
+      },
+      {
+        "drug_type": "Oligonucleotide",
+        "actionType": "ANTISENSE INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 22
+      },
+      {
+        "drug_type": "Oligonucleotide",
+        "actionType": "ANTISENSE INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "aligned",
+        "drug_target_indication_rows": 33
+      },
+      {
+        "drug_type": "Oligonucleotide",
+        "actionType": "BINDING AGENT",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 4
+      },
+      {
+        "drug_type": "Oligonucleotide",
+        "actionType": "RNAI INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "aligned",
+        "drug_target_indication_rows": 22
+      },
+      {
+        "drug_type": "Oligosaccharide",
+        "actionType": "ACTIVATOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 96
+      },
+      {
+        "drug_type": "Oligosaccharide",
+        "actionType": "INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 5
+      },
+      {
+        "drug_type": "Oligosaccharide",
+        "actionType": "INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 13
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "ACTIVATOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 11
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "AGONIST",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 555
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "AGONIST",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 29
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "ANTAGONIST",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 14
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "ANTAGONIST",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "aligned",
+        "drug_target_indication_rows": 40
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "BINDING AGENT",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 36
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "BINDING AGENT",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 17
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "EXOGENOUS PROTEIN",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 21
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "HYDROLYTIC ENZYME",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 71
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 73
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "aligned",
+        "drug_target_indication_rows": 151
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "POSITIVE MODULATOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 11
+      },
+      {
+        "drug_type": "Protein",
+        "actionType": "PROTEOLYTIC ENZYME",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 3
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "ACTIVATOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 7
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "ACTIVATOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 1
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "AGONIST",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 2
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "ANTAGONIST",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "blocking",
+        "drug_target_indication_rows": 47
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "ANTAGONIST",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "blocking",
+        "drug_target_indication_rows": 5
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "CROSS-LINKING AGENT",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 1
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "blocking",
+        "drug_target_indication_rows": 5071
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "blocking",
+        "drug_target_indication_rows": 1536
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "MODULATOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 138
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "NEGATIVE ALLOSTERIC MODULATOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "blocking",
+        "drug_target_indication_rows": 3
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "OTHER",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 3
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "STABILISER",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 3
+      },
+      {
+        "drug_type": "Small molecule",
+        "actionType": "STABILISER",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 8
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "ACTIVATOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 2
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "AGONIST",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 28
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "AGONIST",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 6
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "ANTAGONIST",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 1
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "ANTAGONIST",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 4
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "BINDING AGENT",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 5
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "BINDING AGENT",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 8
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "EXOGENOUS PROTEIN",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 11
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "HYDROLYTIC ENZYME",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 13
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "HYDROLYTIC ENZYME",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 5
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 115
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 80
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "MODULATOR",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 2
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "OTHER",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 1
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "PROTEOLYTIC ENZYME",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 1
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "RNAI INHIBITOR",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 1
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "VACCINE ANTIGEN",
+        "neutralizing_ba": false,
+        "blood": false,
+        "class": "other",
+        "drug_target_indication_rows": 2
+      },
+      {
+        "drug_type": "Unknown",
+        "actionType": "VACCINE ANTIGEN",
+        "neutralizing_ba": false,
+        "blood": true,
+        "class": "other",
+        "drug_target_indication_rows": 1
+      }
+    ],
+    "actionType_to_direction": {
+      "ACTIVATOR": "increase",
+      "AGONIST": "increase",
+      "ALLOSTERIC ANTAGONIST": "decrease",
+      "ANTAGONIST": "decrease",
+      "ANTISENSE INHIBITOR": "decrease",
+      "BINDING AGENT": "ambiguous",
+      "BLOCKER": "decrease",
+      "CROSS-LINKING AGENT": "ambiguous",
+      "DEGRADER": "decrease",
+      "DISRUPTING AGENT": "decrease",
+      "EXOGENOUS GENE": "ambiguous",
+      "EXOGENOUS PROTEIN": "ambiguous",
+      "GENE EDITING NEGATIVE MODULATOR": "ambiguous",
+      "HYDROLYTIC ENZYME": "ambiguous",
+      "INHIBITOR": "decrease",
+      "INVERSE AGONIST": "decrease",
+      "MODULATOR": "ambiguous",
+      "NEGATIVE ALLOSTERIC MODULATOR": "decrease",
+      "NEGATIVE MODULATOR": "ambiguous",
+      "OPENER": "increase",
+      "OTHER": "ambiguous",
+      "PARTIAL AGONIST": "increase",
+      "POSITIVE ALLOSTERIC MODULATOR": "increase",
+      "POSITIVE MODULATOR": "ambiguous",
+      "PROTEOLYTIC ENZYME": "ambiguous",
+      "RELEASING AGENT": "increase",
+      "RNAI INHIBITOR": "decrease",
+      "STABILISER": "increase",
+      "SUBSTRATE": "ambiguous",
+      "VACCINE ANTIGEN": "ambiguous"
+    }
+  },
+  "inputs": {
+    "prereg": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/PREREG.md",
+      "sha256": "35fec0611960de07577cea288f3f435e4d66770fe423c85689086f0fba866d9a",
+      "bytes": 41524,
+      "note": "rules"
+    },
+    "v2_script": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/count_all_indications.py",
+      "sha256": "5086b83747356056ce985a32616ce71812f13304f81bc7098224abf9be27edb1",
+      "bytes": 51449,
+      "note": "functions for candidates, tiers, instruments"
+    },
+    "v2_json": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/coverage_all_indications.json",
+      "sha256": "06b805367890f8cca5bc5b65737d3e9d18e9167740f366e8afc49d13a9916e99",
+      "bytes": 4779567,
+      "note": "seen_sets.keys, counts.pairs.eligible and final_heldout for cross-check only"
+    },
+    "frozen_candidates_v34": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/data/frozen_candidates_v34.csv",
+      "sha256": "c428c733aa66cbdb45ae4761424871f4dfa93e173f56ccd56f101b0dc33ebe62",
+      "bytes": 34918,
+      "note": "usecols disease, ot_disease_id"
+    },
+    "classification_v5": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/results/v5/classification_v5.csv",
+      "sha256": "4e9d132ab7a75733989d5a278e04cce877eea9d916512e24d74e6542f3573100",
+      "bytes": 31999,
+      "note": "usecols gene, disease"
+    },
+    "classification_v5_1": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/results/v5_1/classification_v5_1.csv",
+      "sha256": "14a43f3fca4105612a6e816fd7336739296a879a020c62f82b1cbed65eae15d1",
+      "bytes": 27128,
+      "note": "usecols gene, disease"
+    },
+    "epigraphdb_catalog": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/zenodo_export/data/epigraphdb/v34_mr_catalog.csv",
+      "sha256": "e50f9b3824ebad7c7ee6ae13fd812f8f4f9afff267f18ed60b1aca5c483ddf70",
+      "bytes": 2553816,
+      "note": "usecols gene_symbol"
+    },
+    "ukbppp_cis_genes": {
+      "path": "/Users/elliottower/Documents/GitHub/transport-wrapper/DRUGS_EXPANDED/pqtl_sources/ukbppp_cis_pqtl_genes.json",
+      "sha256": "d40fa2f56ebc0b49100cc7e4d7d96cf4a7b000951210174300ccae7a3a9ec1d7",
+      "bytes": 17723,
+      "note": "UKB-PPP cis-pQTL gene list"
+    },
+    "olink_protein_map_3k": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/planning/perplexity_v8_design/F_data_readmes/olink_protein_map_3k_v1.tsv",
+      "sha256": "2bc9668e56f43818e2a61558fcdd0b5384b4919602bc61c9faaed2622aefe6aa",
+      "bytes": 479829,
+      "note": "usecols HGNC.symbol, ensembl_id"
+    },
+    "decode_supplementary": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/inputs/ferkingstad2021_MOESM4_ESM.xlsx",
+      "sha256": "e3f907a11b452f979db8241ed852c1542d00ed5373c39b53c6a79702f8b80ef6",
+      "bytes": 44366108,
+      "note": "Ferkingstad 2021 ST01, ST02"
+    },
+    "sun2018_supplementary": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/interval/sun2018_MOESM4_ESM.xlsx",
+      "sha256": "d7bfada3eab1e2be15fdde9bc5a62e2d2563c111db5b2e7f242dfb9ea492b9d5",
+      "bytes": 2219218,
+      "note": "sheet ST4 only",
+      "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-018-0175-2/MediaObjects/41586_2018_175_MOESM4_ESM.xlsx"
+    },
+    "hgnc": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/hgnc/hgnc_complete_set.txt",
+      "sha256": "91d0ad20c34f26fb12c8cce3f80a65a6fc694f3a508040b19f6bfa29ae0d889e",
+      "bytes": 16953545,
+      "note": "symbol, status, ensembl_gene_id, uniprot_ids",
+      "url": "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"
+    },
+    "hpa": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/hpa/proteinatlas.tsv.zip",
+      "sha256": "ad401f8519ecdee5b67b0ad3bf28175d402d1ea0ad6c542b90fcab2bee39b470",
+      "bytes": 7460135,
+      "note": "Gene, Ensembl, Secretome location",
+      "url": "https://www.proteinatlas.org/download/proteinatlas.tsv.zip"
+    },
+    "opengwas_gwasinfo": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/opengwas/gwasinfo_all.json",
+      "sha256": "382c5b4cab3c7a342bfdf4bb506356e2c600d1b0fc8fd9fb90d9cb431e845b62",
+      "bytes": 20917306,
+      "note": "full gwasinfo listing",
+      "url": "https://api.opengwas.io/api/gwasinfo"
+    },
+    "ot_clinical_indication": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/clinical_indication.parquet",
+      "sha256": "e10ced7ce09495cd3fa6e7cb94e81e083aed78ee399424730d567243b49a38d8",
+      "bytes": 4989955,
+      "note": "",
+      "url": "https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/26.09/output/clinical_indication/00000000.parquet"
+    },
+    "ot_drug_mechanism_of_action": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/drug_mechanism_of_action.parquet",
+      "sha256": "8484accd3383837e0eaac2164eed89991daf58dc93f0a599072fb7e5ef4f6c28",
+      "bytes": 322830,
+      "note": "",
+      "url": "https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/26.09/output/drug_mechanism_of_action/00000000.parquet"
+    },
+    "ot_drug_molecule": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/drug_molecule.parquet",
+      "sha256": "be65749aa1dbcc68d0930f8ac18126cec5c2bc2c0f232f11e8530dad4ba0585c",
+      "bytes": 6867467,
+      "note": "",
+      "url": "https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/26.09/output/drug_molecule/00000000.parquet"
+    },
+    "ot_disease": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/disease.parquet",
+      "sha256": "a89b8b8b89bad168016e6ff8302d2bcc8d9b7f9cbb35c459ef847c36a4f17aed",
+      "bytes": 6346458,
+      "note": "",
+      "url": "https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/26.09/output/disease/00000000.parquet"
+    },
+    "ot_study": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/study.parquet",
+      "sha256": "158296ab630ae2dbedc14d5a7c0393f92837d99ba59fd76d3c2f363327e48d40",
+      "bytes": 97748879,
+      "note": "",
+      "url": "https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/26.09/output/study/part-00000-90d9a8f0-e00a-492e-b961-40b56a21dbd0-c000.zstd.parquet"
+    },
+    "gwas_catalog_gwas-catalog-v1.0.3.1-studies-r2026-09-13.tsv": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-studies-r2026-09-13.tsv",
+      "sha256": "8b5aa02a1da7ff72b3d4e7f9d45375486016bf6070014bfb5d0b248834f56f21",
+      "bytes": 129219103,
+      "note": "",
+      "url": "https://www.ebi.ac.uk/gwas/api/search/downloads/studies/v1.0.3.1"
+    },
+    "gwas_catalog_gwas-catalog-v1.0.3.1-ancestries-r2026-09-13.tsv": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-ancestries-r2026-09-13.tsv",
+      "sha256": "bc55cd544f6e928c440c8e4c79de53168c0f5a85d03b401e21d2b5603b6d35a7",
+      "bytes": 53445127,
+      "note": "",
+      "url": "https://www.ebi.ac.uk/gwas/api/search/downloads/ancestries/v1.0.3.1"
+    },
+    "gwas_catalog_gwas-catalog-v1.0.3.1-unpublished-studies-r2026-09-13.tsv": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-unpublished-studies-r2026-09-13.tsv",
+      "sha256": "81fee11f6d0c19719ffb23d86324d046202b869a47b2fb9d7da45934e82fd1d1",
+      "bytes": 8150250,
+      "note": "",
+      "url": "https://www.ebi.ac.uk/gwas/api/search/downloads/unpublished_studies/v1.0.3.1"
+    },
+    "gwas_catalog_gwas-catalog-v1.0.3.1-unpublished-ancestries-r2026-09-13.tsv": {
+      "path": "/Users/elliottower/Documents/GitHub/pqtl-mr-domain-of-validity/experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-unpublished-ancestries-r2026-09-13.tsv",
+      "sha256": "398e0935b51c2f4bab7c09376c282d83147de1cdba59b32765f5b1bbec3cf919",
+      "bytes": 6820024,
+      "note": "",
+      "url": "https://www.ebi.ac.uk/gwas/api/search/downloads/unpublished_ancestries/v1.0.3.1"
+    }
+  }
+}
