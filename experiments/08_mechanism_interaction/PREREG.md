@@ -2,7 +2,7 @@
 
 **Status:** FROZEN at `b946087070e4`
 **Plan sha256:** `6cbba0840b213f586ef455b33e569a84a94fc676103b74adef6c46e2e0e70040`
-**Log:** 12 entries, head `d1aa4a36`
+**Log:** 13 entries, head `dc6d1ce2`
 **Frozen:** 2026-09-30
 
 Sections use the [OSF Preregistration](https://osf.io/prereg/) question titles verbatim, so
@@ -928,4 +928,5 @@ decide which word to use: `nothing run`, `no results seen`, `results not opened`
 2026-09-30  correction to the previous line: the representative exact-model table covers 1,300 simulated datasets (600 no-effect, 700 with an effect), one fit each, no reruns; 260 came from the earlier validation and 1,040 were new. Draft revised for round 5: reduced model after persistent sampler failure is descriptive only; post-freeze amendment rule with frozen failure consequences; meaning of confirmatory (no familywise error claim; fixed-sequence bound in checked configurations); multiple-membership term in marginal predictions; H3 20/20 labelled pragmatic   nothing run
 2026-09-30  frozen at b946087070e4                nothing run  ·072508c4
 2026-09-30  osf draft 6abd60246cf9e1ded2dbef1b of plan 6cbba0840b213f58  nothing run  ·d1aa4a36
+2026-09-30  OSF draft registration 6abd60246cf9e1ded2dbef1b created from the frozen plan (freeze commit b946087, tag v8-prereg-freeze); all 23 draft responses match the plan; title set by direct API PATCH after prereg set_metadata left it blank  nothing run  ·dc6d1ce2
 ```
