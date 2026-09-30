@@ -2,7 +2,7 @@
 
 **Status:** FROZEN at `b946087070e4`
 **Plan sha256:** `6cbba0840b213f586ef455b33e569a84a94fc676103b74adef6c46e2e0e70040`
-**Log:** 13 entries, head `dc6d1ce2`
+**Log:** 14 entries, head `2938f33b`
 **Frozen:** 2026-09-30
 
 Sections use the [OSF Preregistration](https://osf.io/prereg/) question titles verbatim, so
@@ -929,4 +929,5 @@ decide which word to use: `nothing run`, `no results seen`, `results not opened`
 2026-09-30  frozen at b946087070e4                nothing run  ·072508c4
 2026-09-30  osf draft 6abd60246cf9e1ded2dbef1b of plan 6cbba0840b213f58  nothing run  ·d1aa4a36
 2026-09-30  OSF draft registration 6abd60246cf9e1ded2dbef1b created from the frozen plan (freeze commit b946087, tag v8-prereg-freeze); all 23 draft responses match the plan; title set by direct API PATCH after prereg set_metadata left it blank  nothing run  ·dc6d1ce2
+2026-09-30  Registered on OSF as https://osf.io/9tzfk/ (date_registered 2026-09-30T19:19:06Z, from draft 6abd60246cf9e1ded2dbef1b, public on approval); nothing computed on held-out evidence or outcomes  nothing run  ·2938f33b
 ```
