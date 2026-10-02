@@ -64,6 +64,8 @@ if modal.is_local():
              .add_local_file(str(HERE / "run_stage_a.py"), "/root/stagea/run_stage_a.py", copy=True)
              .add_local_file(str(GUARD), "/root/stagea/v8_run_guard.py", copy=True)
              .add_local_file(str(GUARD.with_name("v8_manifest.py")), "/root/stagea/v8_manifest.py", copy=True)
+             # the wrapper imports v8_test_report at module level, so the run container needs it too
+             .add_local_file(str(GUARD.with_name("v8_test_report.py")), "/root/stagea/v8_test_report.py", copy=True)
              .add_local_file(str(EXP_LOCAL / "PREREG.md"), str(PREREG_IMAGE), copy=True))
     for rel in EXP_FILES:
         image = image.add_local_file(str(EXP_LOCAL / rel), str(EXP / rel), copy=True)
