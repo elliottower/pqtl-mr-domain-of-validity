@@ -58,3 +58,6 @@ experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/
 # V8 stages: lockfiles are committed; the prereg lock file is not
 !experiments/08_mechanism_interaction/stages/*/uv.lock
 experiments/08_mechanism_interaction/PREREG.md.provenance-lock
+
+# results ledger: the log and its head are committed; lock files are not
+.results/*.provenance-lock
