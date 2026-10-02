@@ -1,0 +1,58 @@
+step,remaining,excluded,reason
+universe_clinical_indication_rows,86451,0,Open Targets 26.09 clinical_indication rows (drug x disease)
+universe_rows_with_mechanism,55197,31254,drug and its parent molecule have no drug_mechanism_of_action row
+drug_target_indication_rows,191210,0,unit: drug x HGNC-approved target gene x indication; targets without an HGNC symbol dropped
+gene_indication_pairs,107244,0,unit: gene x indication
+hypotheses,116009,0,unit from here: gene x indication x direction x mechanism class
+eligible_phase2_or_later,84549,31460,no drug at Phase II or later for the indication
+indication_rule,74073,10476,no_disease_therapeutic_area=2652;prefix_not_mondo_efo_orphanet=7290;therapeutic_area_root=534
+cis_pqtl_instrument,13064,61009,"gene on no strict UKB-PPP, deCODE or INTERVAL list"
+outcome_gwas_tier1,6970,6094,no_candidate=19;tier2=1011;tier3=5064
+overlap_no,6440,530,unknown=408;yes=122
+related_indication_rule,5184,1256,ontology ancestor whose Phase II+ programs all sit on retained descendant hypotheses
+heldout,5064,120,gene+indication key in classification_v5 / classification_v5_1
+S4_added_overlap_unknown,291,0,"tier-1 overlap-unknown hypotheses retained by the related rule on the no+unknown pool, held out"
+S10_added_tier2_tier3,5086,0,"tier-2/3 overlap-no hypotheses retained by the related rule on the tier-1/2/3 overlap-no pool, held out"
+S12_one_hypothesis_per_program,918,4146,"within gene, a program already kept at a more specific indication"
+S20:indication_rule,74073,10476,no_disease_therapeutic_area=2652;prefix_not_mondo_efo_orphanet=7290;therapeutic_area_root=534
+S20:cis_pqtl_instrument,13163,60910,gene on no list of this variant
+S20:outcome_gwas_tier1,7040,6123,no_candidate=19;tier2=1017;tier3=5087
+S20:overlap_no,6520,520,unknown=402;yes=118
+S20:related_indication_rule,5240,1280,ontology ancestor whose Phase II+ programs all sit on retained descendant hypotheses
+S20:heldout,5120,120,gene+indication key in classification_v5 / classification_v5_1
+S20:S4_added_overlap_unknown,286,0,"tier-1 overlap-unknown hypotheses retained by the related rule on the no+unknown pool, held out"
+S20:S10_added_tier2_tier3,5112,0,"tier-2/3 overlap-no hypotheses retained by the related rule on the tier-1/2/3 overlap-no pool, held out"
+S20:rows_present_only_under_inclusive_lists,55,0,written with strict_instrument = false
+S8:indication_rule,73968,10475,no_disease_therapeutic_area=2654;prefix_not_mondo_efo_orphanet=7287;therapeutic_area_root=534
+S8:cis_pqtl_instrument,12952,61016,gene on no list of this variant
+S8:outcome_gwas_tier1,6898,6054,no_candidate=19;tier2=1000;tier3=5035
+S8:overlap_no,6380,518,unknown=399;yes=119
+S8:related_indication_rule,5140,1240,ontology ancestor whose Phase II+ programs all sit on retained descendant hypotheses
+S8:heldout,5021,119,gene+indication key in classification_v5 / classification_v5_1
+S8:S4_added_overlap_unknown,285,0,"tier-1 overlap-unknown hypotheses retained by the related rule on the no+unknown pool, held out"
+S8:S10_added_tier2_tier3,5055,0,"tier-2/3 overlap-no hypotheses retained by the related rule on the tier-1/2/3 overlap-no pool, held out"
+S8:rows_shared_with_primary,4658,0,identical to a written row; flagged in_s8
+S8:rows_present_only_under_s8,482,0,written with variant = s8
+S9:indication_rule,74078,10476,no_disease_therapeutic_area=2652;prefix_not_mondo_efo_orphanet=7290;therapeutic_area_root=534
+S9:cis_pqtl_instrument,13069,61009,gene on no list of this variant
+S9:outcome_gwas_tier1,6973,6096,no_candidate=19;tier2=1012;tier3=5065
+S9:overlap_no,6443,530,unknown=408;yes=122
+S9:related_indication_rule,5186,1257,ontology ancestor whose Phase II+ programs all sit on retained descendant hypotheses
+S9:heldout,5066,120,gene+indication key in classification_v5 / classification_v5_1
+S9:S4_added_overlap_unknown,291,0,"tier-1 overlap-unknown hypotheses retained by the related rule on the no+unknown pool, held out"
+S9:S10_added_tier2_tier3,5088,0,"tier-2/3 overlap-no hypotheses retained by the related rule on the tier-1/2/3 overlap-no pool, held out"
+S9:rows_shared_with_primary,5058,0,identical to a written row; flagged in_s9
+S9:rows_present_only_under_s9,128,0,written with variant = s9
+S21:indication_rule,74031,10498,no_disease_therapeutic_area=2654;prefix_not_mondo_efo_orphanet=7310;therapeutic_area_root=534
+S21:cis_pqtl_instrument,13064,60967,gene on no list of this variant
+S21:outcome_gwas_tier1,6970,6094,no_candidate=19;tier2=1011;tier3=5064
+S21:overlap_no,6440,530,unknown=408;yes=122
+S21:related_indication_rule,5184,1256,ontology ancestor whose Phase II+ programs all sit on retained descendant hypotheses
+S21:heldout,5064,120,gene+indication key in classification_v5 / classification_v5_1
+S21:S4_added_overlap_unknown,291,0,"tier-1 overlap-unknown hypotheses retained by the related rule on the no+unknown pool, held out"
+S21:S10_added_tier2_tier3,5086,0,"tier-2/3 overlap-no hypotheses retained by the related rule on the tier-1/2/3 overlap-no pool, held out"
+S21:rows_shared_with_primary,5175,0,identical to a written row; flagged in_s21
+S21:rows_present_only_under_s21,9,0,written with variant = s21
+hypotheses_csv_rows,11235,0,"S1 and pilot keys surviving the V8 rules, plus S4, S10, S20, S21, S8, S9 additions"
+diagnostic:decode_strict_seqids_st02_symbols_differ_from_st01_gene,1,0,"diagnostic, changes no list: of 1881 strict deCODE SeqIds (ST01: one Gene, one UniProt, at most one Ensembl ID), those whose ST02 cis rows name gene symbols other than exactly the ST01 Gene"
+diagnostic:decode_strict_symbols_only_through_st02_disagreement,1,0,"diagnostic, changes no list: of 1810 gene symbols on the strict deCODE list, those that are the ST01 Gene of no strict SeqId and are listed because an ST02 cis row names them"

@@ -1,0 +1,80 @@
+molecule_type,action_type,neutralizing_binding_agent,blood_secreted_hpa,row_class,row_direction,row_reason,program_target_class,program_target_direction,conflicted,n_mechanism_rows,n_program_targets,n_hypotheses_s1
+Antibody,AGONIST,False,False,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,11,11,27
+Antibody,AGONIST,False,True,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,1,1,4
+Antibody,ANTAGONIST,False,False,other,decrease,other:biologic_target_not_blood_secreted,other,decrease,False,37,36,107
+Antibody,ANTAGONIST,False,True,aligned,decrease,row1_biologic_inhibitor_blood_secreted,aligned,decrease,False,19,19,71
+Antibody,BINDING AGENT,False,False,other,ambiguous,other:binding_agent_not_neutralizing,other,ambiguous,False,14,14,36
+Antibody,BINDING AGENT,False,True,other,ambiguous,other:binding_agent_not_neutralizing,other,ambiguous,False,4,4,6
+Antibody,BLOCKER,False,False,other,decrease,other:molecule_or_action_type_not_in_table,other,decrease,False,1,1,3
+Antibody,CROSS-LINKING AGENT,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,2,2,2
+Antibody,CROSS-LINKING AGENT,False,True,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,2,2,3
+Antibody,INHIBITOR,False,False,other,decrease,other:biologic_target_not_blood_secreted,other,decrease,False,111,107,403
+Antibody,INHIBITOR,False,True,aligned,decrease,row1_biologic_inhibitor_blood_secreted,aligned,decrease,False,103,100,368
+Antibody,NEGATIVE ALLOSTERIC MODULATOR,False,True,aligned,decrease,row1_biologic_inhibitor_blood_secreted,aligned,decrease,False,1,1,1
+Antibody,OTHER,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,8,8,38
+Antibody,STABILISER,False,True,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,1,1,2
+Antibody drug conjugate,BINDING AGENT,False,False,other,ambiguous,other:binding_agent_not_neutralizing,other,ambiguous,False,26,26,86
+Antibody drug conjugate,BINDING AGENT,False,True,other,ambiguous,other:binding_agent_not_neutralizing,other,ambiguous,False,6,6,11
+Antibody drug conjugate,INHIBITOR,False,False,other,decrease,other:molecule_or_action_type_not_in_table,other,decrease,False,2,2,2
+Enzyme,ACTIVATOR,False,True,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,3,3,5
+Enzyme,EXOGENOUS PROTEIN,False,True,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,4,4,23
+Enzyme,HYDROLYTIC ENZYME,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,13,13,104
+Enzyme,HYDROLYTIC ENZYME,False,True,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,2,2,4
+Enzyme,PROTEOLYTIC ENZYME,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,1,1,1
+Gene,AGONIST,False,True,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,1,1,1
+Gene,BINDING AGENT,False,False,other,ambiguous,other:binding_agent_not_neutralizing,other,ambiguous,False,2,2,1
+Gene,EXOGENOUS GENE,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,2,2,3
+Gene,VACCINE ANTIGEN,False,True,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,1,1,3
+Oligonucleotide,ACTIVATOR,False,False,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,1,1,1
+Oligonucleotide,ANTISENSE INHIBITOR,False,False,other,decrease,other:oligonucleotide_target_not_blood_secreted,other,decrease,False,7,7,16
+Oligonucleotide,ANTISENSE INHIBITOR,False,True,aligned,decrease,row2_oligonucleotide_blood_secreted,aligned,decrease,False,9,9,23
+Oligonucleotide,BINDING AGENT,False,True,other,ambiguous,other:binding_agent_not_neutralizing,other,ambiguous,False,1,1,4
+Oligonucleotide,RNAI INHIBITOR,False,True,aligned,decrease,row2_oligonucleotide_blood_secreted,aligned,decrease,False,9,9,13
+Oligosaccharide,ACTIVATOR,False,True,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,9,9,39
+Oligosaccharide,INHIBITOR,False,False,other,decrease,other:molecule_or_action_type_not_in_table,other,decrease,False,1,1,5
+Oligosaccharide,INHIBITOR,False,True,other,decrease,other:molecule_or_action_type_not_in_table,other,decrease,False,3,3,10
+Protein,ACTIVATOR,False,False,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,3,2,7
+Protein,AGONIST,False,False,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,65,65,345
+Protein,AGONIST,False,True,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,3,3,29
+Protein,ANTAGONIST,False,False,other,decrease,other:biologic_target_not_blood_secreted,other,decrease,False,5,4,10
+Protein,ANTAGONIST,False,True,aligned,decrease,row1_biologic_inhibitor_blood_secreted,aligned,decrease,False,2,2,40
+Protein,BINDING AGENT,False,False,other,ambiguous,other:binding_agent_not_neutralizing,other,ambiguous,False,8,8,36
+Protein,BINDING AGENT,False,True,other,ambiguous,other:binding_agent_not_neutralizing,other,ambiguous,False,6,6,17
+Protein,EXOGENOUS PROTEIN,False,True,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,12,12,20
+Protein,HYDROLYTIC ENZYME,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,17,17,71
+Protein,INHIBITOR,False,False,other,decrease,other:biologic_target_not_blood_secreted,other,ambiguous,True,1,1,9
+Protein,INHIBITOR,False,False,other,decrease,other:biologic_target_not_blood_secreted,other,decrease,False,8,8,56
+Protein,INHIBITOR,False,True,aligned,decrease,row1_biologic_inhibitor_blood_secreted,aligned,decrease,False,34,34,138
+Protein,POSITIVE MODULATOR,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,1,1,11
+Protein,PROTEOLYTIC ENZYME,False,True,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,1,1,3
+Small molecule,ACTIVATOR,False,False,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,4,4,7
+Small molecule,ACTIVATOR,False,True,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,1,1,1
+Small molecule,AGONIST,False,True,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,1,1,2
+Small molecule,ANTAGONIST,False,False,blocking,decrease,row4_small_molecule_blocker,blocking,decrease,False,14,14,39
+Small molecule,ANTAGONIST,False,True,blocking,decrease,row4_small_molecule_blocker,blocking,decrease,False,2,2,5
+Small molecule,CROSS-LINKING AGENT,False,True,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,1,1,1
+Small molecule,INHIBITOR,False,False,blocking,decrease,row4_small_molecule_blocker,blocking,decrease,False,616,608,2227
+Small molecule,INHIBITOR,False,True,blocking,decrease,row4_small_molecule_blocker,blocking,decrease,False,184,181,403
+Small molecule,MODULATOR,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,15,15,102
+Small molecule,NEGATIVE ALLOSTERIC MODULATOR,False,False,blocking,decrease,row4_small_molecule_blocker,blocking,decrease,False,1,1,3
+Small molecule,OTHER,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,1,1,3
+Small molecule,STABILISER,False,False,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,1,1,3
+Small molecule,STABILISER,False,True,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,3,3,5
+Unknown,ACTIVATOR,False,True,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,1,1,2
+Unknown,AGONIST,False,False,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,10,10,28
+Unknown,AGONIST,False,True,other,increase,other:molecule_or_action_type_not_in_table,other,increase,False,3,3,6
+Unknown,ANTAGONIST,False,False,other,decrease,other:molecule_or_action_type_not_in_table,other,decrease,False,1,1,1
+Unknown,ANTAGONIST,False,True,other,decrease,other:molecule_or_action_type_not_in_table,other,decrease,False,2,2,4
+Unknown,BINDING AGENT,False,False,other,ambiguous,other:binding_agent_not_neutralizing,other,ambiguous,False,5,5,4
+Unknown,BINDING AGENT,False,True,other,ambiguous,other:binding_agent_not_neutralizing,other,ambiguous,False,4,4,8
+Unknown,EXOGENOUS PROTEIN,False,True,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,4,4,11
+Unknown,HYDROLYTIC ENZYME,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,1,1,13
+Unknown,HYDROLYTIC ENZYME,False,True,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,5,5,5
+Unknown,INHIBITOR,False,False,other,decrease,other:molecule_or_action_type_not_in_table,other,decrease,False,36,36,92
+Unknown,INHIBITOR,False,True,other,decrease,other:molecule_or_action_type_not_in_table,other,decrease,False,33,33,77
+Unknown,MODULATOR,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,1,1,2
+Unknown,OTHER,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,1,1,1
+Unknown,PROTEOLYTIC ENZYME,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,1,1,1
+Unknown,RNAI INHIBITOR,False,True,other,decrease,other:molecule_or_action_type_not_in_table,other,decrease,False,1,1,1
+Unknown,VACCINE ANTIGEN,False,False,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,1,1,2
+Unknown,VACCINE ANTIGEN,False,True,other,ambiguous,other:molecule_or_action_type_not_in_table,other,ambiguous,False,1,1,1

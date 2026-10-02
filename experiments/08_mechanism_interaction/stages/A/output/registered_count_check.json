@@ -1,0 +1,101 @@
+{
+ "source": "PREREG.md \u00a7Sample size (counts of feasibility/v4_round3/count_v4.py, coverage_v4.json)",
+ "quantities": {
+  "s1_hypotheses": {
+   "registered": 5064,
+   "obtained": 5064,
+   "match": true
+  },
+  "s1_gene_indication_pairs": {
+   "registered": 4778,
+   "obtained": 4778,
+   "match": true
+  },
+  "s1_genes": {
+   "registered": 384,
+   "obtained": 384,
+   "match": true
+  },
+  "s1_indications": {
+   "registered": 493,
+   "obtained": 493,
+   "match": true
+  },
+  "h1_hypotheses": {
+   "registered": 3253,
+   "obtained": 3253,
+   "match": true
+  },
+  "h1_aligned_hypotheses": {
+   "registered": 582,
+   "obtained": 582,
+   "match": true
+  },
+  "h1_aligned_genes": {
+   "registered": 69,
+   "obtained": 69,
+   "match": true
+  },
+  "h1_blocking_hypotheses": {
+   "registered": 2671,
+   "obtained": 2671,
+   "match": true
+  },
+  "h1_blocking_genes": {
+   "registered": 170,
+   "obtained": 170,
+   "match": true
+  },
+  "h1_genes_in_both_classes": {
+   "registered": 11,
+   "obtained": 11,
+   "match": true
+  },
+  "s1_other_hypotheses": {
+   "registered": 1811,
+   "obtained": 1811,
+   "match": true
+  },
+  "h4_neuro_psych_hypotheses": {
+   "registered": 698,
+   "obtained": 698,
+   "match": true
+  },
+  "h4_neuro_psych_genes": {
+   "registered": 168,
+   "obtained": 168,
+   "match": true
+  },
+  "h4_other_indication_hypotheses": {
+   "registered": 4366,
+   "obtained": 4366,
+   "match": true
+  },
+  "s4_hypotheses": {
+   "registered": 5355,
+   "obtained": 5355,
+   "match": true
+  },
+  "h1_blood_secreted_aligned_hypotheses": {
+   "registered": 582,
+   "obtained": 582,
+   "match": true
+  },
+  "h1_blood_secreted_aligned_genes": {
+   "registered": 69,
+   "obtained": 69,
+   "match": true
+  },
+  "h1_blood_secreted_blocking_hypotheses": {
+   "registered": 408,
+   "obtained": 408,
+   "match": true
+  },
+  "h1_blood_secreted_blocking_genes": {
+   "registered": 30,
+   "obtained": 30,
+   "match": true
+  }
+ },
+ "all_match": true
+}
