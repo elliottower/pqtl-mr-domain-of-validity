@@ -52,3 +52,22 @@ entry, so it is re-sealed after each `prereg log`; the frozen part is checked by
 **Inputs that cannot be sealed locally.** The AACT snapshot, ChEMBL 37 and the regional genetic
 files exist only on Modal volumes. They are pinned by the sha256 values in each stage's
 `INPUTS.tsv` and `VERIFIED.json`, and the ledger note of each run says so.
+
+## 2026-10-02 — stage A: commits between the wrapper fix and the run
+
+The first stage A start failed at container import. The wrapper was fixed in commit 8d007bc and
+the run that produced the sealed output used commit dd7751f. `git diff 8d007bc dd7751f` changes
+one file, `PREREG.md`, by the single log entry for the failed start; no stage A code changed
+between the two commits. The sealed output records commit dd7751f and code digest
+`8c874725e955de1901023ea69202c52da9d7cf7f08f777b7c0d216bafda711f4` in `run_info.json`.
+
+The stage A inputs were recorded by stage A's own manifest during the run and were entered in
+the results ledger afterwards; the ledger did not seal them before stage A ran.
+
+## 2026-10-02 — deCODE SMP-normalized release (S16)
+
+deCODE's summary-data page (saved copy in `planning/…/F_data_readmes/decode_summarydata_page.html`)
+offers one Ferkingstad et al. 2021 folder, `proteomics` (4,907 aptamer files and a readme), which
+is the non-normalized release (Eldjarn et al. 2023, Supplementary Note SN4, cites Ferkingstad
+2021 among the studies that forgo SMP normalization). No SMP-normalized per-protein listing is
+offered, so S16 is reported as not run.

@@ -2,17 +2,35 @@
 that wrote it, so each one carries the fingerprint of the run that may resume it:
 
     sha256 of {the full InstrumentUnit, the source pins, the stage B code digest, the frozen plan
-               hash, the tool versions}
+               hash, the tool versions, the collect digest}
 
 `DirStore.bind` (pipeline.py) writes it to FINGERPRINT.json before the first step and refuses a
 directory holding another one, so a checkpoint written for a different unit record (another
-outcome list, another source file), other pinned inputs, other code, another plan or another image
-is never resumed. `result.json` carries the same value and assembly checks it.
+outcome list, another source file), other pinned inputs, other code, another plan, another image
+or other collected bytes is never resumed. `result.json` carries the same value and assembly
+checks it.
 
 The unit record names each source file by identity: the source, the assay or SeqId, and for a
 deCODE file its name, size and ETag in the pinned folder listing (schemas.InstrumentUnit, which
 refuses a URL). No link and no token is in it, so a re-issued deCODE folder link or a renewed
 Synapse or OpenGWAS token leaves every fingerprint, and so every finished checkpoint, as it was.
+
+Name, size and ETag do not fix a file's bytes, so the fingerprint also covers what the collect
+phase recorded. The collect digest (`collect_digest`) is the sha256 of the canonical JSON of one
+entry per whole file the unit reads (`collect.collect_tasks` of the unit), sorted by source and key:
+
+    collected       source, key, status, name, bytes, sha256 of the file on the volume
+    absent          source, key, status, and the name the pinned listing gives the file (or "")
+    remote_indexed  source, key, status, the file's name in the source's listing, and the pinned
+                    release of the source (REMOTE_RELEASE); the file is queried by region and has
+                    no whole-file hash
+
+No address and no token is in an entry. The analyze phase opens a whole file only after its size
+and sha256 match its record (collect.collected_file), so a result is bound to the bytes it was
+computed from: a file collected again with other bytes under the same name, size and ETag has
+another sha256 in its record, another collect digest, and another fingerprint. FINGERPRINT.json and
+result.json carry the digest (`collect_sha256`); assembly recomputes it from the collect records it
+is given.
 
 Tool versions (`tool_versions`) are read where the unit runs, not copied from the image definition:
 Python and the Python packages, R, coloc, susieR and jsonlite as R reports them, bcftools with the
@@ -36,11 +54,16 @@ from collections.abc import Callable, Mapping
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from v8_manifest import code_sha256, guard_files, relative_files, sha256_file
+from v8_manifest import SHA256_RE, code_sha256, guard_files, relative_files, sha256_file
 
-from stage_b.schemas import InputContractError, InstrumentUnit, StaleCheckpointError
+from stage_b.collect import collect_tasks, read_record
+from stage_b.schemas import (CollectError, CollectRecord, CollectSource, CollectTask, InputContractError, InstrumentUnit,
+                             StaleCheckpointError)
 
 FINGERPRINT_NAME = "FINGERPRINT.json"
+# The pinned release of a source whose files are queried by region and not downloaded (PREREG §Data
+# collection: "GWAS Catalog r2026-09-13").
+REMOTE_RELEASE: dict[str, str] = {"gwas_catalog": "r2026-09-13"}
 PINNED_SOURCES = ("inputs/decode/assocvariants.annotated.txt.gz", "inputs/decode/assocvariants.excluded.txt.gz")
 PY_PACKAGES = ("numpy", "pandas", "pydantic", "requests", "openpyxl", "synapseclient", "prereg", "provenance-core")
 R_PACKAGES = ("coloc", "susieR", "jsonlite")
@@ -115,14 +138,49 @@ def verified_source_pins(inputs_manifest: Path, experiment_root: Path) -> dict[s
     return pins
 
 
+def collect_entry(task: CollectTask, record: CollectRecord) -> dict:
+    """What the collect digest keeps of one collect record: identity, terminal status and, for a
+    collected file, its bytes and sha256. Never an address."""
+    what = f"{task.source} {task.key}"
+    if (record.source, record.key) != (task.source, task.key):
+        raise CollectError(f"the record of {record.source} {record.key} was given for {what}")
+    entry = {"source": task.source, "key": task.key, "status": record.status}
+    if record.status == "collected":
+        if not record.name or record.bytes is None or SHA256_RE.fullmatch(record.sha256) is None:
+            raise CollectError(f"{what}: the record of a collected file lacks its name, size or sha256")
+        if task.name and record.name != task.name:
+            raise CollectError(f"{what}: the record names the file {record.name}, the pinned listing {task.name}")
+        return {**entry, "name": record.name, "bytes": record.bytes, "sha256": record.sha256}
+    if record.status == "absent":
+        return {**entry, "name": task.name, "bytes": None, "sha256": ""}
+    if record.source not in REMOTE_RELEASE or not record.name:
+        raise CollectError(f"{what}: a file queried by region needs its name and the pinned release of its source")
+    return {**entry, "name": record.name, "bytes": None, "sha256": "", "release": REMOTE_RELEASE[record.source]}
+
+
+def collect_digest(unit: InstrumentUnit, record_of: Callable[[CollectSource, str], CollectRecord]) -> str:
+    """The sha256 over the collect records of every whole file `unit` reads (module docstring).
+    `record_of(source, key)` returns a file's record and raises when there is none."""
+    entries = [collect_entry(t, record_of(t.source, t.key)) for t in collect_tasks([unit])]
+    return hashlib.sha256(json.dumps(entries, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def volume_collect_digest(root: Path, unit: InstrumentUnit) -> str:
+    """`collect_digest` from the records under `root`/collect; CollectError when one is missing."""
+    return collect_digest(unit, lambda source, key: read_record(root, source, key))
+
+
 def unit_fingerprint(unit: InstrumentUnit, pins: Mapping[str, str], code_digest: str, plan_sha256: str,
-                     tools: Mapping[str, str]) -> str:
+                     tools: Mapping[str, str], collect_sha256: str) -> str:
     """`tools` is `tool_versions()` of the container the unit runs in (or, at assembly, the record
-    the unit left in FINGERPRINT.json)."""
+    the unit left in FINGERPRINT.json); `collect_sha256` is `collect_digest` of the unit."""
     if not tools:
         raise InputContractError("a unit fingerprint needs the tool versions of the image")
+    if SHA256_RE.fullmatch(collect_sha256) is None:
+        raise InputContractError("a unit fingerprint needs the collect digest of the unit's files")
     record = {"unit": unit.model_dump(mode="json"), "source_pins": dict(sorted(pins.items())),
-              "code_sha256": code_digest, "plan_sha256": plan_sha256, "tools": dict(sorted(tools.items()))}
+              "code_sha256": code_digest, "plan_sha256": plan_sha256, "tools": dict(sorted(tools.items())),
+              "collect_sha256": collect_sha256}
     return hashlib.sha256(json.dumps(record, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 

@@ -14,9 +14,13 @@ unit has no result.json, and a later call resumes at that step.
 
 Resuming is allowed only under the fingerprint the directory was written with
 (stage_b/checkpoint.py: the full unit record, the source pins, the code digest, the frozen plan
-hash and the tool versions of the image). `DirStore.bind` writes FINGERPRINT.json (the fingerprint
-and the tool versions it covers) before the first step and raises
-StaleCheckpointError on a directory that holds files under another fingerprint or under none.
+hash, the tool versions of the image and the collect digest, the sha256 over the collect records
+of the unit's whole files). `DirStore.bind` writes FINGERPRINT.json (the fingerprint, and the tool
+versions and collect digest it covers) before the first step and raises StaleCheckpointError on a
+directory that holds files under another fingerprint or under none.
+
+A source that keeps failing is never turned into "unavailable": no step counts failures, and no
+code path writes an unavailable record, a result or a collect record after any number of them.
 """
 import gzip
 import hashlib
@@ -71,10 +75,10 @@ class DirStore:
     def has(self, name: str) -> bool:
         return (self.root / name).exists()
 
-    def bind(self, fingerprint: str, tools: Mapping[str, str]) -> None:
-        """Bind the directory to `fingerprint`: write FINGERPRINT.json (with `tools`, the tool
-        versions the fingerprint covers) when the directory is empty, accept a directory already
-        bound to it, refuse any other state."""
+    def bind(self, fingerprint: str, tools: Mapping[str, str], collect_sha256: str) -> None:
+        """Bind the directory to `fingerprint`: write FINGERPRINT.json (with `tools` and
+        `collect_sha256`, the tool versions and the collect digest the fingerprint covers) when the
+        directory is empty, accept a directory already bound to it, refuse any other state."""
         path = self.root / FINGERPRINT_NAME
         if path.exists():
             found = json.loads(path.read_text()).get("fingerprint")
@@ -86,7 +90,8 @@ class DirStore:
         if others:
             raise StaleCheckpointError(f"{self.root} holds {others[:5]} and no {FINGERPRINT_NAME}; "
                                        "the checkpoint is not resumed")
-        self.put_json(FINGERPRINT_NAME, {"fingerprint": fingerprint, "tools": dict(sorted(tools.items()))})
+        self.put_json(FINGERPRINT_NAME, {"fingerprint": fingerprint, "tools": dict(sorted(tools.items())),
+                                         "collect_sha256": collect_sha256})
 
     def _write(self, name: str, data: bytes) -> str:
         tmp = self.root / f".{name}.tmp"
@@ -236,21 +241,23 @@ def splicing_step(unit: InstrumentUnit, p500: pd.DataFrame, qtl: dict[str, dict[
             "splicing_candidate": splicing_candidate(sq_pp, eq_pp, False)}
 
 
-def _checked_result(store: DirStore, fingerprint: str) -> dict:
+def _checked_result(store: DirStore, fingerprint: str, collect_sha256: str) -> dict:
     result = store.json("result.json")
-    if result.get("fingerprint") != fingerprint:
-        raise StaleCheckpointError(f"{store.root / 'result.json'} carries fingerprint {result.get('fingerprint')}, "
-                                   f"this run is {fingerprint}")
+    found = (result.get("fingerprint"), result.get("collect_sha256"))
+    if found != (fingerprint, collect_sha256):
+        raise StaleCheckpointError(f"{store.root / 'result.json'} carries fingerprint and collect digest {found}, "
+                                   f"this run is {(fingerprint, collect_sha256)}")
     return result
 
 
 def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, store: DirStore,
-                 fingerprint: str, tools: Mapping[str, str]) -> dict:
+                 fingerprint: str, tools: Mapping[str, str], collect_sha256: str) -> dict:
     """`fingerprint` is checkpoint.unit_fingerprint of this unit under this run, computed with
-    `tools` (checkpoint.tool_versions of the container)."""
-    store.bind(fingerprint, tools)
+    `tools` (checkpoint.tool_versions of the container) and `collect_sha256`
+    (checkpoint.collect_digest of the unit's collect records)."""
+    store.bind(fingerprint, tools, collect_sha256)
     if store.has("result.json"):
-        return _checked_result(store, fingerprint)
+        return _checked_result(store, fingerprint, collect_sha256)
     s = unit.sentinel
     if not store.has("positions.json"):
         store.put_json("positions.json", fetcher.positions(s))
@@ -260,8 +267,9 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
     pmeta = _region_step(store, "pqtl", lambda: fetcher.pqtl_region(unit, s.chrom, s.pos, WINDOW_WIDE),
                          f"{s.chrom}:{s.pos - WINDOW_WIDE}-{s.pos + WINDOW_WIDE} {SOURCE_BUILD[unit.source]}")
     if pmeta["status"] != "ok":
-        result = {"unit_key": unit.unit_key, "fingerprint": fingerprint, "pqtl_available": False,
-                  "pqtl_detail": pmeta["detail"], "outcomes": {}, "splicing": None, "vep": {}, "s16": {}}
+        result = {"unit_key": unit.unit_key, "fingerprint": fingerprint, "collect_sha256": collect_sha256,
+                  "pqtl_available": False, "pqtl_detail": pmeta["detail"], "outcomes": {}, "splicing": None, "vep": {},
+                  "s16": {}}
         store.put_json("result.json", result)
         return result
     pqtl = store.table("pqtl.tsv.gz")
@@ -344,8 +352,8 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
                                           "lead_variant": lead, "genetic_direction": gd})
             s16[spec.accession] = store.json(name)
 
-    result = {"unit_key": unit.unit_key, "fingerprint": fingerprint, "pqtl_available": True, "pqtl_detail": "",
-              "positions": pos,
+    result = {"unit_key": unit.unit_key, "fingerprint": fingerprint, "collect_sha256": collect_sha256,
+              "pqtl_available": True, "pqtl_detail": "", "positions": pos,
               "sentinel_proxies": sorted(sent_prox), "outcomes": outcomes, "vep": vep, "splicing": splicing,
               "s16": s16, "coloc_session": getattr(backend, "session", {})}
     store.put_json("result.json", result)

@@ -63,10 +63,12 @@ file is wrong.
   deCODE file, its name, size and ETag in the pinned folder listing; never a URL or token, so a
   re-issued link or renewed token changes no fingerprint), the source pins (the deCODE annotation and excluded-variant files of
   `modal_inputs_manifest.json`, hashed in the container), the `stage_b/` code digest, the frozen
-  plan hash and the tool versions read in the container when the unit starts
+  plan hash, the tool versions read in the container when the unit starts
   (`stage_b.checkpoint.tool_versions`: Python and the Python packages, R, coloc, susieR, jsonlite,
-  bcftools with its htslib, tabix); `FINGERPRINT.json` stores those versions beside the
-  fingerprint. Stage D binds its work directory (`FINGERPRINT.json`), `plan.json`, every fit attempt,
+  bcftools with its htslib, tabix) and the collect digest (`stage_b.checkpoint.collect_digest`, in
+  the stage B section below), which carries the sha256 of every whole file the unit reads;
+  `FINGERPRINT.json` stores those versions and the collect digest (`collect_sha256`) beside the
+  fingerprint, and `result.json` carries the fingerprint and the collect digest. Stage D binds its work directory (`FINGERPRINT.json`), `plan.json`, every fit attempt,
   `final.json` and every frequentist result to the sha256 of the frozen plan hash, the sealed A, B
   and C manifest hashes, the script digest (`run_stage_d.py`, the `stage_d/` modules,
   `power_v9_fast.py`), the installed Python and package versions, the run token and the
@@ -119,7 +121,11 @@ file is wrong.
   raw downloads go under `experiments/08_mechanism_interaction/inputs/` (gitignored). The whole
   files stage B collects (deCODE per-SeqId files, UKB-PPP tars and rsID maps, GWAS Catalog files
   without an index) are held on the `pqtl-v8-stage-b` volume under `/stage_b/raw/` and are never
-  copied into the repository; `collected_files.tsv` records each one's size and sha256.
+  copied into the repository; `collected_files.tsv` records each one's size and sha256. Stage B's
+  regional extracts (each unit directory's `pqtl.tsv.gz`, `pqtl_smp.tsv.gz`, `outcome__*.tsv.gz`
+  and `ld.npz`) hold rows of the downloaded files and are not committed either: they stay on the
+  volume under `/stage_b/units/`, a local copy for `assemble` goes under the gitignored
+  `inputs/stage_b/`, and `B/output/` carries only their hashes (`regional_manifest.tsv`).
 - Pinned raw inputs live on the Modal volume `pqtl-v8-inputs` under `/08_mechanism_interaction/`,
   mirroring the experiment directory (`inputs/{decode,karim2026,ot_26.09,ukbppp}/`,
   `feasibility/v2_all_indications/inputs/`); `modal_inputs_manifest.json` pins every file by
@@ -263,7 +269,7 @@ directory>`); the repository files stage A reads are baked into the image. Outpu
 | S, E | primary binary and secondary continuous evidence |
 | protein_altering, platform_concordant, splicing_candidate | flags (platform_concordant: concordant / discordant / untested) |
 | s15a_pp_h4 … s15g_pp_h4, s15f_low_coverage_excluded | sensitivity colocalizations (plan S15a–g) |
-| s16_evidence_state | deCODE SMP-normalized sensitivity, empty where not retrievable |
+| s16_evidence_state | evidence state from the deCODE instrument's SMP-normalized statistics (S16); empty where no such colocalization exists: every instrument of another source, a deCODE instrument whose SMP-normalized file is not retrievable, and every row when no SMP-normalized listing is pinned (stage D then reports S16 as not run) |
 | s17_sentinel_p | outcome-association p-value at the instrument's sentinel variant (rsID match in the outcome region, direction ignored), S17; empty where the outcome file is unavailable, lacks the sentinel, or lists it with two p-values |
 | evidence_state_ukbppp, evidence_state_decode | the primary evidence rule applied with that source's instrument against the row's selected outcome GWAS (descriptive table 12, agreement where a gene has cis-pQTLs in both); equals `evidence_state` for the selected source; inconclusive where the source's regional file does not resolve; empty where the row names no assay in that source |
 
@@ -275,6 +281,15 @@ token, repository commit, code digest, and the tool versions the units ran under
 and deCODE instruments where it names assays in them; `unit_plan.json` maps each hypothesis to
 those units (`hypothesis_source_units`). The deCODE annotation and excluded-variant files are
 read from the `pqtl-v8-inputs` volume, mounted read-only.
+
+`B/output/` holds exactly these files: `evidence.csv`, `regional_manifest.tsv`,
+`collected_files.tsv`, `run_info.json`, `INPUTS.tsv`, `MANIFEST.tsv`, and the side file
+`unit_plan.json`. They are tables of hashes, record metadata and derived summary results. No
+regional extract and no whole source file is written there: `assemble` writes only the files
+above, `verify_output_dir` (at `purge` and in stage D) refuses any other file in the directory,
+and `assemble` refuses a `--units-dir` or `--collect-dir` inside the repository unless under the
+gitignored `inputs/` directory (`stage_b.launch.private_copy`). The plan's data manifest rule is
+the same: the manifest is committed, raw and extracted data files are not.
 
 Stage B runs on Modal in three phases, each behind the run guard (`launch_stage_b.py`):
 
@@ -299,10 +314,12 @@ Stage B runs on Modal in three phases, each behind the run guard (`launch_stage_
    A deCODE file is requested from `https://download.decode.is/s3/download?token=<token>&file=<Key>`
    (the form deCODE's download page builds), whose reply is followed whether it redirects to a
    signed address or carries one in a JSON body; the token and the signed address are never
-   written. The files under `/stage_b/raw/` are working copies: the plan stores no full file, and
-   `launch_stage_b.py purge` (`purge_raw_files`) deletes them once stage B's SEAL is logged, its
-   output verifies against the seal, every unit has its result and every planned file its record.
-   The records and the regional extracts stay.
+   written. The files under `/stage_b/raw/` are working copies, held between collection and the
+   stage B seal (a logged procedural deviation: the plan states that the full files are not
+   stored). `launch_stage_b.py purge` (`purge_raw_files`) deletes them once stage B's SEAL is
+   logged, its output verifies against the seal, every unit has its result and every planned file
+   its record. The records and the regional extracts stay on the volume; the extracts stay private
+   and only their hashes are published.
 3. `spawn` (`run_unit`, `stage_b/pipeline.py`), one call per instrument unit, refused while a
    planned file has no record. Whole files are read only from the volume, after their size and
    sha256 match their record; a missing record raises `CollectError`. Queries by region stay
@@ -312,15 +329,33 @@ Stage B runs on Modal in three phases, each behind the run guard (`launch_stage_
 
 Unavailable (`stage_b/remote.py`). A regional or outcome file is recorded as unavailable, and its
 hypotheses take the registered consequence, only on a definitive absence (`SourceAbsent`): HTTP 404
-or 410, a file its source's listing does not name, an accession without exactly one harmonised
-file, or Ensembl's HTTP 400 whose body says the id is not known (an rsID without a mapping on the
-other build has no position there; a lead variant without VEP output leaves `protein_altering`
-missing unless ST29 flags it). A refused credential (401/403), a rate limit (429), a server error (5xx), any
+or 410, a file its source's listing does not name, or an accession without exactly one harmonised
+file. A refused credential (401/403), a rate limit (429), a server error (5xx), any
 other status, a timeout, a connection error, a failed tabix or bcftools call and a truncated or
 corrupt gzip or tar stream raise `RetryableSourceError` with that class: nothing is written for the
 step, the call fails and leaves a note under `/stage_b/errors/`, and the file or unit stays
 unfinished until a later call finishes it. Messages carry a source label and the exception type,
 never a URL.
+
+Ensembl (`stage_b.fetch.ensembl_json`, `ensembl_unknown_id`). Ensembl's one definitive absence is
+an HTTP 400 for which all of these hold: the body parses as its error JSON, an object whose only
+key `error` holds a string; that string is, in full, its unknown-identifier message, `<rsID> not
+found for human` on `GET /variation/human/<rsID>` or `No variant found with ID '<rsID>'` on `POST
+/vep/human/id`; and the rsID it names is one that was requested. A 400 that says anything else or
+anything more (request size, syntax, a backend fault, a page not found), a body that is not that
+JSON, a message naming another rsID, and every other status raise; an Ensembl 404 or 410 raises as
+`protocol`, because Ensembl answers 404 for a badly formed URL and 400 for an id it does not know.
+An rsID Ensembl reports as unknown on the other build has no position there, like an rsID without
+a single mapping on that chromosome. VEP is asked in batches of 200 rsIDs; Ensembl leaves an
+unknown rsID out of a reply that holds records for others and answers with the 400 only when no
+rsID of the batch gave a record, so such a batch adds no record, and the lookup is an absence
+(`protein_altering` missing unless ST29 flags the protein) only when every batch was answered so.
+
+Persistent outages. A source that keeps failing with a retryable error is never converted to
+unavailable. No code path counts failures or writes an unavailable step, a collect record or a
+result after any number of them, and Modal's `retries=3` only runs the same call again. The file
+or unit stays unfinished, `status` shows it, and `assemble` refuses while a planned file has no
+record or a unit no result.
 
 `launch_stage_b.py status` writes `inputs/stage_b/status/status_<utc>.json`: per source, the files
 collected, absent, queried by region, pending, failed (with the error class) and stranded, and the
@@ -335,11 +370,31 @@ read: `ukbppp_st9`, `decode_st02`, `interval_st4`, `opengwas_gwasinfo`, `decode_
 and `assemble` take `--run-token` and refuse unless `a_outputs` equals the sealed stage A hashes
 and `units.jsonl` is unchanged; `assemble` also refuses while a planned file has no collect
 record. Each unit directory on the `pqtl-v8-stage-b` volume holds
-`FINGERPRINT.json` (the fingerprint and the tool versions it covers); `run_unit` refuses a directory
-written under another fingerprint or under none. `assemble` recomputes each unit's fingerprint from
-the unit record, the pins, the code and the plan it holds and the tool versions the unit recorded,
-refuses a `FINGERPRINT.json` or `result.json` carrying any other value, and refuses units run under
-different tool versions.
+`FINGERPRINT.json` (the fingerprint, and the tool versions and collect digest it covers); `run_unit`
+refuses a directory written under another fingerprint or under none. `assemble` recomputes each
+unit's fingerprint from the unit record, the pins, the code and the plan it holds, the tool versions
+the unit recorded and the collect digest recomputed from the collect records in `--collect-dir`,
+refuses a `FINGERPRINT.json` or `result.json` carrying any other fingerprint or collect digest, and
+refuses units run under different tool versions.
+
+Collect digest (`stage_b.checkpoint.collect_digest`). A unit's name, size and ETag do not fix the
+bytes of its files, so the fingerprint also covers what the collect phase recorded. The digest is
+the sha256 of the canonical JSON (sorted keys, no whitespace) of a list with one entry per whole
+file the unit reads (`collect.collect_tasks` of the unit), ordered by source and key:
+
+| record `status` | entry |
+|---|---|
+| `collected` | `source`, `key`, `status`, `name`, `bytes`, `sha256` of the record |
+| `absent` | `source`, `key`, `status`, `name` as the pinned listing gives it (else empty), `bytes` null, `sha256` empty |
+| `remote_indexed` | `source`, `key`, `status`, `name` as the source's listing gives it, `bytes` null, `sha256` empty, `release` (the pinned release of the source: GWAS Catalog `r2026-09-13`) |
+
+No address, token, ETag, time or detail is in an entry. `run_unit` computes the digest from the
+records under `/stage_b/collect/` before the first step and a missing record raises; the analyze
+phase opens a whole file only after its size and sha256 match its record. A file collected again
+with other bytes under the same name, size and ETag therefore has another sha256 in its record,
+another collect digest and another fingerprint, and every checkpoint and result written from the
+earlier bytes is refused by `run_unit` and by `assemble`. A file queried by region has no
+whole-file hash; the sha256 of each extract taken from it is in `regional_manifest.tsv`.
 
 ## Stage C → `C/output/`
 
@@ -416,7 +471,9 @@ enter no other set), S19 the held-out S1 rows with `blood_secreted_hpa` and an `
 consistent with the class (aligned with neutralizing_biologic, blocking with
 small_molecule_blocker), S17 the state from `s17_sentinel_p` < 0.05, table 7
 the follow-up from `last_phase2_end_date`, a `no_phase` status a missing outcome counted in each
-set's exclusion report, and table 12 the cross-source agreement from
+set's exclusion report, S16 the S1 rows with `s16_evidence_state` in place of the evidence state
+where stage B wrote one (not formed, and reported as not run, when it is empty for every S1
+hypothesis), and table 12 the cross-source agreement from
 `evidence_state_ukbppp` / `evidence_state_decode`; the join raises if the selected source's state
 differs from `evidence_state`. S5 keeps only `protein_altering` false, S11 only
 `splicing_candidate` false and S15f only `low_coverage` false; a hypothesis whose flag is missing

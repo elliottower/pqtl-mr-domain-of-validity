@@ -5,11 +5,18 @@ accession and its own intervention direction. Eldjarn ST29 supplies the platform
 flag and the platform PAV half of protein_altering. `s17_sentinel_p` is the outcome p-value at
 the sentinel (S17); `evidence_state_ukbppp` / `evidence_state_decode` are the primary evidence
 rule applied with each source's instrument (descriptive table 12), empty where the hypothesis
-names no assay in that source.
+names no assay in that source. `s16_evidence_state` is the evidence rule applied to a deCODE
+instrument's SMP-normalized statistics (S16) and is empty wherever no such colocalization exists:
+for every instrument of another source, and for every hypothesis when no SMP-normalized listing is
+pinned.
 
 `collected_files.tsv` lists every record of the collect phase (stage_b/collect.py): each whole file
 with its size, sha256, ETag and source address (no query, no token), and each file recorded absent
 or queried by region.
+
+The output directory holds tables of hashes and derived summary results only. No regional extract
+(a unit directory's `*.tsv.gz` or `ld.npz`, which hold rows of the source files) and no whole file
+is written there: `regional_manifest.tsv` and `collected_files.tsv` carry their sha256 values.
 
 `write_outputs` also writes run_info.json (run token, repository commit, code digest, the tool
 versions the units ran under) and puts the code digest and the commit in INPUTS.tsv as the
@@ -19,6 +26,7 @@ import csv
 import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Literal
 
 import openpyxl
 from v8_manifest import (RUN_INFO_NAME, InputRecord, code_record, code_sha256, guard_files, portable_path,
@@ -72,6 +80,16 @@ def _blank_row(h: HypothesisInput, reason: str, pa, pc, spl, s16: str) -> dict:
             "s17_sentinel_p": "", "evidence_state_ukbppp": "", "evidence_state_decode": ""}
 
 
+def s16_state(h: HypothesisInput, source: str, result: Mapping) -> EvidenceState | Literal[""]:
+    """The evidence rule on the SMP-normalized colocalization of a deCODE instrument (S16); ""
+    where the unit holds none for the hypothesis's outcome, which is every unit of another source
+    and every deCODE unit planned without an SMP-normalized file."""
+    s = result["s16"].get(h.outcome_accession) if source == "decode" else None
+    if s is None:
+        return ""
+    return evidence_state(s["coloc_run"], s.get("pp_h4"), h.direction, s.get("genetic_direction", 0))
+
+
 def evidence_row(h: HypothesisInput, source: str, assay_id: str, result: Mapping | None,
                  st29: Mapping[tuple[str, str], dict]) -> EvidenceRow:
     key = st29_key(source, assay_id) if assay_id else None
@@ -79,28 +97,21 @@ def evidence_row(h: HypothesisInput, source: str, assay_id: str, result: Mapping
     pc = platform_concordance(st)
     pav = st29_pav(st, h.platform)
     if result is None or not result["pqtl_available"]:
-        s16 = "" if source == "decode" else "inconclusive"
-        return EvidenceRow(**_blank_row(h, "regional_file_unavailable", protein_altering(None, pav), pc, "", s16))
+        return EvidenceRow(**_blank_row(h, "regional_file_unavailable", protein_altering(None, pav), pc, "", ""))
     spl = result["splicing"]["splicing_candidate"] if result.get("splicing") else ""
     o = result["outcomes"].get(h.outcome_accession)
     if o is None:
         raise InputContractError(f"unit {result['unit_key']} has no record for {h.outcome_accession}")
     if o["not_run_reason"] == "outcome_file_unavailable":
-        s16 = "" if source == "decode" else "inconclusive"
-        return EvidenceRow(**_blank_row(h, "outcome_file_unavailable", protein_altering(None, pav), pc, spl, s16))
+        return EvidenceRow(**_blank_row(h, "outcome_file_unavailable", protein_altering(None, pav), pc, spl, ""))
     cov = o["coverage"]
-    base = _blank_row(h, o["not_run_reason"], protein_altering(None, pav), pc, spl, "")
+    base = _blank_row(h, o["not_run_reason"], protein_altering(None, pav), pc, spl, s16_state(h, source, result))
     p17 = o.get("s17_sentinel_p")
     base.update({"s17_sentinel_p": "" if p17 is None else p17, "n_shared": cov["n_shared"], "frac_pqtl_retained": cov["frac_pqtl_retained"],
                  "frac_outcome_retained": cov["frac_outcome_retained"],
                  "sentinel_or_proxy_retained": cov["sentinel_or_proxy_retained"], "low_coverage": cov["low_coverage"],
                  "s15f_low_coverage_excluded": cov["low_coverage"]})
     if not o["coloc_run"]:
-        base["s16_evidence_state"] = "" if source == "decode" else "inconclusive"
-        if source == "decode" and h.outcome_accession in result["s16"]:
-            s = result["s16"][h.outcome_accession]
-            base["s16_evidence_state"] = evidence_state(s["coloc_run"], s.get("pp_h4"), h.direction,
-                                                        s.get("genetic_direction", 0))
         return EvidenceRow(**base)
     pp = o["pp"]
     gd = int(o["genetic_direction"])
@@ -113,12 +124,6 @@ def evidence_row(h: HypothesisInput, source: str, assay_id: str, result: Mapping
                  "s15a_pp_h4": o["s15a_pp_h4"], "s15b_pp_h4": o["s15b_pp_h4"],
                  "s15c_pp_h4": "" if o["s15c_pp_h4"] is None else o["s15c_pp_h4"],
                  "s15d_pp_h4": pp[4], "s15e_pp_h4": pp[4], "s15f_pp_h4": pp[4], "s15g_pp_h4": o["s15g_pp_h4"]})
-    if source == "decode":
-        s = result["s16"].get(h.outcome_accession)
-        base["s16_evidence_state"] = "" if s is None else evidence_state(
-            s["coloc_run"], s.get("pp_h4"), h.direction, s.get("genetic_direction", 0))
-    else:
-        base["s16_evidence_state"] = state
     return EvidenceRow(**base)
 
 
@@ -218,20 +223,23 @@ def write_outputs(out_dir: Path, evidence: list[EvidenceRow], regional: list[Reg
     return write_manifest(out_dir, [*files, run_info], script, inputs)
 
 
-def collect_unit_dir(unit: InstrumentUnit, unit_dir: Path, fingerprint: str) -> tuple[dict, list[dict]]:
+def collect_unit_dir(unit: InstrumentUnit, unit_dir: Path, fingerprint: str, collect_sha256: str) -> tuple[dict, list[dict]]:
     """(result.json, regional-manifest rows) from one unit's checkpoint directory, as copied
     from the volume (`modal volume get pqtl-v8-stage-b /stage_b/units <dir>`). The directory's
     FINGERPRINT.json and its result.json must both carry `fingerprint`
-    (checkpoint.unit_fingerprint of this unit under this run)."""
+    (checkpoint.unit_fingerprint of this unit under this run) and `collect_sha256`, the collect
+    digest that fingerprint was computed with (checkpoint.collect_digest, recomputed by the caller
+    from the collect records it holds)."""
     res_path = unit_dir / "result.json"
     if not res_path.exists():
         raise InputContractError(f"unit {unit.unit_key} has no result.json; stage B is not complete")
     result = json.loads(res_path.read_text())
-    bound = unit_dir / FINGERPRINT_NAME
-    found = (json.loads(bound.read_text()).get("fingerprint") if bound.exists() else None, result.get("fingerprint"))
-    if found != (fingerprint, fingerprint):
-        raise StaleCheckpointError(f"unit {unit.unit_key}: {unit_dir} carries fingerprints {found}, this run is "
-                                   f"{fingerprint}")
+    path = unit_dir / FINGERPRINT_NAME
+    bound = json.loads(path.read_text()) if path.exists() else {}
+    found = [(d.get("fingerprint"), d.get("collect_sha256")) for d in (bound, result)]
+    if found != [(fingerprint, collect_sha256)] * 2:
+        raise StaleCheckpointError(f"unit {unit.unit_key}: {unit_dir} carries fingerprints and collect digests {found}, "
+                                   f"this run is {(fingerprint, collect_sha256)}")
     names = {"pqtl": (unit.source, unit.assay_id), "pqtl_smp": (f"{unit.source}_smp", unit.assay_id)}
     names.update({f"outcome__{safe(o.accession)}": (o.source, o.accession) for o in unit.outcomes})
     metas = []

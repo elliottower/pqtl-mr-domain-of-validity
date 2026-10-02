@@ -173,6 +173,21 @@ def test_s8_s9_are_the_reformed_rows(joined, analysis_sets):
     assert not (set(df.loc[df["variant"] != "primary", "hypothesis_id"]) & s1)
 
 
+def test_s16_is_not_formed_when_no_smp_normalized_state_was_written(joined):
+    df, _ = joined
+    df = df.copy()
+    assert form_sets(df)["S16"].info.formed and form_sets(df)["S16"].info.notes["replaced"] > 0
+    df["s16_evidence_state"] = None
+    s16 = form_sets(df)["S16"]
+    assert not s16.info.formed and s16.info.reason.startswith("no deCODE SMP-normalized statistics were retrieved")
+    assert s16.info.reason.endswith("S16 is not run")
+    with pytest.raises(SetError):
+        s16.analysed()
+    one = df.copy()
+    one.loc[one.index[(one["in_s1"] & one["heldout"]).to_numpy()][0], "s16_evidence_state"] = "supportive"
+    assert form_sets(one)["S16"].info.formed and form_sets(one)["S16"].info.notes == {"replaced": 1}
+
+
 def test_s11_not_formed_when_flag_missing_everywhere(joined):
     df, _ = joined
     df = df.copy()

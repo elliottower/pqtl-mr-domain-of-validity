@@ -11,6 +11,10 @@ open are stated beside each set and in the stage D report.
 Flag restrictions keep only rows whose flag is known to be false: S5 keeps `protein_altering ==
 False`, S11 `splicing_candidate == False`, S15f `low_coverage == False`. A row with the flag
 missing is excluded from that set and counted in its `flag_missing_excluded` note.
+
+S16 replaces the evidence state by `s16_evidence_state` where stage B wrote one (a deCODE instrument
+colocalized with its SMP-normalized statistics). When no S1 hypothesis has one, because no
+SMP-normalized file was retrieved, S16 is not formed and is reported as not run.
 """
 import numpy as np
 import pandas as pd
@@ -165,9 +169,15 @@ def form_sets(df: pd.DataFrame) -> dict[str, AnalysisSet]:
     sets["S15f"] = _make(df, base & (low == False).fillna(False).to_numpy(), "S15f",  # noqa: E712
                          "low_coverage excluded (hypotheses with coverage computed)",
                          notes={"flag_missing_excluded": int((base & low.isna().to_numpy()).sum())})
-    s16 = df["s16_evidence_state"].fillna(df["evidence_state"])
-    sets["S16"] = _make(df, base, "S16", "deCODE SMP-normalized statistics where available", state=s16,
-                        notes={"replaced": int((base & df["s16_evidence_state"].notna().to_numpy()).sum())})
+    has_smp = base & df["s16_evidence_state"].notna().to_numpy()
+    if not has_smp.any():
+        sets["S16"] = _not_formed("S16", "deCODE SMP-normalized statistics where available", ("h1",),
+                                  "no deCODE SMP-normalized statistics were retrieved (s16_evidence_state is empty "
+                                  "for every S1 hypothesis); S16 is not run")
+    else:
+        s16 = df["s16_evidence_state"].fillna(df["evidence_state"])
+        sets["S16"] = _make(df, base, "S16", "deCODE SMP-normalized statistics where available", state=s16,
+                            notes={"replaced": int(has_smp.sum())})
     if "s17_sentinel_p" in present:
         p = df["s17_sentinel_p"]
         st17 = np.where(p.fillna(np.inf).to_numpy() < 0.05, "supportive", "inconclusive")

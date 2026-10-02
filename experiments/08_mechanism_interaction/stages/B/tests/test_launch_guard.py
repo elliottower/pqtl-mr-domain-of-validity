@@ -9,7 +9,7 @@ from prereg.log import append
 from v8_manifest import ManifestError, write_manifest
 from v8_run_guard import RunNotAuthorized
 
-from stage_b.launch import A_FILES, authorize, sealed_stage_b, spawn_collect, spawn_units
+from stage_b.launch import A_FILES, authorize, private_copy, sealed_stage_b, spawn_collect, spawn_units
 from stage_b.schemas import InputContractError, InstrumentUnit, OutcomeSpec, Sentinel
 
 HERE = Path(__file__).resolve().parents[1]
@@ -219,7 +219,8 @@ def test_modal_run_unit_guards_on_the_baked_prereg_and_stage_a_files_before_anyt
     src = (HERE / "modal_stage_b.py").read_text()
     assert 'PREREG_IMAGE = Path("/root/exp/PREREG.md")' in src and '"PREREG.md"), str(PREREG_IMAGE)' in src
     assert 'A_BAKED = ("MANIFEST.tsv", "hypotheses.csv", "outcome_trait_coding.tsv")' in src
-    assert "process_unit(unit, fetcher, RscriptColoc(), store, fingerprint, tools)" in src
+    assert "process_unit(unit, fetcher, RscriptColoc(), store, fingerprint, tools, collected)" in src
+    assert "collected = volume_collect_digest(fetcher.root, unit)" in src       # the records the fetcher reads from
     assert ast.unparse(fn.body[1]) == "run_commit(None)"          # an image built from an unclean tree refuses
     assert "image = image.env({COMMIT_ENV: baked_commit(EXP.parents[1])})" in src
 
@@ -233,5 +234,22 @@ def test_launcher_spawns_and_assembles_only_through_the_guard():
     assemble = ast.unparse(_function(HERE / "launch_stage_b.py", "cmd_assemble").body[1])
     assert assemble == "sealed = authorize(PREREG, a.run_token, A_OUTPUT)"
     assert "repo_commit=commit, tools=common_tools(tools)," in src and "collected=collected)" in src
+    assert 'units_dir = private_copy(a.units_dir, REPO, EXP / "inputs")' in src
+    assert 'load_collect_records(private_copy(a.collect_dir, REPO, EXP / "inputs"))' in src
+    assert "digest = collect_digest(u, lambda source, key: records[(source, key)])" in src
+    assert "unit_fingerprint(u, pins, code, PLAN_SHA256, tools[u.unit_key], digest), digest)" in src
     assert ast.unparse(_function(HERE / "launch_stage_b.py", "cmd_plan").body[1]) == "authorize(PREREG, a.run_token, A_OUTPUT)"
     assert "re.search" not in src and "require_logged_start" not in src
+
+
+def test_unit_directories_are_copied_only_outside_the_repository_or_under_the_gitignored_inputs_directory(tmp_path):
+    repo = tmp_path / "repo"
+    private = repo / "experiments" / "08_mechanism_interaction" / "inputs"
+    inside = repo / "experiments" / "08_mechanism_interaction" / "stages" / "B" / "output" / "units"
+    for d in (private / "stage_b" / "units", inside, tmp_path / "elsewhere" / "units"):
+        d.mkdir(parents=True)
+    assert private_copy(private / "stage_b" / "units", repo, private) == private / "stage_b" / "units"
+    assert private_copy(tmp_path / "elsewhere" / "units", repo, private) == tmp_path / "elsewhere" / "units"
+    for path in (inside, repo / "units", repo / "experiments" / "08_mechanism_interaction" / "inputs_copy"):
+        with pytest.raises(InputContractError, match="regional extracts, which are not committed"):
+            private_copy(path, repo, private)

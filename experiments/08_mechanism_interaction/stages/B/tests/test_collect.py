@@ -2,24 +2,35 @@
 resumable downloads, one record per file, absence against every other fault, and the analyze-side
 reads of collected files. The server is the synthetic one of synthetic_unit.py without its
 tabix-indexed files, so nothing here needs htslib."""
+import ast
 import gzip
 import json
 import subprocess
 import zlib
+from pathlib import Path
 
 import pytest
 import requests
 from fake_remote import FakeRemote, FakeSynapse
-from synthetic_unit import (CHROM, DECODE_KEY, DISTINCT, EXCLUDED_INDEX, GRCH37, N_VARIANTS, NO_DIR, NO_FILE, OID, SENTINEL_INDEX,
-                            SHARED, TAR_NAME, TOKENS, build_world, rsid)
+from synthetic_unit import (CHROM, DECODE_KEY, DISTINCT, ENSEMBL_EXPECTED, ENSEMBL_REPLIES, EXCLUDED_INDEX, GRCH37, N_VARIANTS,
+                            NO_DIR, NO_FILE, OID, SENTINEL_INDEX, SHARED, TAR_NAME, TOKENS, build_world, ensembl_outcomes,
+                            rsid, same_size_other_bytes)
+from test_pipeline import COLLECT, H4, SENTINEL, TOOLS, FakeFetcher, StubBackend, fp
 
 from stage_b import collect as collect_module
 from stage_b import remote as remote_module
+from stage_b.assemble import collect_unit_dir
+from stage_b.checkpoint import FINGERPRINT_NAME, volume_collect_digest
 from stage_b.collect import PURGED_NAME, collect_one, collect_tasks, collected_file, download, purge_raw, read_record, record_path
-from stage_b.fetch import DECODE_FILE_URL, RemoteFile, RemoteSources, https_path
+from stage_b.fetch import (DECODE_FILE_URL, ENSEMBL_UNKNOWN_VARIATION, ENSEMBL_UNKNOWN_VEP_ID, RemoteFile, RemoteSources,
+                           ensembl_unknown_id, https_path)
+from stage_b.pipeline import DirStore, process_unit
 from stage_b.remote import attempt, check_status, classify, http
-from stage_b.schemas import (WINDOW_WIDE, CollectError, CollectTask, OutcomeSpec, RetryableSourceError, SourceAbsent)
+from stage_b.schemas import (WINDOW_WIDE, CollectError, CollectTask, InputContractError, OutcomeSpec, RetryableSourceError,
+                             SourceAbsent, StaleCheckpointError)
 from stage_b.status import error_of, marked, status_report, volume_state
+
+HERE = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(autouse=True)
@@ -309,29 +320,209 @@ def test_regional_queries_raise_on_an_expired_token_and_record_absence_only_for_
     assert err.value.kind == "server"
 
 
-def test_ensembl_400_is_an_absence_only_when_the_body_says_the_id_is_not_known(world, tmp_path):
+# ---- Ensembl: a 400 is an absence only as its unknown-identifier message naming the requested rsID ------
+
+def test_ensembl_knows_the_sentinel_and_reports_an_rsid_it_does_not_hold_as_unknown(world, tmp_path):
+    fetcher, sentinel = world.fetcher(tmp_path / "vol"), decode_unit(world).sentinel
+    assert fetcher.positions(sentinel) == {"GRCh38": sentinel.pos, "GRCh37": sentinel.pos - 12_345}
+    unknown = sentinel.model_copy(update={"rsid": "rs1"})        # the server answers 400 {"error": "rs1 not found for human"}
+    assert fetcher.positions(unknown) == {"GRCh38": sentinel.pos, "GRCh37": None}
+    assert fetcher.vep([sentinel.rsid], "GRCh38")[0]["id"] == sentinel.rsid
+
+
+def test_ensembl_error_replies_are_an_absence_only_for_the_unknown_id_message_naming_the_requested_rsid(world, tmp_path):
+    sentinel = decode_unit(world).sentinel
+    got = ensembl_outcomes(world, world.fetcher(tmp_path / "vol"), sentinel)
+    assert set(ENSEMBL_REPLIES) >= {"unknown_id", "backend_error", "endpoint_not_found", "malformed_json", "another_rsid"}
+    assert got == {"position_lookup": ENSEMBL_EXPECTED, "vep": ENSEMBL_EXPECTED}
+    assert [name for name, outcome in ENSEMBL_EXPECTED.items() if outcome == "absent"] == ["unknown_id"]
+    assert set(ENSEMBL_EXPECTED.values()) == {"absent", "raised:protocol", "raised:server"}
+    assert fetcher_still_answers(world, tmp_path, sentinel)          # the routes were put back
+
+
+def fetcher_still_answers(world, tmp_path, sentinel) -> bool:
+    fetcher = world.fetcher(tmp_path / "vol")
+    return fetcher.positions(sentinel)["GRCh37"] == sentinel.pos - 12_345 and bool(fetcher.vep([sentinel.rsid], "GRCh38"))
+
+
+GENUINE = {ENSEMBL_UNKNOWN_VARIATION: "rs123 not found for human", ENSEMBL_UNKNOWN_VEP_ID: "No variant found with ID 'rs123'"}
+
+
+@pytest.mark.parametrize("pattern", list(GENUINE), ids=["position_lookup", "vep"])
+def test_the_ensembl_matcher_needs_the_error_object_the_whole_message_and_a_requested_rsid(pattern):
+    message = GENUINE[pattern]
+
+    def unknown(body, requested=("rs123",)) -> bool:
+        return ensembl_unknown_id(body if isinstance(body, bytes) else json.dumps(body).encode(), pattern, set(requested))
+
+    assert unknown({"error": message})
+    assert unknown({"error": message}, requested=("rs5", "rs123"))                  # one of the ids of a batch
+    assert not unknown({"error": message}, requested=("rs1234",))                   # another rsID, of which rs123 is a prefix
+    assert not unknown({"error": message}, requested=())
+    for body in ({"error": "Unknown backend error while querying the variation database"}, {"error": "endpoint not found"},
+                 {"error": "page not found. Please check your uri and refer to our documentation https://rest.ensembl.org/"},
+                 json.dumps({"error": message}).encode()[:-1], b"", b"<html>rs123 not found for human</html>",
+                 {"error": message.replace("rs123", "rs124")}, {"error": message + " "}, {"error": " " + message},
+                 {"error": message + "; Unknown backend error"}, {"error": message.lower() if message[0] == "N" else message.upper()},
+                 {"error": message, "status": 500}, {"message": message}, {"error": [message]}, {"error": None}, [message],
+                 message, {"error": "ID 'rs123' not found"}, {"error": "rs123 unknown"}, {"error": "unknown"},
+                 {"error": "rs123 not found"}, {"error": "No variant found"}, {"error": "No mappings found for variant 'rs123'"},
+                 {"error": "POST message too large. You have submitted 201 elements but a limit of 200 is in place. "
+                           "Request smaller regions or lists of IDs"},
+                 {"error": ' Cannot find "ids" key in your POST. Please check the format of your message against the documentation'}):
+        assert not unknown(body), body
+    other = next(m for p, m in GENUINE.items() if p is not pattern)
+    assert not unknown({"error": other})                                            # the other endpoint's message
+    assert not unknown({"error": "rs123 not found for homo_sapiens"})               # the species is the URL's: `human`
+
+
+def test_an_ensembl_status_other_than_the_unknown_id_400_raises_with_its_class(world, tmp_path):
     fetcher, remote = world.fetcher(tmp_path / "vol"), world.remote
     sentinel = decode_unit(world).sentinel
-    assert fetcher.positions(sentinel) == {"GRCh38": sentinel.pos, "GRCh37": sentinel.pos - 12_345}
-    unknown = sentinel.model_copy(update={"rsid": "rs1"})               # the server answers 400 "ID 'rs1' not found"
-    assert fetcher.positions(unknown) == {"GRCh38": sentinel.pos, "GRCh37": None}
-    remote.json_prefixes.insert(0, ("GET", "/ensembl/GRCh37/variation/human/", lambda rest, q, b, h: (400, {"error": "page size too large"})))
-    with pytest.raises(RetryableSourceError) as err:
-        fetcher.positions(sentinel)
-    assert err.value.kind == "protocol" and str(err.value) == f"[protocol] Ensembl GRCh37 {sentinel.rsid}: HTTP 400"
+    path = f"/ensembl/GRCh37/variation/human/{sentinel.rsid}"
+    for status, kind in ((404, "protocol"), (410, "protocol"), (400, "protocol"), (429, "rate_limit"), (500, "server"), (403, "auth")):
+        remote.faults[path] = [("status", status)] * remote_module.ATTEMPTS
+        with pytest.raises(RetryableSourceError) as err:
+            fetcher.positions(sentinel)
+        assert err.value.kind == kind and str(err.value) == f"[{kind}] Ensembl GRCh37 {sentinel.rsid}: HTTP {status}"
+        remote.faults[path] = []
     vep = ("POST", "/ensembl/GRCh38/vep/human/id")
-    assert fetcher.vep([sentinel.rsid], "GRCh38")[0]["id"] == sentinel.rsid
-    remote.json_routes[vep] = lambda q, b, h: (400, {"error": "No variant found with ID 'rs1'"})
-    with pytest.raises(SourceAbsent, match="the id is not known to Ensembl"):
-        fetcher.vep(["rs1"], "GRCh38")
-    remote.json_routes[vep] = lambda q, b, h: (400, {"error": "Bad request: POST message exceeds the limit"})
-    with pytest.raises(RetryableSourceError) as err:
-        fetcher.vep([sentinel.rsid], "GRCh38")
-    assert err.value.kind == "protocol"
-    remote.json_routes[vep] = lambda q, b, h: (503, {"error": "not found"})          # the words alone are not a 400
+    remote.json_routes[vep] = lambda q, b, h: (503, {"error": f"No variant found with ID '{sentinel.rsid}'"})   # the words alone are not a 400
     with pytest.raises(RetryableSourceError) as err:
         fetcher.vep([sentinel.rsid], "GRCh38")
     assert err.value.kind == "server"
+    remote.json_routes[vep] = lambda q, b, h: (400, {"error": "x" * 5000})
+    with pytest.raises(RetryableSourceError) as err:
+        fetcher.vep([sentinel.rsid], "GRCh38")
+    assert err.value.kind == "protocol"
+
+
+def test_vep_batches_ensembl_does_not_know_add_nothing_and_only_all_of_them_unknown_is_an_absence(world, tmp_path):
+    fetcher, remote = world.fetcher(tmp_path / "vol"), world.remote
+    known = [rsid(i) for i in range(N_VARIANTS)]
+    asked: list[list[str]] = []
+
+    def vep(q, b, h):
+        """As Ensembl: records for the ids it knows; 400 naming the first id only when it knows none."""
+        ids = json.loads(b)["ids"]
+        asked.append(ids)
+        found = [{"id": i, "transcript_consequences": []} for i in ids if i in known]
+        return (200, found) if found else (400, {"error": f"No variant found with ID '{ids[0]}'"})
+
+    remote.json_routes[("POST", "/ensembl/GRCh38/vep/human/id")] = vep
+    strangers = [f"rs{i}" for i in range(1, 251)]                    # none is in the synthetic panel
+    got = fetcher.vep(known[:200] + strangers[:200] + known[200:] + ["not_an_rsid"], "GRCh38")
+    assert [len(batch) for batch in asked] == [200, 200, N_VARIANTS - 200]      # the second batch is answered 400
+    assert [r["id"] for r in got] == known                                       # and the batches around it are kept
+    assert [r["id"] for r in fetcher.vep(known[:3] + strangers[:3], "GRCh38")] == known[:3]
+    with pytest.raises(SourceAbsent, match="VEP GRCh38: HTTP 400, the id is not known to Ensembl"):
+        fetcher.vep(strangers, "GRCh38")                                         # two batches, both unknown
+    assert fetcher.vep(["not_an_rsid"], "GRCh38") == []
+    remote.json_routes[("POST", "/ensembl/GRCh38/vep/human/id")] = lambda q, b, h: (400, {"error": "No variant found with ID 'rs999'"})
+    with pytest.raises(RetryableSourceError) as err:                              # the reply names an id that was not asked
+        fetcher.vep(strangers[:5], "GRCh38")
+    assert err.value.kind == "protocol"
+
+
+# ---- a source that keeps failing is never turned into "unavailable" ----------------------------------------
+
+CALLS_FOR_FIFTY = -(-50 // remote_module.ATTEMPTS)          # calls whose attempts add up to at least 50 responses
+
+
+def test_fifty_consecutive_server_errors_on_a_file_leave_no_record_no_file_and_nothing_absent(world, tmp_path):
+    root, path = tmp_path / "vol", f"/decode/{DECODE_KEY}"
+    world.remote.faults[path] = [("status", 503)] * (CALLS_FOR_FIFTY * remote_module.ATTEMPTS)
+    for _ in range(CALLS_FOR_FIFTY):                             # as Modal's retries and later launches: the same call again
+        with pytest.raises(RetryableSourceError) as err:
+            marked(root, "collect", "decode__0_0", "decode/0_0", lambda: collect(world, root, "decode", "0_0"), lambda: None)
+        assert err.value.kind == "server"
+        assert not (root / "collect").exists() and not (root / "raw").exists()
+    assert world.remote.faults[path] == []
+    assert len([p for _m, p, _r in world.remote.log if p == path]) == CALLS_FOR_FIFTY * remote_module.ATTEMPTS >= 50
+    state = volume_state(root)
+    assert state["records"] == [] and state["errors"]["collect"]["decode/0_0"]["kind"] == "server"
+    failed = {"call_id": "fc-1", "state": "failed", **error_of(err.value)}
+    report = status_report(collect_tasks(world.units), world.units, state, {"collect": {"decode/0_0": failed}}, {"deployed": True})
+    assert report["files"]["decode/0_0"]["state"] == "failed" and report["files_by_source"]["decode"] == {"failed": 1}
+    assert collect(world, root, "decode", "0_0").status == "collected"   # the source held the file all along
+
+
+def test_fifty_consecutive_server_errors_in_a_unit_leave_no_step_no_result_and_assembly_refuses(world, tmp_path):
+    root = tmp_path / "vol"
+    unit = decode_unit(world)
+    path = f"/ensembl/GRCh37/variation/human/{unit.sentinel.rsid}"
+    world.remote.faults[path] = [("status", 502)] * (CALLS_FOR_FIFTY * remote_module.ATTEMPTS)
+    store, fetcher = DirStore(root / "units" / unit.unit_key), world.fetcher(root)
+    for _ in range(CALLS_FOR_FIFTY):
+        with pytest.raises(RetryableSourceError) as err:
+            marked(root, "units", unit.unit_key, unit.unit_key,
+                   lambda: process_unit(unit, fetcher, StubBackend(H4), store, fp(unit), TOOLS, COLLECT), lambda: None)
+        assert err.value.kind == "server"
+        assert sorted(p.name for p in store.root.iterdir()) == [FINGERPRINT_NAME]    # no step, no meta file, no result
+    assert len([p for _m, p, _r in world.remote.log if p == path]) == CALLS_FOR_FIFTY * remote_module.ATTEMPTS >= 50
+    state = volume_state(root)
+    assert state["units_done"] == [] and state["errors"]["units"][unit.unit_key]["kind"] == "server"
+    report = status_report([], world.units, state, {}, {"deployed": True})
+    assert report["units"][unit.unit_key]["state"] == "not_started" and "done" not in report["units_by_source"]["decode"]
+    with pytest.raises(InputContractError, match="has no result.json; stage B is not complete"):
+        collect_unit_dir(unit, store.root, fp(unit), COLLECT)
+
+
+def test_only_a_definitive_absence_is_caught_and_recorded_and_modal_retries_only_run_the_call_again():
+    def caught(path: Path) -> list[str]:
+        return sorted(ast.unparse(n.type) for n in ast.walk(ast.parse(path.read_text())) if isinstance(n, ast.ExceptHandler))
+
+    package = HERE / "stage_b"
+    # every handler of the unit pipeline: three record a definitive absence, one notes that susie was not run
+    assert caught(package / "pipeline.py") == ["LDReferenceError", "SourceAbsent", "SourceAbsent", "SourceAbsent"]
+    # collect: two record a definitive absence; a 416 restarts the download; a corrupt gzip is reported as corrupt
+    assert caught(package / "collect.py") == ["CORRUPT", "RetryableSourceError", "SourceAbsent", "SourceAbsent"]
+    wrapper = ast.parse((HERE / "modal_stage_b.py").read_text())
+    for name in ("collect_file", "run_unit", "checkpointed_unit"):
+        fn = next(n for n in ast.walk(wrapper) if isinstance(n, ast.FunctionDef) and n.name == name)
+        assert not [n for n in ast.walk(fn) if isinstance(n, (ast.Try, ast.While, ast.For))], name   # nothing counts or absorbs failures
+    marker = next(n for n in ast.walk(ast.parse((package / "status.py").read_text()))
+                  if isinstance(n, ast.FunctionDef) and n.name == "marked")
+    handler = next(n for n in ast.walk(marker) if isinstance(n, ast.ExceptHandler))
+    assert isinstance(handler.body[-1], ast.Raise) and handler.body[-1].exc is None      # the note is written, the error re-raised
+
+
+# ---- other bytes under the same name, size and ETag ------------------------------------------------------
+
+def test_a_file_served_with_one_other_byte_under_the_same_name_size_and_etag_makes_the_old_checkpoint_refused(world, tmp_path):
+    root, path = tmp_path / "vol", f"/decode/{DECODE_KEY}"
+    unit = decode_unit(world).model_copy(update={"sentinel": SENTINEL, "outcomes": (
+        OutcomeSpec(accession="F_ok", source="finngen", n_case=1000, n_control=9000, risk_coded=True),)})
+    assert [(t.source, t.key) for t in collect_tasks([unit])] == [("decode", "0_0"), ("decode_smp", "0_0")]
+    for t in collect_tasks([unit]):
+        collect_one(t, world.sources(root / "cache"), root, checkpoint_bytes=2048)
+    first, old = read_record(root, "decode", "0_0"), volume_collect_digest(root, unit)
+    store = DirStore(root / "units" / unit.unit_key)
+    done = process_unit(unit, FakeFetcher(), StubBackend(H4), store, fp(unit, collect=old), TOOLS, old)
+    assert done["collect_sha256"] == old and done["outcomes"]["F_ok"]["coloc_run"] is True
+
+    data = world.remote.files[path]
+    world.remote.etags[path] = world.remote.etag(path)                      # the ETag the listing pins is still served
+    world.remote.files[path] = same_size_other_bytes(data)
+    assert len(world.remote.files[path]) == len(data) and sum(a != b for a, b in zip(data, world.remote.files[path])) == 1
+    record_path(root, "decode", "0_0").unlink()                              # the file is collected again from the source
+    (root / first.path).unlink()
+    second = collect(world, root, "decode", "0_0")
+    assert (second.name, second.bytes, second.etag) == (first.name, first.bytes, first.etag) == (
+        unit.pqtl_listing.name, unit.pqtl_listing.size, unit.pqtl_listing.etag)
+    assert {k for k, v in first.model_dump().items() if getattr(second, k) != v} - {"utc"} == {"sha256"}
+    new = volume_collect_digest(root, unit)
+    assert new != old and fp(unit, collect=new) != fp(unit, collect=old)
+
+    before, fetcher = {p.name: p.read_bytes() for p in sorted(store.root.iterdir())}, FakeFetcher()
+    with pytest.raises(StaleCheckpointError, match="not resumed"):
+        process_unit(unit, fetcher, StubBackend(H4), store, fp(unit, collect=new), TOOLS, new)
+    assert fetcher.calls == {} and {p.name: p.read_bytes() for p in sorted(store.root.iterdir())} == before
+    with pytest.raises(StaleCheckpointError):
+        collect_unit_dir(unit, store.root, fp(unit, collect=new), new)       # assembly recomputes the digest from the records
+    fresh = process_unit(unit, FakeFetcher(), StubBackend(H4), DirStore(root / "units_again" / unit.unit_key),
+                         fp(unit, collect=new), TOOLS, new)
+    assert fresh["collect_sha256"] == new and fresh["fingerprint"] != done["fingerprint"]
 
 
 # ---- the deCODE download endpoint: a redirect, or a JSON body carrying the address -------------------

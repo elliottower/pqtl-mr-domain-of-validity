@@ -11,7 +11,8 @@ a missing record raises CollectError and a record of `absent` raises SourceAbsen
 region what is served by region: OpenGWAS associations, tabix on FinnGen, on GWAS Catalog files that
 have an index and on the eQTL Catalogue, bcftools on 1000 Genomes, Ensembl and GTEx. Each of those
 raises SourceAbsent only on a definitive absence and RetryableSourceError on anything else. For
-Ensembl a definitive absence includes its HTTP 400 for an id it does not know (`ensembl_json`).
+Ensembl the only definitive absence is its HTTP 400 whose JSON error names a requested rsID as
+unknown (`ensembl_json`, `ensembl_unknown_id`); every other Ensembl status, 404 included, raises.
 
 Endpoints are the ones named in PREREG §Data collection. Two are not API calls any more:
 - eQTL Catalogue: the REST API is deprecated ("The RESTful API has now been deprecated and is no
@@ -42,7 +43,7 @@ import tarfile
 import tempfile
 import time
 import urllib.parse
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Collection, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -58,7 +59,7 @@ from stage_b.parsers import (decode_to_canonical, filter_decode, filter_decode_a
                              filter_eqtl_catalogue, filter_finngen, filter_gwas_catalog, filter_ukbppp,
                              normalize_chrom, opengwas_to_canonical, parse_ukbppp_rsid_map, split_lines,
                              ukbppp_to_canonical)
-from stage_b.remote import CORRUPT, attempt, check_status, http, http_json
+from stage_b.remote import ABSENT_STATUS, CORRUPT, attempt, http, http_json, status_kind
 from stage_b.schemas import (Build, CollectError, CollectTask, InstrumentUnit, LDReferenceError, OutcomeSpec,
                              RetryableSourceError, Sentinel, SourceAbsent)
 
@@ -108,7 +109,25 @@ FIXED_TISSUES = ("liver", "blood")   # GTEx v8 liver and whole blood
 
 
 DECODE_FILE_URL = "https://download.decode.is/s3/download?token={token}&file={key}"   # token and key URL-encoded
-ENSEMBL_UNKNOWN_ID = re.compile(r"not found|no variant found|unknown", re.IGNORECASE)
+# Ensembl REST error replies, from its documentation and source (read 2026-10-02):
+# - github.com/Ensembl/ensembl-rest/wiki/HTTP-Response-Codes: 400 "Occurs during exceptional circumstances
+#   such as the service is unable to find an ID ... the JSON object is an exception hash with the message
+#   keyed under error"; 404 "Indicates a badly formatted request. Check your URL". An Ensembl 404 is
+#   therefore a fault of the request, not an absence.
+# - GET /variation/:species/:id, ensembl-rest lib/EnsEMBL/REST/Model/Variation.pm (fetch_variation):
+#   `Catalyst::Exception->throw("$variation_id not found for $species")`, the species as the URL gives it.
+# - POST /vep/:species/id, ensembl-rest lib/EnsEMBL/REST/Controller/VEP.pm (get_consequences) returns the
+#   first VEP warning as the error when no input id gave a consequence; ensembl-vep
+#   modules/Bio/EnsEMBL/VEP/Parser/ID.pm warns "No variant found with ID '$id'". Ids VEP does not know
+#   are left out of a 200 reply that holds consequences for other ids.
+# The pages rest.ensembl.org/documentation/info/variation_id and .../vep_id_post document parameters
+# only. Both messages were also returned verbatim by rest.ensembl.org and grch37.rest.ensembl.org for an
+# invented rsID on 2026-10-02: {"error":"rs99999999999999 not found for human"} and
+# {"error":"No variant found with ID 'rs99999999999999'"}.
+# The variation message ends with the species segment of the request URL, which is always `human` here.
+ENSEMBL_UNKNOWN_VARIATION = re.compile(r"(?P<id>rs[0-9]+) not found for human")
+ENSEMBL_UNKNOWN_VEP_ID = re.compile(r"No variant found with ID '(?P<id>rs[0-9]+)'")
+ENSEMBL_ERROR_BYTES = 4096      # an error reply longer than this is not one of the two messages
 EBI_FTP, EBI_HTTPS = "ftp://ftp.ebi.ac.uk/", "https://ftp.ebi.ac.uk/"
 
 
@@ -163,15 +182,36 @@ def https_path(path: str) -> str:
     return EBI_HTTPS + path[len(EBI_FTP):] if path.startswith(EBI_FTP) else path
 
 
-def ensembl_json(method: str, url: str, what: str, **kwargs):
-    """The JSON body of an Ensembl REST request. Ensembl answers HTTP 400 for an id it does not
-    know, with a body that says so: that is a definitive answer and raises SourceAbsent. A 400
-    whose body says anything else, and every other status, is classified as for any source."""
+def ensembl_unknown_id(body: bytes, message: re.Pattern, requested: Collection[str]) -> bool:
+    """True only when `body` is Ensembl's error JSON, an object whose one key `error` holds a string,
+    and that string is, from first to last character, the unknown-identifier message `message` naming
+    one of the `requested` rsIDs. A body that does not parse, has another structure, says anything
+    more or anything else (request size, syntax, a backend fault, a page not found) or names an rsID
+    that was not requested is not an answer about the requested identifier."""
+    try:
+        doc = json.loads(body)
+    except ValueError:
+        return False
+    if not isinstance(doc, dict) or set(doc) != {"error"} or not isinstance(doc["error"], str):
+        return False
+    match = message.fullmatch(doc["error"])
+    return match is not None and match.group("id") in requested
+
+
+def ensembl_json(method: str, url: str, what: str, unknown: re.Pattern, requested: Collection[str], **kwargs):
+    """The JSON body of an Ensembl REST request for the rsIDs `requested`. HTTP 400 with the
+    unknown-identifier message `unknown` naming one of them (`ensembl_unknown_id`) is Ensembl's
+    definitive answer and raises SourceAbsent. Every other status that is not 2xx raises
+    RetryableSourceError: any other 400 as `protocol`, and 404 or 410 as `protocol` too, because
+    Ensembl answers 404 for a badly formed URL and 400, not 404, for an id it does not know."""
     def get():
         with requests.request(method, url, **kwargs) as r:
-            if r.status_code == 400 and ENSEMBL_UNKNOWN_ID.search(r.text[:2000]):
+            if (r.status_code == 400 and len(r.content) <= ENSEMBL_ERROR_BYTES
+                    and ensembl_unknown_id(r.content, unknown, requested)):
                 raise SourceAbsent(f"{what}: HTTP 400, the id is not known to Ensembl")
-            check_status(r.status_code, what)
+            if not 200 <= r.status_code < 300:
+                kind = "protocol" if r.status_code in ABSENT_STATUS else status_kind(r.status_code)
+                raise RetryableSourceError(kind, f"{what}: HTTP {r.status_code}")
             return r.json()
     return attempt(get, what)
 
@@ -347,9 +387,9 @@ class VolumeFetcher:
         if sentinel.rsid.startswith("rs"):
             try:
                 doc = ensembl_json("GET", f"{self.endpoints.ensembl_rest[other]}/variation/human/{sentinel.rsid}",
-                                   f"Ensembl {other} {sentinel.rsid}", headers={"Content-Type": "application/json"},
-                                   timeout=60)
-            except SourceAbsent:       # Ensembl does not know the rsID on this build: no mapping
+                                   f"Ensembl {other} {sentinel.rsid}", ENSEMBL_UNKNOWN_VARIATION, {sentinel.rsid},
+                                   headers={"Content-Type": "application/json"}, timeout=60)
+            except SourceAbsent:       # Ensembl reports the rsID as unknown on this build: no position there
                 doc = {}
             maps = [m for m in doc.get("mappings", [])
                     if normalize_chrom(m.get("seq_region_name", "")) == sentinel.chrom
@@ -473,13 +513,22 @@ class VolumeFetcher:
 
     # ---- VEP ---------------------------------------------------------------------------------------
     def vep(self, rsids: list[str], build: Build) -> list[dict]:
-        out = []
-        for i in range(0, len(rsids), 200):
-            batch = [r for r in rsids[i:i + 200] if r.startswith("rs")]
-            if batch:
+        """VEP records of `rsids`, asked in batches of 200. Ensembl leaves an id it does not know
+        out of a reply that holds records for other ids, and answers HTTP 400 naming an unknown id
+        only when no id of the batch gave a record; such a batch adds nothing, like the ids left
+        out of another batch's reply. SourceAbsent is raised only when every batch was answered
+        that way, so the outcome does not depend on where a batch boundary falls."""
+        batches = [b for b in ([r for r in rsids[i:i + 200] if r.startswith("rs")] for i in range(0, len(rsids), 200)) if b]
+        out, unknown = [], []
+        for batch in batches:
+            try:
                 out += ensembl_json("POST", f"{self.endpoints.ensembl_rest[build]}/vep/human/id", f"VEP {build}",
-                                    json={"ids": batch}, timeout=300,
+                                    ENSEMBL_UNKNOWN_VEP_ID, set(batch), json={"ids": batch}, timeout=300,
                                     headers={"Content-Type": "application/json", "Accept": "application/json"})
+            except SourceAbsent as err:
+                unknown.append(str(err))
+        if batches and len(unknown) == len(batches):
+            raise SourceAbsent(unknown[0])
         return out
 
     # ---- eQTL Catalogue (GTEx v8) ------------------------------------------------------------------

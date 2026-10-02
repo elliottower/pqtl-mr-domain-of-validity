@@ -31,13 +31,20 @@ The splicing step finds a liver sQTL signal at the sentinel and no eQTL signal (
 
 `scenario` is the dry run: collect under injected faults (broken connections, an expired folder
 token, a rate limit), a re-issued folder link between collect and analyze, an expired OpenGWAS token
-during analyze, the checks that none of them changed a record, a checkpoint or a result, and the
-purge of the whole files once every unit is finished.
+during analyze, the checks that none of them changed a record, a checkpoint or a result, Ensembl's
+error replies (`ensembl_outcomes`: only its unknown-identifier message naming the requested rsID is
+an absence), a source that serves other bytes under an unchanged name, size and ETag (the finished
+checkpoint is refused), and the purge of the whole files once every unit is finished.
+
+The synthetic Ensembl answers an rsID it does not hold as rest.ensembl.org does: HTTP 400 with
+`{"error": "<rsID> not found for human"}` on the variation endpoint and
+`{"error": "No variant found with ID '<rsID>'"}` on the VEP endpoint (stage_b/fetch.py cites both).
 """
 import gzip
 import io
 import json
 import math
+import shutil
 import subprocess
 import tarfile
 import urllib.parse
@@ -53,10 +60,11 @@ from stage_b import collect as collect_module
 from stage_b import fetch as fetch_module
 from stage_b import remote as remote_errors
 from stage_b.assemble import build_evidence, collect_unit_dir, regional_rows
+from stage_b.checkpoint import volume_collect_digest
 from stage_b.collect import collect_one, collect_tasks, purge_raw, read_record
 from stage_b.fetch import SYNAPSE_RSID_MAPS, SYNAPSE_UKBPPP_EUR, Endpoints, RemoteSources, VolumeFetcher, gwas_catalog_dir
-from stage_b.schemas import (WINDOW_PRIMARY, CollectError, CollectTask, HypothesisInput, InstrumentUnit, OutcomeSpec,
-                             RetryableSourceError, Sentinel, SourceFile)
+from stage_b.schemas import (WINDOW_PRIMARY, CollectTask, HypothesisInput, InstrumentUnit, OutcomeSpec,
+                             RetryableSourceError, Sentinel, SourceAbsent, SourceFile, StageBError)
 from stage_b.status import error_of, status_report, volume_state
 from stage_b.units import unit_key
 
@@ -293,7 +301,7 @@ def build_world(remote: FakeRemote, work: Path, indexed: bool = True) -> World:
     for build, shift in (("GRCh38", 0), ("GRCh37", GRCH37_SHIFT)):
         def variation(rest: str, q, b, h, build=build, shift=shift) -> tuple[int, object]:
             if rest not in index:
-                return 400, {"error": f"ID '{rest}' not found"}
+                return 400, {"error": f"{rest} not found for human"}
             return 200, {"mappings": [{"seq_region_name": CHROM, "assembly_name": build,
                                        "start": int(meta["pos"][index[rest]]) + shift}]}
         remote.json_prefixes.append(("GET", f"/ensembl/{build}/variation/human/", variation))
@@ -388,11 +396,12 @@ def _ld_shape(unit_dir: Path) -> tuple[int, ...]:
         return tuple(z["dosage"].shape)
 
 
-def check_unit(unit: InstrumentUnit, unit_dir: Path, result: dict) -> dict:
+def check_unit(unit: InstrumentUnit, unit_dir: Path, result: dict, collect_sha256: str) -> dict:
     """The dry-run record of one finished unit directory: what colocalization returned for each
     outcome, the evidence rows assembly forms from it, and `checks`, each True when the known
-    answer of the module docstring was obtained."""
-    collected, metas = collect_unit_dir(unit, unit_dir, result["fingerprint"])
+    answer of the module docstring was obtained. `collect_sha256` is the collect digest recomputed
+    from the unit's collect records, as assembly recomputes it."""
+    collected, metas = collect_unit_dir(unit, unit_dir, result["fingerprint"], collect_sha256)
     hyps = hypotheses(unit)
     rows = build_evidence(hyps, {h.hypothesis_id: unit.unit_key for h in hyps}, {unit.unit_key: (unit.source, unit.assay_id)},
                           {unit.unit_key: collected}, {})
@@ -403,6 +412,7 @@ def check_unit(unit: InstrumentUnit, unit_dir: Path, result: dict) -> dict:
     n_pqtl = N_VARIANTS - (1 if unit.source == "decode" else 0)          # deCODE drops its excluded variant
     checks = {
         "result_on_disk_equals_returned": collected == result,
+        "result_carries_the_collect_digest_of_its_records": result.get("collect_sha256") == collect_sha256,
         "pqtl_available": result["pqtl_available"] is True,
         "not_run_reasons": {a: out[a]["not_run_reason"] for a in names} == {a: EXPECTED_NOT_RUN[a] for a in names},
         "evidence_states": state == {a: EXPECTED_STATE[a] for a in names},
@@ -444,9 +454,74 @@ def _raised(call: Callable[[], object]) -> dict:
     """The stage B error a call raised, as the status report records it; {} when it returned."""
     try:
         call()
-    except (RetryableSourceError, CollectError) as err:
+    except StageBError as err:
         return error_of(err)
     return {}
+
+
+# ---- Ensembl's error replies ---------------------------------------------------------------------------
+
+OTHER_RSID = "rs1"      # an rsID no synthetic request asks for
+# name -> (HTTP status, body) for a request about the rsID `rs`; a `bytes` body is sent as it is.
+ENSEMBL_REPLIES: dict[str, Callable[[str, str], tuple[int, object]]] = {
+    "unknown_id": lambda rs, genuine: (400, {"error": genuine}),
+    "backend_error": lambda rs, genuine: (400, {"error": "Unknown backend error while querying the variation database"}),
+    "endpoint_not_found": lambda rs, genuine: (400, {"error": "endpoint not found"}),
+    "page_not_found_404": lambda rs, genuine: (404, {"error": "page not found. Please check your uri and refer to our "
+                                                              "documentation https://rest.ensembl.org/"}),
+    "malformed_json": lambda rs, genuine: (400, json.dumps({"error": genuine}).encode()[:-1]),
+    "another_rsid": lambda rs, genuine: (400, {"error": genuine.replace(rs, OTHER_RSID)}),
+    "unknown_id_and_more": lambda rs, genuine: (400, {"error": f"{genuine}; Unknown backend error"}),
+    "unknown_id_beside_another_key": lambda rs, genuine: (400, {"error": genuine, "status": "backend unavailable"}),
+    "post_too_large": lambda rs, genuine: (400, {"error": "POST message too large. You have submitted 201 elements but a "
+                                                          "limit of 200 is in place. Request smaller regions or lists of IDs"}),
+    "words_without_the_message": lambda rs, genuine: (400, {"error": f"ID '{rs}' not found"}),
+    "not_an_object": lambda rs, genuine: (400, [genuine]),
+    "unknown_id_with_503": lambda rs, genuine: (503, {"error": genuine}),
+}
+ENSEMBL_EXPECTED = {name: "absent" if name == "unknown_id" else "raised:server" if name.endswith("_503") else "raised:protocol"
+                    for name in ENSEMBL_REPLIES}
+
+
+def ensembl_outcomes(world: World, fetcher: VolumeFetcher, sentinel: Sentinel) -> dict[str, dict[str, str]]:
+    """What the position lookup and the VEP lookup of `fetcher` make of each reply of
+    ENSEMBL_REPLIES about the sentinel's rsID: "absent" (the lookup takes it as Ensembl not knowing
+    the rsID: no position on the other build, SourceAbsent from VEP), "raised:<kind>" (a
+    RetryableSourceError) or "answered". The routes of `world.remote` are put back afterwards."""
+    remote, rs = world.remote, sentinel.rsid
+    other = "GRCh37" if sentinel.build == "GRCh38" else "GRCh38"
+    vep_route = ("POST", f"/ensembl/{sentinel.build}/vep/human/id")
+    saved = remote.json_routes[vep_route]
+
+    def outcome(call: Callable[[], bool]) -> str:
+        try:
+            return "absent" if call() else "answered"
+        except SourceAbsent:
+            return "absent"
+        except RetryableSourceError as err:
+            return f"raised:{err.kind}"
+
+    out: dict[str, dict[str, str]] = {"position_lookup": {}, "vep": {}}
+    try:
+        for name, reply in ENSEMBL_REPLIES.items():
+            position = reply(rs, f"{rs} not found for human")
+            remote.json_prefixes.insert(0, ("GET", f"/ensembl/{other}/variation/human/", lambda rest, q, b, h, r=position: r))
+            try:
+                out["position_lookup"][name] = outcome(lambda: fetcher.positions(sentinel)[other] is None)
+            finally:
+                remote.json_prefixes.pop(0)
+            vep = reply(rs, f"No variant found with ID '{rs}'")
+            remote.json_routes[vep_route] = lambda q, b, h, r=vep: r
+            out["vep"][name] = outcome(lambda: not fetcher.vep([rs], sentinel.build))
+    finally:
+        remote.json_routes[vep_route] = saved
+    return out
+
+
+def same_size_other_bytes(gz: bytes) -> bytes:
+    """A gzip file of the same length that differs in one byte and still decompresses to its end:
+    the OS field of the gzip header (byte 9), which no reader checks."""
+    return gz[:9] + bytes([gz[9] ^ 0x01]) + gz[10:]
 
 
 def scenario(world: World, root: Path, analyze: Callable[[InstrumentUnit, VolumeFetcher, Path], dict],
@@ -540,8 +615,39 @@ def scenario(world: World, root: Path, analyze: Callable[[InstrumentUnit, Volume
         empty_dir = root / "empty" / "units" / decode_unit.unit_key
         checks["missing_collect_record_raises_and_records_nothing"] = (
             events["missing_collect_record"].get("error_class") == "CollectError" and not (empty_dir / "pqtl.meta.json").exists())
-        unit_reports = {u.unit_key: check_unit(u, root / "units" / u.unit_key, results[u.source]) for u in units}
+        unit_reports = {u.unit_key: check_unit(u, root / "units" / u.unit_key, results[u.source], volume_collect_digest(root, u))
+                        for u in units}
         checks.update({f"{k}: {name}": ok for k, rep in unit_reports.items() for name, ok in rep["checks"].items()})
+        # 7b. Ensembl: only its unknown-identifier message naming the requested rsID is an absence
+        events["ensembl"] = ensembl_outcomes(world, world.fetcher(root, opengwas_token="opengwas-token-two"), decode_unit.sentinel)
+        checks["ensembl_400_is_an_absence_only_for_the_unknown_id_message_naming_the_requested_rsid"] = (
+            events["ensembl"] == {"position_lookup": ENSEMBL_EXPECTED, "vep": ENSEMBL_EXPECTED})
+        # 7c. the source serves other bytes under the same name, size and ETag; the file is collected
+        #     again from scratch: its record differs only in sha256 and the finished checkpoint is refused
+        changed, unit_name = root / "changed_bytes", decode_unit.unit_key
+        original = remote.files[decode_path]
+        remote.etags[decode_path], remote.files[decode_path] = remote.etag(decode_path), same_size_other_bytes(original)
+        try:
+            recollected = {key: collect_one(task, world.sources(changed / "cache", decode_token="folder-token-three"), changed,
+                                            commit, checkpoint_bytes=4096)
+                           for key, task in tasks.items() if task in collect_tasks([decode_unit])}
+        finally:
+            remote.files[decode_path] = original
+            del remote.etags[decode_path]
+        shutil.copytree(root / "units" / unit_name, changed / "units" / unit_name)
+        held = {p.name: p.read_bytes() for p in sorted((changed / "units" / unit_name).iterdir())}
+        mark = len(remote.log)
+        events["changed_bytes"] = _raised(lambda: analyze(decode_unit, world.fetcher(changed), changed / "units"))
+        old, new = records[("decode", "0_0")], recollected[("decode", "0_0")]
+        differing = {k for k in old.model_dump() if getattr(old, k) != getattr(new, k)} - {"utc"}
+        checks["changed_bytes_keep_name_size_and_etag_and_differ_in_sha256_only"] = (
+            differing == {"sha256"} and (new.name, new.bytes, new.etag) == (old.name, old.bytes, old.etag))
+        digest_before, digest_after = volume_collect_digest(root, decode_unit), volume_collect_digest(changed, decode_unit)
+        checks["changed_bytes_change_the_collect_digest"] = (
+            digest_before == results["decode"]["collect_sha256"] and digest_after != digest_before)
+        checks["checkpoint_of_the_old_bytes_is_refused_and_left_as_it_was"] = (
+            events["changed_bytes"].get("error_class") == "StaleCheckpointError" and remote.log[mark:] == []
+            and {p.name: p.read_bytes() for p in sorted((changed / "units" / unit_name).iterdir())} == held)
         # 8. every unit is finished: the whole files are deleted, the records and the extracts stay
         events["purge_before_units_finish"] = _raised(lambda: purge_raw(root / "empty", units, commit))
         extracts = {p: p.read_bytes() for p in sorted((root / "units").rglob("*.tsv.gz"))}

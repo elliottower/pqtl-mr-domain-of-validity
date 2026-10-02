@@ -26,10 +26,16 @@ The analyze phase reads these files only through `read_record` and `collected_fi
 record raises CollectError (it is not 'unavailable'), and a file is opened only after its size and
 sha256 match its record.
 
-The files under raw/ are working copies: the plan stores no full file. `purge_raw` deletes them
-once every unit has its result (the wrapper also requires stage B's SEAL in the PREREG.md log). The
-records stay, with each file's size, sha256, ETag and time, and so do the regional extracts of the
-unit directories; PURGED.json lists what was deleted.
+The files under raw/ are working copies, held on the private stage B volume between collection
+and the stage B seal. `purge_raw` deletes them once every unit has its result (the wrapper also
+requires stage B's SEAL in the PREREG.md log). The records stay, with each file's size, sha256,
+ETag and time, and so do the regional extracts of the unit directories; PURGED.json lists what was
+deleted. The extracts hold rows of the downloaded files: they stay on the volume, as checkpoint
+and provenance material, and are never written to the committed B/output/.
+
+A record is what binds a unit's result to the bytes it was computed from: the sha256 here enters
+the unit fingerprint through the collect digest (stage_b/checkpoint.py), so a file collected again
+with other bytes under the same name, size and ETag invalidates every checkpoint that read it.
 """
 import gzip
 import hashlib

@@ -17,6 +17,11 @@ Each call carries the token, so the Modal function applies the same guard.
 `sealed_stage_b` is the check before the collected whole files are deleted (collect.purge_raw): the
 log holds a chained `SEAL stage=B manifest_sha256=<sha256>` and, where the caller has stage B's
 MANIFEST.tsv, that file has the sealed sha256.
+
+`private_copy` is the check on where `assemble` reads the unit directories and collect records
+from. A copy of the unit directories holds the regional extracts, which are rows of the downloaded
+source files and are never committed, so the copy lies outside the repository or under the
+gitignored inputs directory.
 """
 import json
 from collections.abc import Callable, Collection
@@ -51,6 +56,17 @@ def sealed_stage_b(prereg: Path, manifest: Path | None = None) -> str:
     if manifest is not None and sha256_file(manifest) != seal:
         raise RunNotAuthorized(f"{manifest} has sha256 {sha256_file(manifest)}, the log seals stage B as {seal}")
     return seal
+
+
+def private_copy(path: Path, repo: Path, private_root: Path) -> Path:
+    """`path`, refused when it lies inside `repo` but not under `private_root` (the gitignored
+    inputs directory of the experiment)."""
+    resolved = path.resolve()
+    if resolved.is_relative_to(repo.resolve()) and not resolved.is_relative_to(private_root.resolve()):
+        raise InputContractError(f"{path} lies in the repository outside {private_root}; unit directories hold regional "
+                                 "extracts, which are not committed: copy them outside the repository or under "
+                                 f"{private_root}")
+    return path
 
 
 def check_plan_inputs(unit_plan: Path, units: Path, sealed: dict[str, str]) -> None:

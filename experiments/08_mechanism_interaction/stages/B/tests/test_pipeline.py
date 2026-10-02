@@ -18,14 +18,14 @@ from v8_manifest import code_sha256, read_inputs, verify_output_dir
 from v8_run_guard import PLAN_SHA256
 
 from stage_b.assemble import build_evidence, collect_unit_dir, regional_rows, sha256_file, write_outputs
-from stage_b.checkpoint import (FINGERPRINT_NAME, PINNED_SOURCES, PY_PACKAGES, R_VERSIONS, common_tools, package_files,
-                                package_sha256, source_pins, tool_versions, unit_fingerprint, unit_tools,
-                                verified_source_pins)
+from stage_b.checkpoint import (FINGERPRINT_NAME, PINNED_SOURCES, PY_PACKAGES, R_VERSIONS, REMOTE_RELEASE, collect_digest,
+                                collect_entry, common_tools, package_files, package_sha256, source_pins, tool_versions,
+                                unit_fingerprint, unit_tools, verified_source_pins)
 from stage_b.coloc_backend import AbfResult, ColocTask, SusieResult
 from stage_b.pipeline import DirStore, process_unit, reset_unavailable
-from stage_b.schemas import (EVIDENCE_COLUMNS, CollectError, CollectRecord, HypothesisInput, InputContractError,
-                             InstrumentUnit, OutcomeSpec, RetryableSourceError, Sentinel, SourceAbsent, SourceFile,
-                             StaleCheckpointError)
+from stage_b.schemas import (EVIDENCE_COLUMNS, PRIMARY_P1, PRIMARY_P2, PRIMARY_P12, WINDOW_PRIMARY, CollectError,
+                             CollectRecord, CollectTask, HypothesisInput, InputContractError, InstrumentUnit, OutcomeSpec,
+                             RetryableSourceError, Sentinel, SourceAbsent, SourceFile, StaleCheckpointError)
 
 INTERFACES = Path(__file__).resolve().parents[2] / "INTERFACES.md"
 PACKAGE = Path(__file__).resolve().parents[1] / "stage_b"
@@ -34,15 +34,16 @@ CODE = package_sha256(PACKAGE)
 TOOLS = {"python": "3.12.0", "python:numpy": "2.1.3", "R": "4.4.3", "R:coloc": "5.2.3", "R:susieR": "0.12.35",
          "R:jsonlite": "2.0.0", "bcftools": "1.21", "bcftools:htslib": "1.21", "tabix:htslib": "1.21"}
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
+COLLECT = "f" * 64          # the collect digest of a unit, where the test collects no file
 
 
-def fp(u: InstrumentUnit, pins=None, code: str = CODE, plan: str = PLAN_SHA256, tools=None) -> str:
-    return unit_fingerprint(u, PINS if pins is None else pins, code, plan, TOOLS if tools is None else tools)
+def fp(u: InstrumentUnit, pins=None, code: str = CODE, plan: str = PLAN_SHA256, tools=None, collect: str = COLLECT) -> str:
+    return unit_fingerprint(u, PINS if pins is None else pins, code, plan, TOOLS if tools is None else tools, collect)
 
 
 def run(u: InstrumentUnit, fetcher, backend, store: DirStore) -> dict:
     """process_unit under the unit's own fingerprint, as modal_stage_b.run_unit calls it."""
-    return process_unit(u, fetcher, backend, store, fp(u), TOOLS)
+    return process_unit(u, fetcher, backend, store, fp(u), TOOLS, COLLECT)
 N = 120
 RSIDS = [f"rs{i}" for i in range(N)]
 POS = [1_000_000 + 1000 * i for i in range(N)]
@@ -169,6 +170,11 @@ def test_unit_to_evidence_rows(tmp_path):
     primary = next(t for t in backend.tasks if t.id == "primary")
     assert len(primary.d1.snp) == N and primary.p12 == 5e-6 and primary.d2.s == pytest.approx(0.1)
     assert {t.p12 for t in backend.tasks if t.id in ("s15a", "s15b")} == {1e-6, 1e-5}
+    # the registered settings: p1 = p2 = 1e-4, p12 = 5e-6, +/-500 kb, coloc.abf (coloc.susie for S15g only)
+    assert (PRIMARY_P1, PRIMARY_P2, PRIMARY_P12, WINDOW_PRIMARY) == (1e-4, 1e-4, 5e-6, 500_000)
+    assert {(t.p1, t.p2) for t in backend.tasks} == {(1e-4, 1e-4)}
+    assert (primary.method, {t.method for t in backend.tasks if t.id == "s15g"}) == ("abf", {"susie"})
+    assert {t.method for t in backend.tasks if t.id != "s15g"} == {"abf"}
 
 
 def test_primary_window_is_500kb_and_s15c_is_1mb(tmp_path):
@@ -271,6 +277,11 @@ def test_outputs_and_manifest(tmp_path):
     assert m.set_index("path").loc["evidence.csv", "rows"] == "1"
     assert set(verify_output_dir(tmp_path / "out", ["evidence.csv"])) == {
         "evidence.csv", "regional_manifest.tsv", "collected_files.tsv", "run_info.json", "INPUTS.tsv"}
+    # the output directory holds those tables and MANIFEST.tsv and nothing else: no regional extract, no whole file
+    assert sorted(p.name for p in (tmp_path / "out").rglob("*")) == [
+        "INPUTS.tsv", "MANIFEST.tsv", "collected_files.tsv", "evidence.csv", "regional_manifest.tsv", "run_info.json"]
+    assert sorted(p.name for p in (tmp_path / "u").iterdir() if p.name.endswith((".tsv.gz", ".npz"))) == [
+        "ld.npz", "outcome__F_ok.tsv.gz", "pqtl.tsv.gz", "pqtl_smp.tsv.gz"]          # the extracts stay in the unit directory
     inp, code = read_inputs(tmp_path / "out" / "INPUTS.tsv")
     assert (inp.name, inp.path, inp.sha256) == ("hypotheses", "in.csv", sha256_file(src))
     script = m["script_sha256"].iloc[0]
@@ -350,10 +361,14 @@ def test_the_fingerprint_changes_with_the_unit_the_pins_the_code_and_the_plan():
         "another htslib": fp(u, tools={**TOOLS, "bcftools:htslib": "1.22"}),
         "another numpy": fp(u, tools={**TOOLS, "python:numpy": "2.1.4"}),
         "a tool more": fp(u, tools={**TOOLS, "python:scipy": "1.0"}),
+        "other collected bytes": fp(u, collect="e" * 64),
     }
     assert fp(u, tools=dict(reversed(list(TOOLS.items())))) == fp(u)          # the order of the record does not matter
     with pytest.raises(InputContractError, match="needs the tool versions"):
         fp(u, tools={})
+    for digest in ("", "f" * 63, "F" * 64):
+        with pytest.raises(InputContractError, match="needs the collect digest"):
+            fp(u, collect=digest)
     assert len({fp(u), *variants.values()}) == len(variants) + 1, variants
 
 
@@ -369,15 +384,17 @@ def test_a_finished_unit_is_not_returned_to_a_run_with_another_unit_record(tmp_p
 
 
 @pytest.mark.parametrize("change", [{"pins": {**PINS, PINNED_SOURCES[1]: "c" * 64}}, {"code": "d" * 64}, {"plan": "e" * 64},
-                                    {"tools": {**TOOLS, "R:susieR": "0.12.36"}}, {"tools": {**TOOLS, "bcftools": "1.22"}}])
-def test_a_half_finished_unit_is_not_resumed_under_other_pins_code_plan_or_tool_versions(tmp_path, change):
+                                    {"tools": {**TOOLS, "R:susieR": "0.12.36"}}, {"tools": {**TOOLS, "bcftools": "1.22"}},
+                                    {"collect": "e" * 64}])
+def test_a_half_finished_unit_is_not_resumed_under_other_pins_code_plan_tool_versions_or_collected_bytes(tmp_path, change):
     store, u = DirStore(tmp_path / "u"), unit(("F_ok",))
     with pytest.raises(RuntimeError, match="container killed"):
         run(u, FakeFetcher(qtl_error=RuntimeError("container killed")), StubBackend(H4), store)
     assert store.has("coloc__F_ok.json") and not store.has("result.json")
     before, fetcher = files(store.root), FakeFetcher()
     with pytest.raises(StaleCheckpointError):
-        process_unit(u, fetcher, StubBackend(H4), store, fp(u, **change), change.get("tools", TOOLS))
+        process_unit(u, fetcher, StubBackend(H4), store, fp(u, **change), change.get("tools", TOOLS),
+                     change.get("collect", COLLECT))
     assert fetcher.calls == {} and files(store.root) == before
     assert run(u, FakeFetcher(), StubBackend(H4), store)["fingerprint"] == fp(u)   # the run that wrote it still resumes
 
@@ -396,15 +413,25 @@ def test_a_result_carrying_another_fingerprint_is_refused_by_the_unit_and_by_ass
     store, u = DirStore(tmp_path / "u"), unit(("F_ok",))
     res = run(u, FakeFetcher(), StubBackend(H4), store)
     assert res["fingerprint"] == fp(u)
-    assert json.loads((store.root / FINGERPRINT_NAME).read_text()) == {"fingerprint": fp(u), "tools": TOOLS}
-    assert collect_unit_dir(u, store.root, fp(u))[0] == res
+    assert json.loads((store.root / FINGERPRINT_NAME).read_text()) == {"fingerprint": fp(u), "tools": TOOLS,
+                                                                       "collect_sha256": COLLECT}
+    assert res["collect_sha256"] == COLLECT and collect_unit_dir(u, store.root, fp(u), COLLECT)[0] == res
     with pytest.raises(StaleCheckpointError):
-        collect_unit_dir(u, store.root, fp(u, code="d" * 64))
+        collect_unit_dir(u, store.root, fp(u, code="d" * 64), COLLECT)
+    with pytest.raises(StaleCheckpointError):          # the collect records at assembly are not the ones the unit ran on
+        collect_unit_dir(u, store.root, fp(u, collect="e" * 64), "e" * 64)
+    with pytest.raises(StaleCheckpointError):          # the fingerprint alone is not enough: the digest must be the unit's too
+        collect_unit_dir(u, store.root, fp(u), "e" * 64)
+    store.put_json("result.json", {**res, "collect_sha256": "e" * 64})
+    with pytest.raises(StaleCheckpointError):
+        run(u, FakeFetcher(), StubBackend(H4), store)
+    with pytest.raises(StaleCheckpointError):
+        collect_unit_dir(u, store.root, fp(u), COLLECT)
     store.put_json("result.json", {**res, "fingerprint": "0" * 64})
     with pytest.raises(StaleCheckpointError):
         run(u, FakeFetcher(), StubBackend(H4), store)
     with pytest.raises(StaleCheckpointError):
-        collect_unit_dir(u, store.root, fp(u))
+        collect_unit_dir(u, store.root, fp(u), COLLECT)
 
 
 def test_source_pins_are_read_from_the_inputs_manifest_and_checked_against_the_files(tmp_path):
@@ -525,13 +552,13 @@ def test_assembly_recomputes_the_fingerprint_from_the_tool_versions_the_unit_rec
     res = run(u, FakeFetcher(), StubBackend(H4), store)
     tools = unit_tools(store.root)
     assert tools == TOOLS
-    assert collect_unit_dir(u, store.root, unit_fingerprint(u, PINS, CODE, PLAN_SHA256, tools))[0] == res
+    assert collect_unit_dir(u, store.root, unit_fingerprint(u, PINS, CODE, PLAN_SHA256, tools, COLLECT), COLLECT)[0] == res
     # a tool version edited in the unit directory no longer matches the fingerprint the unit carries
     record = json.loads((store.root / FINGERPRINT_NAME).read_text())
     record["tools"]["R:coloc"] = "5.2.4"
     (store.root / FINGERPRINT_NAME).write_text(json.dumps(record))
     with pytest.raises(StaleCheckpointError):
-        collect_unit_dir(u, store.root, unit_fingerprint(u, PINS, CODE, PLAN_SHA256, unit_tools(store.root)))
+        collect_unit_dir(u, store.root, unit_fingerprint(u, PINS, CODE, PLAN_SHA256, unit_tools(store.root), COLLECT), COLLECT)
     (store.root / FINGERPRINT_NAME).write_text(json.dumps({"fingerprint": fp(u)}))
     with pytest.raises(StaleCheckpointError, match="records no tool versions"):
         unit_tools(store.root)
@@ -610,7 +637,7 @@ def unit_files(root: Path) -> dict[str, bytes]:
 
 def tables(tmp: Path, u: InstrumentUnit, unit_dir: Path) -> dict[str, bytes]:
     """evidence.csv and regional_manifest.tsv as assembly writes them from one unit directory."""
-    res, metas = collect_unit_dir(u, unit_dir, fp(u))
+    res, metas = collect_unit_dir(u, unit_dir, fp(u), COLLECT)
     hyps = [hyp("h1", "decrease", "F_ok"), hyp("h2", "increase", "F_ok"), hyp("h4", "decrease", "F_small"),
             hyp("h5", "decrease", "F_missing")]
     rows = build_evidence(hyps, {h.hypothesis_id: u.unit_key for h in hyps}, {u.unit_key: (u.source, u.assay_id)},
@@ -735,3 +762,126 @@ def test_a_variant_ensembl_does_not_know_leaves_protein_altering_missing_unless_
     flagged = {("soma", "1_1"): {"N platforms tested": 1, "cis pQTL on both and high correlation (> 0.5)": "N",
                                  "PAV olink": "N", "PAV soma": "Y"}}
     assert build_evidence(*args, flagged)[0].protein_altering is True
+
+
+# ---- the collect digest: the fingerprint covers the bytes the collect phase recorded -----------------
+
+def collected(source: str, key: str, name: str, sha: str, **extra) -> CollectRecord:
+    return CollectRecord(status="collected", source=source, key=key, name=name, path=f"raw/{source}/{name}", bytes=950_000_000,
+                         sha256=sha, **extra)
+
+
+def catalog_unit() -> InstrumentUnit:
+    outcomes = tuple(OutcomeSpec(accession=a, source="gwas_catalog", n_case=1000, n_control=9000, risk_coded=True)
+                     for a in ("GCST1", "GCST2", "GCST3"))
+    return unit().model_copy(update={"outcomes": outcomes})
+
+
+def unit_records(u: InstrumentUnit, decode_sha: str = "1" * 64) -> dict[tuple[str, str], CollectRecord]:
+    """One record per whole file of `catalog_unit`: two collected, one absent, one queried by region."""
+    return {("decode", "1_1"): collected("decode", "1_1", u.pqtl_listing.name, decode_sha, etag=u.pqtl_listing.etag),
+            ("decode_smp", "1_1"): CollectRecord(status="absent", source="decode_smp", key="1_1", detail="decode_smp 1_1: HTTP 404"),
+            ("gwas_catalog", "GCST1"): collected("gwas_catalog", "GCST1", "1-GCST1-EFO_1.h.tsv.gz", "2" * 64),
+            ("gwas_catalog", "GCST2"): CollectRecord(status="remote_indexed", source="gwas_catalog", key="GCST2",
+                                                     name="2-GCST2-EFO_2.h.tsv.gz"),
+            ("gwas_catalog", "GCST3"): CollectRecord(status="absent", source="gwas_catalog", key="GCST3",
+                                                     detail="GWAS Catalog GCST3 listing: HTTP 404")}
+
+
+def digest(u: InstrumentUnit, records: dict[tuple[str, str], CollectRecord]) -> str:
+    return collect_digest(u, lambda source, key: records[(source, key)])
+
+
+def test_the_collect_digest_covers_identity_status_size_and_sha256_and_no_address():
+    u = catalog_unit()
+    records = unit_records(u)
+    entries = {(s, k): collect_entry(CollectTask(source=s, key=k, name=u.pqtl_listing.name if s.startswith("decode") else ""), r)
+               for (s, k), r in records.items()}
+    assert entries[("decode", "1_1")] == {"source": "decode", "key": "1_1", "status": "collected", "name": "1_1_G_G.txt.gz",
+                                          "bytes": 950_000_000, "sha256": "1" * 64}
+    assert entries[("decode_smp", "1_1")] == {"source": "decode_smp", "key": "1_1", "status": "absent",
+                                              "name": "1_1_G_G.txt.gz", "bytes": None, "sha256": ""}
+    assert entries[("gwas_catalog", "GCST2")] == {"source": "gwas_catalog", "key": "GCST2", "status": "remote_indexed",
+                                                  "name": "2-GCST2-EFO_2.h.tsv.gz", "bytes": None, "sha256": "",
+                                                  "release": REMOTE_RELEASE["gwas_catalog"]}
+    assert entries[("gwas_catalog", "GCST3")] == {"source": "gwas_catalog", "key": "GCST3", "status": "absent", "name": "",
+                                                  "bytes": None, "sha256": ""}
+    assert REMOTE_RELEASE == {"gwas_catalog": "r2026-09-13"}
+    base = digest(u, records)
+    assert len(base) == 64 and base == digest(u, dict(reversed(list(records.items()))))
+    # what is not identity, status, size or sha256 leaves the digest as it was: an address, a time, a detail
+    decode = records[("decode", "1_1")]
+    moved = decode.model_copy(update={"source_url": "https://download.example/s3/download?token=<token>&file=x",
+                                      "utc": "2026-10-09T00:00:00+00:00", "last_modified": "another day", "detail": "note"})
+    assert digest(u, {**records, ("decode", "1_1"): moved}) == base
+    changes = {
+        "other bytes, same name size and ETag": decode.model_copy(update={"sha256": "3" * 64}),
+        "another size": decode.model_copy(update={"bytes": 950_000_001}),
+        "absent where it was collected": CollectRecord(status="absent", source="decode", key="1_1"),
+    }
+    digests = {name: digest(u, {**records, ("decode", "1_1"): r}) for name, r in changes.items()}
+    digests["a file now collected that was absent"] = digest(u, {**records, ("gwas_catalog", "GCST3"): collected(
+        "gwas_catalog", "GCST3", "3-GCST3-EFO_3.h.tsv.gz", "4" * 64)})
+    digests["an indexed file under another name"] = digest(u, {**records, ("gwas_catalog", "GCST2"): records[
+        ("gwas_catalog", "GCST2")].model_copy(update={"name": "2-GCST2-EFO_9.h.tsv.gz"})})
+    assert len({base, *digests.values()}) == len(digests) + 1, digests
+    for bad, match in ((decode.model_copy(update={"sha256": ""}), "lacks its name, size or sha256"),
+                       (decode.model_copy(update={"bytes": None}), "lacks its name, size or sha256"),
+                       (decode.model_copy(update={"name": "1_1_G_H.txt.gz"}), "the pinned listing"),
+                       (records[("gwas_catalog", "GCST1")], "was given for decode 1_1")):
+        with pytest.raises(CollectError, match=match):
+            digest(u, {**records, ("decode", "1_1"): bad})
+    with pytest.raises(KeyError):                                  # a file without a record gives no digest
+        digest(u, {k: r for k, r in records.items() if k != ("gwas_catalog", "GCST1")})
+    assert "http" not in json.dumps(list(entries.values())) and "token" not in json.dumps(list(entries.values()))
+
+
+def test_a_checkpoint_is_refused_when_the_file_was_collected_again_with_other_bytes_under_the_same_name_size_and_etag(tmp_path):
+    u = catalog_unit()
+    first = unit_records(u)
+    again = {**first, ("decode", "1_1"): first[("decode", "1_1")].model_copy(update={"sha256": "9" * 64})}
+    same = {f: getattr(first[("decode", "1_1")], f) for f in ("name", "bytes", "etag")}
+    assert same == {f: getattr(again[("decode", "1_1")], f) for f in same} and same["etag"] == u.pqtl_listing.etag
+    old, new = digest(u, first), digest(u, again)
+    assert old != new and fp(u, collect=old) != fp(u, collect=new)
+    store = DirStore(tmp_path / "u")
+    done = process_unit(u, FakeFetcher(fail_outcomes={"GCST3"}), StubBackend(H4), store, fp(u, collect=old), TOOLS, old)
+    assert done["collect_sha256"] == old and json.loads((store.root / FINGERPRINT_NAME).read_text())["collect_sha256"] == old
+    before, fetcher = files(store.root), FakeFetcher()
+    with pytest.raises(StaleCheckpointError, match="not resumed"):     # the unit record, and so name, size and ETag, is unchanged
+        process_unit(u, fetcher, StubBackend(H4), store, fp(u, collect=new), TOOLS, new)
+    assert fetcher.calls == {} and files(store.root) == before
+    with pytest.raises(StaleCheckpointError):                          # and assembly, which recomputes the digest, refuses it
+        collect_unit_dir(u, store.root, fp(u, collect=new), new)
+    assert collect_unit_dir(u, store.root, fp(u, collect=old), old)[0] == done
+    assert process_unit(u, FakeFetcher(), StubBackend(H4), store, fp(u, collect=old), TOOLS, old) == done
+
+
+# ---- S16 without a pinned SMP-normalized listing: nothing fetched, the column empty ---------------------
+
+def test_without_an_smp_listing_s16_fetches_nothing_and_its_column_is_empty_for_every_row(tmp_path):
+    decode = unit(("F_ok", "F_small", "F_missing")).model_copy(update={"smp_listing": None})
+    fetcher, backend = FakeFetcher(fail_outcomes={"F_missing"}), StubBackend(H4)
+    res = run(decode, fetcher, backend, DirStore(tmp_path / "d"))
+    assert "pqtl_smp" not in fetcher.calls and res["s16"] == {} and not any(t.id == "s16" for t in backend.tasks)
+    assert not list((tmp_path / "d").glob("pqtl_smp*")) and not list((tmp_path / "d").glob("s16__*"))
+    ukb = run(ukb_unit(), FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "k"))
+    hyps = [hyp("h1", "decrease", "F_ok"), hyp("h4", "decrease", "F_small"), hyp("h5", "decrease", "F_missing"),
+            hyp("h6", "decrease", "F_ok", "9_9"),
+            hyp("k1", "decrease", "F_ok", "OID1").model_copy(update={"instrument_source": "ukbppp", "platform": "Olink"})]
+    rows = build_evidence(hyps, {"h1": "decode__1_1", "h4": "decode__1_1", "h5": "decode__1_1", "k1": "ukbppp__OID1"},
+                          {"decode__1_1": ("decode", "1_1"), "ukbppp__OID1": ("ukbppp", "OID1")},
+                          {"decode__1_1": res, "ukbppp__OID1": ukb}, {})
+    assert [r.s16_evidence_state for r in rows] == [""] * 5
+    assert [r.evidence_state for r in rows] == ["supportive", "inconclusive", "inconclusive", "inconclusive", "supportive"]
+
+
+def test_s16_state_is_set_only_for_a_decode_instrument_with_an_smp_colocalization(tmp_path):
+    dec = run(unit(("F_ok",)), FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "d"))
+    ukb = run(ukb_unit(), FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "k"))
+    hyps = [hyp("d1", "decrease", "F_ok"),
+            hyp("k1", "decrease", "F_ok", "OID1").model_copy(update={"instrument_source": "ukbppp", "platform": "Olink"})]
+    rows = build_evidence(hyps, {"d1": "decode__1_1", "k1": "ukbppp__OID1"},
+                          {"decode__1_1": ("decode", "1_1"), "ukbppp__OID1": ("ukbppp", "OID1")},
+                          {"decode__1_1": dec, "ukbppp__OID1": ukb}, {})
+    assert [(r.evidence_state, r.s16_evidence_state) for r in rows] == [("supportive", "contradictory"), ("supportive", "")]

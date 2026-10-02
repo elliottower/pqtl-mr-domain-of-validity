@@ -3,14 +3,17 @@ only what a test or synthetic_unit.py puts in it; nothing here reaches a real so
 
 What it reproduces of the real ones:
 - files with ETag, Last-Modified and Content-Length, HTTP Range requests (206 with Content-Range,
-  416 past the end), so resumable downloads, tabix and bcftools work against it;
+  416 past the end), so resumable downloads, tabix and bcftools work against it; the ETag is the
+  MD5 of the bytes unless `etags` fixes one for the path, which is how a source that serves other
+  bytes under an unchanged name, size and ETag is simulated;
 - deCODE's download endpoint, `/<source>/s3/download?token=<token>&file=<Key>`: 403 for any token
   but the folder's current one (`tokens`), so a link can expire and be re-issued; 404 for a file
   the folder does not hold; otherwise it hands over a signed address `/signed/<signature>/...`,
   either by a 302 redirect or, for a source listed in `json_links`, in a JSON body;
 - pre-signed links, `/synapse/<signature>/<file>` and `/signed/<signature>/<source>/<file>`: 403
   for a signature that is not current;
-- JSON endpoints registered by the caller (`json_routes`, `json_prefixes`);
+- JSON endpoints registered by the caller (`json_routes`, `json_prefixes`); a route that returns
+  `bytes` has them sent as the body unchanged, so a reply that is not JSON can be served;
 - faults, queued per path in `faults` and consumed one per request: ("status", code) answers with
   that status; ("break", n) declares the full length, sends n bytes and drops the connection.
 
@@ -33,6 +36,7 @@ LAST_MODIFIED = "Wed, 30 Sep 2026 00:00:00 GMT"
 class FakeRemote:
     def __init__(self):
         self.files: dict[str, bytes] = {}
+        self.etags: dict[str, str] = {}        # path -> an ETag served whatever the bytes are
         self.json_routes: dict[tuple[str, str], JsonRoute] = {}
         self.json_prefixes: list[tuple[str, str, Callable[[str, dict, bytes, Mapping], tuple[int, object]]]] = []
         self.tokens: dict[str, str] = {}
@@ -89,7 +93,7 @@ class FakeRemote:
 
     # ---- content ----------------------------------------------------------------------------------
     def etag(self, path: str) -> str:
-        return hashlib.md5(self.files[path], usedforsecurity=False).hexdigest()
+        return self.etags.get(path) or hashlib.md5(self.files[path], usedforsecurity=False).hexdigest()
 
     def paths_read(self, since: int = 0) -> list[str]:
         """The paths requested from position `since` of the log on."""
@@ -150,7 +154,8 @@ class FakeRemote:
                     break
         if route is not None:
             status, obj = route(parse_qs(url.query), body, h.headers)
-            return self._send(h, status, json.dumps(obj).encode(), {"Content-Type": "application/json"})
+            return self._send(h, status, obj if isinstance(obj, bytes) else json.dumps(obj).encode(),
+                              {"Content-Type": "application/json"})
         if path not in self.files:
             return self._send(h, 404, b"")
         data = self.files[path]

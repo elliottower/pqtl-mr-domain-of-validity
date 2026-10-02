@@ -56,15 +56,17 @@ class AmbiguousInstrumentError(StageBError):
 
 class SourceAbsent(StageBError):
     """Definitive absence at the source, the only condition recorded as the plan's 'unavailable':
-    HTTP 404 or 410, a file its source's listing does not name, or an accession without a
-    harmonised file."""
+    HTTP 404 or 410, a file its source's listing does not name, an accession without a harmonised
+    file, or, for Ensembl only, its HTTP 400 unknown-identifier message naming a requested rsID
+    (an Ensembl 404 is a malformed request, not an absence)."""
 
 
 class RetryableSourceError(StageBError):
     """A fault that says nothing about whether the source holds the file: authentication or
     authorization (401/403), rate limit (429), server error (5xx), timeout, connection reset, or a
-    truncated or corrupt gzip stream. Never recorded as unavailable: the file or unit stays
-    unfinished and a later call retries it. `kind` names the class for the status report."""
+    truncated or corrupt gzip stream. Never recorded as unavailable, however often it repeats: the
+    file or unit stays unfinished and a later call retries it. `kind` names the class for the
+    status report."""
 
     def __init__(self, kind: str, message: str):
         super().__init__(kind, message)

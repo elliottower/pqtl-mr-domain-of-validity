@@ -13,9 +13,10 @@ after it (the image bakes PREREG.md and the sealed stage A files).
     # 3. analyze: one call per instrument unit; refused while a file has no collect record
     $B spawn --run-token <token>
     $B status                            # until every unit is done
-    # 4. after `modal volume get pqtl-v8-stage-b /stage_b/units <UNITS_DIR>` and
-    #    `modal volume get pqtl-v8-stage-b /stage_b/collect <COLLECT_DIR>`
-    $B assemble --run-token <token> --units-dir <UNITS_DIR> --collect-dir <COLLECT_DIR> \
+    # 4. after `modal volume get pqtl-v8-stage-b /stage_b/units inputs/stage_b/units` and
+    #    `modal volume get pqtl-v8-stage-b /stage_b/collect inputs/stage_b/collect` (the gitignored
+    #    inputs directory: the unit directories hold regional extracts, which are never committed)
+    $B assemble --run-token <token> --units-dir inputs/stage_b/units --collect-dir inputs/stage_b/collect \
         --hypotheses stages/A/output/hypotheses.csv --st29 <Eldjarn 2023 MOESM3.xlsx>
     # 5. after `prereg log "SEAL stage=B manifest_sha256=<sha256>"`, a commit and a new deploy (the
     #    image bakes the log): delete the collected whole files; the records and extracts stay
@@ -39,10 +40,15 @@ launch_log.jsonl after `collect` and `spawn`) and PREREG.md authorizes the run f
 given (stage_b.launch.authorize, the shared guard in stages/run_guard); each Modal call makes the
 same check on its baked copies. `collect` and `spawn` refuse units planned from files other than
 the sealed ones. `assemble` accepts a unit directory only under the fingerprint of this run
-(stage_b/checkpoint.py), recomputed from the unit record, the pins, the code and the plan held here
-and the tool versions the unit recorded, only when every unit ran under the same tool versions, and
-only when every planned file has a collect record; it writes the commit to run_info.json and
-INPUTS.tsv and the collect records to collected_files.tsv.
+(stage_b/checkpoint.py), recomputed from the unit record, the pins, the code and the plan held here,
+the tool versions the unit recorded and the collect digest recomputed from the collect records
+given (so a unit computed from other bytes than the recorded ones is refused), only when every unit
+ran under the same tool versions, and only when every planned file has a collect record; it writes
+the commit to run_info.json and INPUTS.tsv and the collect records to collected_files.tsv. It
+writes B/output/ only: evidence.csv, regional_manifest.tsv, collected_files.tsv, run_info.json,
+INPUTS.tsv and MANIFEST.tsv, beside the unit_plan.json `plan` left there. No regional extract and
+no whole file is written to B/output/; `--units-dir` and `--collect-dir` are refused inside the
+repository unless under the gitignored inputs directory (stage_b.launch.private_copy).
 
 `status` writes inputs/stage_b/status/status_<utc>.json and prints its summary: per source, files
 collected, absent, pending and failed (with the error class), and units done, pending and failed.
@@ -61,8 +67,9 @@ from v8_run_guard import PLAN_SHA256, clean_commit
 
 from stage_b.assemble import (build_evidence, collect_unit_dir, load_collect_records, load_st29, regional_rows,
                               write_outputs)
-from stage_b.checkpoint import common_tools, package_sha256, source_pins, unit_fingerprint, unit_tools
-from stage_b.launch import authorize, check_plan_inputs, planned_tasks, sealed_stage_b, spawn_collect, spawn_units
+from stage_b.checkpoint import collect_digest, common_tools, package_sha256, source_pins, unit_fingerprint, unit_tools
+from stage_b.launch import (authorize, check_plan_inputs, planned_tasks, private_copy, sealed_stage_b, spawn_collect,
+                            spawn_units)
 from stage_b.schemas import InputContractError, InstrumentUnit
 from stage_b.status import error_of, status_report
 from stage_b.units import load_hypotheses
@@ -218,17 +225,20 @@ def cmd_assemble(a: argparse.Namespace) -> None:
     plan = json.loads(PLAN_JSON.read_text())
     lines = UNITS.read_text().splitlines()
     units = [InstrumentUnit.model_validate_json(line) for line in lines]
-    collected = load_collect_records(a.collect_dir)
-    missing = {(t.source, t.key) for t in planned_tasks(lines)} - {(r.source, r.key) for r in collected}
+    units_dir = private_copy(a.units_dir, REPO, EXP / "inputs")
+    collected = load_collect_records(private_copy(a.collect_dir, REPO, EXP / "inputs"))
+    records = {(r.source, r.key): r for r in collected}
+    missing = {(t.source, t.key) for t in planned_tasks(lines)} - set(records)
     if missing:
         raise InputContractError(f"{len(missing)} planned files have no collect record in {a.collect_dir} "
                                  f"(first: {sorted(missing)[0]}); stage B is not complete")
     pins, code = source_pins(INPUTS_MANIFEST), package_sha256(HERE / "stage_b")
     results, metas, tools = {}, {}, {}
     for u in units:
-        tools[u.unit_key] = unit_tools(a.units_dir / u.unit_key)
+        tools[u.unit_key] = unit_tools(units_dir / u.unit_key)
+        digest = collect_digest(u, lambda source, key: records[(source, key)])
         results[u.unit_key], metas[u.unit_key] = collect_unit_dir(
-            u, a.units_dir / u.unit_key, unit_fingerprint(u, pins, code, PLAN_SHA256, tools[u.unit_key]))
+            u, units_dir / u.unit_key, unit_fingerprint(u, pins, code, PLAN_SHA256, tools[u.unit_key], digest), digest)
     unit_ids = {k: tuple(v) for k, v in plan["unit_ids"].items()}
     rows = build_evidence(hyps, plan["hypothesis_unit"], unit_ids, results, load_st29(a.st29),
                           plan["hypothesis_source_units"])

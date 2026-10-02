@@ -5,8 +5,10 @@ is unavailable makes the hypothesis inconclusive. A link that expired, a token t
 renewed or a dropped connection is not the source failing, so two classes are kept apart:
 
     SourceAbsent          HTTP 404 or 410. The callers add the other definitive cases: a file the
-                          source's listing does not name, an accession with no harmonised file,
-                          and Ensembl's 400 for an id it does not know (fetch.ensembl_json).
+                          source's listing does not name and an accession with no harmonised
+                          file. Ensembl has its own rule (fetch.ensembl_json): the one absence is
+                          its HTTP 400 whose JSON error is the unknown-identifier message naming a
+                          requested rsID; its 404 is a malformed request and raises as `protocol`.
                           Recorded as unavailable.
     RetryableSourceError  everything else: 401/403 (kind `auth`), 429 (`rate_limit`), 5xx
                           (`server`), any other status (`protocol`), a timeout (`timeout`), a
@@ -15,7 +17,9 @@ renewed or a dropped connection is not the source failing, so two classes are ke
                           recorded: the file or unit stays unfinished.
 
 `attempt` retries a retryable fault inside the call with backoff and then raises it; an `auth`
-fault is raised at once, because waiting does not renew a credential. Messages name the source by
+fault is raised at once, because waiting does not renew a credential. A source that keeps failing
+is never converted to SourceAbsent, here or by any caller: after any number of retryable faults the
+file or unit is unfinished, `status` shows it, and stage B is not assembled. Messages name the source by
 a label the caller passes and the exception by its type only: a URL can carry a token, so no URL
 and no exception text reaches a message, a log or a file.
 """

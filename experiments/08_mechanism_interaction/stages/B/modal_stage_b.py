@@ -34,7 +34,9 @@ Errors (stage_b/remote.py): only a definitive absence (HTTP 404/410, a file the 
 does not name, an accession without a harmonised file) is recorded as unavailable. A refused
 credential (401/403), a rate limit, a server error, a timeout, a dropped connection and a truncated
 or corrupt stream raise: the call fails, leaves a note under /vol/stage_b/errors/, and the file or
-unit stays unfinished until a later call finishes it. `launch_stage_b.py status` lists them.
+unit stays unfinished until a later call finishes it. `launch_stage_b.py status` lists them. A source
+that keeps failing is never turned into "unavailable": Modal's `retries=3` only runs the same call
+again, each run raising the same way, and nothing counts failures or writes a record after them.
 
 Secret `pqtl-stage-b`: SYNAPSE_PAT (UKB-PPP), OPENGWAS, DECODE_FOLDER_TOKEN (the token of the deCODE
 folder link `https://download.decode.is/folder/<token>`; the link expires and is requested again
@@ -44,14 +46,18 @@ SMP-normalized release, S16), DECODE_FILE_URL_TEMPLATE and DECODE_SMP_FILE_URL_T
 of one file of a folder link, with `{token}` and `{key}`, where it differs from
 stage_b.fetch.DECODE_FILE_URL).
 
-The whole files under /vol/stage_b/raw/ are working copies (the plan stores no full file):
-`purge_raw_files` deletes them after stage B is sealed, and the records and regional extracts stay.
+The whole files under /vol/stage_b/raw/ are working copies, held between collection and the stage B
+seal: `purge_raw_files` deletes them after stage B is sealed, and the records and the regional
+extracts of the unit directories stay on the volume. The extracts hold rows of the downloaded files
+and stay private: they are never written to B/output/ or committed; only their hashes
+(regional_manifest.tsv) and the derived summary results are.
 
 A unit checkpoint is resumed only in a directory bound to this run's fingerprint
 (stage_b/checkpoint.py: the unit record, the pinned deCODE annotation files as hashed in the
-container, the stage_b/ code digest, the frozen plan hash, and the versions of Python, the Python
+container, the stage_b/ code digest, the frozen plan hash, the versions of Python, the Python
 packages, R, coloc, susieR, jsonlite, bcftools/htslib and tabix read in the container at the start
-of the call); any other directory raises. Pinned: R 4.4.3 (rocker/r-ver, dated CRAN snapshot for
+of the call, and the collect digest: the sha256 over the collect records of the unit's whole files,
+each with the size and sha256 of the bytes on the volume); any other directory raises. Pinned: R 4.4.3 (rocker/r-ver, dated CRAN snapshot for
 transitive packages), coloc 5.2.3, susieR 0.12.35, jsonlite 2.0.0, htslib/bcftools 1.21, and the
 Python wheels below.
 
@@ -193,13 +199,13 @@ with image.imports():
 
     from fake_remote import FakeRemote
     from stage_b.checkpoint import (package_sha256, source_pins, tool_versions, unit_fingerprint, unit_tools,
-                                    verified_source_pins)
+                                    verified_source_pins, volume_collect_digest)
     from stage_b.collect import collect_one, purge_raw
     from stage_b.coloc_backend import ColocDataset, ColocTask, RscriptColoc
     from stage_b.fetch import (DECODE_FILE_URL, ENSEMBL_REST, EQTLCAT_PATHS, GWASCAT_FTP, KG_PANEL, KG_VCF, OPENGWAS_API,
                                SYNAPSE_RSID_MAPS, SYNAPSE_UKBPPP_EUR, Endpoints, RemoteSources, VolumeFetcher, https_path)
     from stage_b.launch import A_FILES, authorize, sealed_stage_b
-    from stage_b.pipeline import DirStore, Fetcher, process_unit, reset_unavailable
+    from stage_b.pipeline import DirStore, process_unit, reset_unavailable
     from stage_b.plan import PLAN_TABLES, make_plan, pinned_tables
     from stage_b.schemas import CollectTask, InstrumentUnit, StageBError
     from stage_b.sentinels import DECODE_ST02, INTERVAL_ST4, UKBPPP_ST9, sheet_header
@@ -215,13 +221,15 @@ def endpoints() -> "Endpoints":
                      decode_smp_file=os.environ.get("DECODE_SMP_FILE_URL_TEMPLATE") or DECODE_FILE_URL)
 
 
-def checkpointed_unit(unit: "InstrumentUnit", fetcher: "Fetcher", pins: dict[str, str], units_root: Path) -> dict:
+def checkpointed_unit(unit: "InstrumentUnit", fetcher: "VolumeFetcher", pins: dict[str, str], units_root: Path) -> dict:
     """One unit under its fingerprint, every step committed to the volume: what `run_unit` does
-    after its guard, and what `dry_run` does with the synthetic units."""
+    after its guard, and what `dry_run` does with the synthetic units. The collect digest is taken
+    from the records under the root the fetcher reads whole files from; a missing record raises."""
     tools = tool_versions()
-    fingerprint = unit_fingerprint(unit, pins, package_sha256(PACKAGE_IMAGE), PLAN_SHA256, tools)
+    collected = volume_collect_digest(fetcher.root, unit)
+    fingerprint = unit_fingerprint(unit, pins, package_sha256(PACKAGE_IMAGE), PLAN_SHA256, tools, collected)
     store = DirStore(units_root / unit.unit_key, commit=vol.commit)
-    result = process_unit(unit, fetcher, RscriptColoc(), store, fingerprint, tools)
+    result = process_unit(unit, fetcher, RscriptColoc(), store, fingerprint, tools, collected)
     vol.commit()
     return result
 
