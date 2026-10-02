@@ -2,7 +2,7 @@
 
 **Status:** FROZEN at `b946087070e4`
 **Plan sha256:** `6cbba0840b213f586ef455b33e569a84a94fc676103b74adef6c46e2e0e70040`
-**Log:** 14 entries, head `2938f33b`
+**Log:** 15 entries, head `733f5b3b`
 **Frozen:** 2026-09-30
 
 Sections use the [OSF Preregistration](https://osf.io/prereg/) question titles verbatim, so
@@ -930,4 +930,5 @@ decide which word to use: `nothing run`, `no results seen`, `results not opened`
 2026-09-30  osf draft 6abd60246cf9e1ded2dbef1b of plan 6cbba0840b213f58  nothing run  ·d1aa4a36
 2026-09-30  OSF draft registration 6abd60246cf9e1ded2dbef1b created from the frozen plan (freeze commit b946087, tag v8-prereg-freeze); all 23 draft responses match the plan; title set by direct API PATCH after prereg set_metadata left it blank  nothing run  ·dc6d1ce2
 2026-09-30  Registered on OSF as https://osf.io/9tzfk/ (date_registered 2026-09-30T19:19:06Z, from draft 6abd60246cf9e1ded2dbef1b, public on approval); nothing computed on held-out evidence or outcomes  nothing run  ·2938f33b
+2026-09-30  Pre-stage note (B, eQTL Catalogue access): the eQTL Catalogue REST API named in the data table is retired. The same GTEx v8 summary statistics are read from the Catalogue's tabix-indexed files on EBI FTP (ftp.ebi.ac.uk/pub/databases/spot/eQTL/sumstats/, paths from eQTL-Catalogue-resources tabix/tabix_ftp_paths.tsv; e.g. GTEx liver leafcutter QTD000270, whole blood QTD000360) by regional tabix query. Same source, datasets and splicing-flag rule; only the access route changes. sha256 of each regional extract recorded in B/output/regional_manifest.tsv  nothing run  ·733f5b3b
 ```
