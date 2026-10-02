@@ -23,8 +23,9 @@ from stage_b.checkpoint import (FINGERPRINT_NAME, PINNED_SOURCES, PY_PACKAGES, R
                                 verified_source_pins)
 from stage_b.coloc_backend import AbfResult, ColocTask, SusieResult
 from stage_b.pipeline import DirStore, process_unit, reset_unavailable
-from stage_b.schemas import (EVIDENCE_COLUMNS, HypothesisInput, InputContractError, InstrumentUnit, OutcomeSpec,
-                             RetrievalError, Sentinel, StaleCheckpointError)
+from stage_b.schemas import (EVIDENCE_COLUMNS, CollectError, CollectRecord, HypothesisInput, InputContractError,
+                             InstrumentUnit, OutcomeSpec, RetryableSourceError, Sentinel, SourceAbsent, SourceFile,
+                             StaleCheckpointError)
 
 INTERFACES = Path(__file__).resolve().parents[2] / "INTERFACES.md"
 PACKAGE = Path(__file__).resolve().parents[1] / "stage_b"
@@ -96,7 +97,7 @@ class FakeFetcher:
     def outcome_region(self, spec, chrom, center, half_width):
         self._count(spec.accession)
         if spec.accession in self.fail_outcomes:
-            raise RetrievalError(f"{spec.accession} gone")
+            raise SourceAbsent(f"{spec.accession} gone")
         return outcome_table({"F_ok": N, "F_small": 30}.get(spec.accession, N))
 
     def ld_panel(self, chrom, center, half_width):
@@ -124,8 +125,9 @@ class FakeFetcher:
 
 def unit(outcomes=("F_ok", "F_small", "F_missing")) -> InstrumentUnit:
     return InstrumentUnit(unit_key="decode__1_1", source="decode", assay_id="1_1", gene_symbol="G", gene_ensembl="ENSG1",
-                          platform="SomaScan", sentinel=SENTINEL, pqtl_locator="https://x/1_1_G_G.txt.gz",
-                          decode_smp_url="https://x/smp/1_1_G_G.txt.gz",
+                          platform="SomaScan", sentinel=SENTINEL, pqtl_locator="1_1_G_G.txt.gz",
+                          pqtl_listing=SourceFile(name="1_1_G_G.txt.gz", size=950_000_000, etag="a" * 32),
+                          smp_listing=SourceFile(name="1_1_G_G.txt.gz", size=940_000_000, etag="b" * 32),
                           outcomes=tuple(OutcomeSpec(accession=a, source="finngen", n_case=1000, n_control=9000,
                                                      risk_coded=True) for a in outcomes))
 
@@ -210,7 +212,7 @@ def test_checkpoints_resume_without_refetching(tmp_path):
 
 
 def test_failed_eqtl_catalogue_leaves_splicing_missing(tmp_path):
-    res = run(unit(("F_ok",)), FakeFetcher(qtl_error=RetrievalError("gone")), StubBackend(H4), DirStore(tmp_path / "u"))
+    res = run(unit(("F_ok",)), FakeFetcher(qtl_error=SourceAbsent("gone")), StubBackend(H4), DirStore(tmp_path / "u"))
     assert res["splicing"] == {"query_failed": True, "detail": "gone", "splicing_candidate": ""}
 
 
@@ -228,7 +230,7 @@ def test_reset_unavailable_retries_only_the_failed_region(tmp_path):
 def test_regional_unavailable_unit(tmp_path):
     class NoPqtl(FakeFetcher):
         def pqtl_region(self, unit, chrom, center, half_width, smp=False):
-            raise RetrievalError("link expired")
+            raise SourceAbsent("deCODE 1_1: HTTP 404")
 
     res = run(unit(("F_ok",)), NoPqtl(), StubBackend(H4), DirStore(tmp_path / "u"))
     row = build_evidence([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1"}, {"decode__1_1": ("decode", "1_1")},
@@ -267,8 +269,8 @@ def test_outputs_and_manifest(tmp_path):
     m = pd.read_csv(manifest, sep="\t", dtype=str)
     assert m.set_index("path").loc["evidence.csv", "sha256"] == sha256_file(tmp_path / "out" / "evidence.csv")
     assert m.set_index("path").loc["evidence.csv", "rows"] == "1"
-    assert set(verify_output_dir(tmp_path / "out", ["evidence.csv"])) == {"evidence.csv", "regional_manifest.tsv",
-                                                                          "run_info.json", "INPUTS.tsv"}
+    assert set(verify_output_dir(tmp_path / "out", ["evidence.csv"])) == {
+        "evidence.csv", "regional_manifest.tsv", "collected_files.tsv", "run_info.json", "INPUTS.tsv"}
     inp, code = read_inputs(tmp_path / "out" / "INPUTS.tsv")
     assert (inp.name, inp.path, inp.sha256) == ("hypotheses", "in.csv", sha256_file(src))
     script = m["script_sha256"].iloc[0]
@@ -294,7 +296,8 @@ def test_s17_sentinel_p_is_the_outcome_p_at_the_sentinel(tmp_path):
 def ukb_unit() -> InstrumentUnit:
     s = SENTINEL.model_copy(update={"source": "ukbppp", "assay_id": "OID1"})
     return unit(("F_ok",)).model_copy(update={"unit_key": "ukbppp__OID1", "source": "ukbppp", "assay_id": "OID1",
-                                              "platform": "Olink", "sentinel": s, "decode_smp_url": ""})
+                                              "platform": "Olink", "sentinel": s, "pqtl_locator": "OID1",
+                                              "pqtl_listing": None, "smp_listing": None})
 
 
 def test_per_source_states_apply_the_primary_rule_with_each_instrument(tmp_path):
@@ -334,8 +337,10 @@ def test_the_fingerprint_changes_with_the_unit_the_pins_the_code_and_the_plan():
     variants = {
         "another outcome list": fp(unit(("F_ok", "F_small"))),
         "another outcome record": fp(u.model_copy(update={"outcomes": (u.outcomes[0].model_copy(update={"n_case": 1001}),)})),
-        "another deCODE link": fp(u.model_copy(update={"pqtl_locator": "https://x/other/1_1_G_G.txt.gz"})),
-        "another SMP link": fp(u.model_copy(update={"decode_smp_url": ""})),
+        "another file name": fp(u.model_copy(update={"pqtl_locator": "1_1_G_H.txt.gz"})),
+        "another listed size": fp(u.model_copy(update={"pqtl_listing": u.pqtl_listing.model_copy(update={"size": 1})})),
+        "another listed ETag": fp(u.model_copy(update={"pqtl_listing": u.pqtl_listing.model_copy(update={"etag": "c" * 32})})),
+        "no SMP file": fp(u.model_copy(update={"smp_listing": None})),
         "another sentinel": fp(u.model_copy(update={"sentinel": SENTINEL.model_copy(update={"pos": SENTINEL.pos + 1})})),
         "another pinned file": fp(u, pins={**PINS, PINNED_SOURCES[0]: "c" * 64}),
         "other code": fp(u, code="d" * 64),
@@ -645,3 +650,88 @@ def test_a_unit_killed_twice_and_resumed_twice_gives_the_tables_of_a_fresh_run(t
     run(u, SteadyFetcher(fail_outcomes={"F_missing"}), StubBackend(H4), resumed)
     assert unit_files(resumed.root) == unit_files(fresh.root)
     assert tables(tmp_path / "resumed", u, resumed.root) == tables(tmp_path / "fresh", u, fresh.root)
+
+
+# ---- only a definitive absence is recorded; every other fault leaves the unit unfinished ----------
+
+class Faulty(SteadyFetcher):
+    """A fetcher that raises `error` the first time step `at` is reached."""
+
+    def __init__(self, at: str, error: Exception):
+        super().__init__(fail_outcomes={"F_missing"})
+        self.at, self.error = at, error
+
+    def _count(self, k):
+        if k == self.at:
+            raise self.error
+        super()._count(k)
+
+
+FAULTS = [RetryableSourceError("auth", "deCODE 1_1: HTTP 403"), RetryableSourceError("rate_limit", "OpenGWAS x: HTTP 429"),
+          RetryableSourceError("server", "x: HTTP 503"), RetryableSourceError("timeout", "x: ReadTimeout"),
+          RetryableSourceError("connection", "x: ChunkedEncodingError"), RetryableSourceError("corrupt", "x: EOFError"),
+          CollectError("no collect record for decode 1_1")]
+
+
+@pytest.mark.parametrize("error", FAULTS, ids=lambda e: getattr(e, "kind", type(e).__name__))
+@pytest.mark.parametrize("at", ["pqtl", "ld", "F_ok", "vep", "qtl", "pqtl_smp"])
+def test_a_fault_that_is_not_an_absence_records_nothing_and_the_resumed_unit_equals_a_fresh_one(tmp_path, at, error):
+    u = unit()
+    fresh = DirStore(tmp_path / "fresh" / "u")
+    done = run(u, SteadyFetcher(fail_outcomes={"F_missing"}), StubBackend(H4), fresh)
+    store = DirStore(tmp_path / "faulty" / "u")
+    with pytest.raises(type(error)) as raised:
+        run(u, Faulty(at, error), StubBackend(H4), store)
+    assert raised.value is error and not store.has("result.json")
+    step = {"pqtl": "pqtl.meta.json", "ld": "ld.npz", "F_ok": "outcome__F_ok.meta.json", "vep": "vep__rs60.json",
+            "qtl": "splicing.json", "pqtl_smp": "pqtl_smp.meta.json"}[at]
+    assert not store.has(step)                                   # the step that failed left no file at all
+    unavailable = sorted(p.name for p in store.root.glob("*.meta.json") if json.loads(p.read_text())["status"] != "ok")
+    assert unavailable in ([], ["outcome__F_missing.meta.json"])  # only the outcome the source does not hold
+    assert run(u, SteadyFetcher(fail_outcomes={"F_missing"}), StubBackend(H4), store) == done
+    assert unit_files(store.root) == unit_files(fresh.root)
+
+
+def test_a_unit_record_cannot_hold_a_url_and_the_fingerprint_reads_the_record_only():
+    u = unit(("F_ok",))
+    for update in ({"pqtl_locator": "https://download.example/folder/token/1_1_G_G.txt.gz"},
+                   {"pqtl_locator": "1_1_G_G.txt.gz?token=abc"},
+                   {"pqtl_listing": {"name": "folder/token/1_1_G_G.txt.gz"}}, {"smp_listing": {"name": "https://x/y.txt.gz"}}):
+        with pytest.raises(ValueError, match="not a URL"):
+            InstrumentUnit(**{**u.model_dump(), **update})
+    record = json.dumps(u.model_dump(mode="json"))
+    assert "http" not in record and "token" not in record
+    assert set(InstrumentUnit.model_fields) == {"unit_key", "source", "assay_id", "gene_symbol", "gene_ensembl", "platform",
+                                                "sentinel", "pqtl_locator", "pqtl_listing", "smp_listing", "outcomes"}
+
+
+def test_collected_files_are_listed_in_the_outputs(tmp_path):
+    res = run(unit(("F_ok",)), FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "u"))
+    rows = build_evidence([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1"}, {"decode__1_1": ("decode", "1_1")},
+                          {"decode__1_1": res}, {})
+    src = tmp_path / "in.csv"
+    src.write_text("x")
+    records = [CollectRecord(status="collected", source="decode", key="1_1", name="1_1_G_G.txt.gz", path="raw/decode/1_1_G_G.txt.gz",
+                             bytes=5, sha256="d" * 64, etag="a" * 32, source_url="https://download.example/folder/<token>/1_1_G_G.txt.gz",
+                             utc="2026-10-02T00:00:00+00:00"),
+               CollectRecord(status="absent", source="gwas_catalog", key="GCST1", detail="GWAS Catalog GCST1 listing: HTTP 404")]
+    write_outputs(tmp_path / "out", rows, [], [src], {"hypotheses": src}, [("", tmp_path)], script_root=tmp_path,
+                  run_token="stageb-token-0001", repo_commit=COMMIT, tools=TOOLS, collected=records)
+    table = pd.read_csv(tmp_path / "out" / "collected_files.tsv", sep="\t", dtype=str, keep_default_na=False)
+    assert table[["source", "key", "status", "bytes", "sha256"]].values.tolist() == [
+        ["decode", "1_1", "collected", "5", "d" * 64], ["gwas_catalog", "GCST1", "absent", "", ""]]
+    assert "collected_files.tsv" in verify_output_dir(tmp_path / "out", ["evidence.csv"])
+
+
+def test_a_variant_ensembl_does_not_know_leaves_protein_altering_missing_unless_st29_flags_it(tmp_path):
+    class NoVep(FakeFetcher):
+        def vep(self, rsids, build):
+            raise SourceAbsent("VEP GRCh38: HTTP 400, the id is not known to Ensembl")
+
+    res = run(unit(("F_ok",)), NoVep(), StubBackend(H4), DirStore(tmp_path / "u"))
+    assert res["vep"]["rs60"]["hit"] is None and res["outcomes"]["F_ok"]["coloc_run"] is True
+    args = ([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1"}, {"decode__1_1": ("decode", "1_1")}, {"decode__1_1": res})
+    assert build_evidence(*args, {})[0].protein_altering == ""
+    flagged = {("soma", "1_1"): {"N platforms tested": 1, "cis pQTL on both and high correlation (> 0.5)": "N",
+                                 "PAV olink": "N", "PAV soma": "Y"}}
+    assert build_evidence(*args, flagged)[0].protein_altering is True

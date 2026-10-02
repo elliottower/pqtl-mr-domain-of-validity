@@ -45,7 +45,7 @@ file is wrong.
   fingerprint digest adds `power_v9/power_v9_fast.py`; the digest is the same in the repository
   and in a Modal image.
 - Commit identity. A real run is started from a commit: every launcher (`modal_stage_a.py`,
-  `launch_stage_b.py spawn` and `assemble`, `modal_stage_c.py`) first calls
+  `launch_stage_b.py plan`, `collect`, `spawn` and `assemble`, `modal_stage_c.py`) first calls
   `v8_run_guard.clean_commit`, which refuses unless `git status --porcelain` is empty for
   `experiments/08_mechanism_interaction/stages` and `PREREG.md`. Each Modal image carries that
   commit as `V8_REPO_COMMIT` (`baked_commit`: empty when the tree is not clean), and every real-run
@@ -59,7 +59,9 @@ file is wrong.
 - Long loops checkpoint inside the unit of work and resume from disk. A checkpoint is resumed only
   under the fingerprint of the run that wrote it. Stage B binds each unit directory
   (`FINGERPRINT.json`, and the `fingerprint` field of `result.json`) to the sha256 of the full
-  `InstrumentUnit`, the source pins (the deCODE annotation and excluded-variant files of
+  `InstrumentUnit` (which names each source file by identity: source, assay or SeqId and, for a
+  deCODE file, its name, size and ETag in the pinned folder listing; never a URL or token, so a
+  re-issued link or renewed token changes no fingerprint), the source pins (the deCODE annotation and excluded-variant files of
   `modal_inputs_manifest.json`, hashed in the container), the `stage_b/` code digest, the frozen
   plan hash and the tool versions read in the container when the unit starts
   (`stage_b.checkpoint.tool_versions`: Python and the Python packages, R, coloc, susieR, jsonlite,
@@ -98,7 +100,7 @@ file is wrong.
   the predecessor MANIFEST.tsv files the stage reads (B and C: A's; D: A's, B's and C's) and
   refuses unless each has the sealed sha256. The stage then checks the predecessor files it reads
   against that manifest, by sha256 and row count: B `hypotheses.csv` and `outcome_trait_coding.tsv`
-  (`stage_b.launch.authorize`, at `spawn`, at `assemble` and in every Modal call), C
+  (`stage_b.launch.authorize`, at `plan`, `collect`, `spawn` and `assemble` and in every Modal call), C
   `hypotheses.csv` (`run_stage_c.run`), D every listed file of A, B and C. C needs B's seal in the
   log and opens no stage B file.
 - Each Modal image bakes `PREREG.md` and the predecessor files its guard checks (B: A's
@@ -114,11 +116,19 @@ file is wrong.
   `--what cross_stage` for `D/tests/test_cross_stage_seal.py`, which needs all four stage projects
   in one image. A report is never overwritten: the earlier one is moved to `superseded/` first.
 - Output directories `stages/<stage>/output/` hold small tables committed at the stage commit;
-  raw downloads go under `experiments/08_mechanism_interaction/inputs/` (gitignored).
+  raw downloads go under `experiments/08_mechanism_interaction/inputs/` (gitignored). The whole
+  files stage B collects (deCODE per-SeqId files, UKB-PPP tars and rsID maps, GWAS Catalog files
+  without an index) are held on the `pqtl-v8-stage-b` volume under `/stage_b/raw/` and are never
+  copied into the repository; `collected_files.tsv` records each one's size and sha256.
 - Pinned raw inputs live on the Modal volume `pqtl-v8-inputs` under `/08_mechanism_interaction/`,
   mirroring the experiment directory (`inputs/{decode,karim2026,ot_26.09,ukbppp}/`,
   `feasibility/v2_all_indications/inputs/`); `modal_inputs_manifest.json` pins every file by
-  sha256. Real runs mount it read-only at `/inputs`. ChEMBL 37 is read from
+  sha256 (`scripts/upload_inputs_to_modal.py` for the directories, `scripts/add_inputs_to_modal.py`
+  for files added later, `scripts/modal_verify_inputs.py` to hash them on Modal). Among them are
+  the five tables stage B's `plan` reads: the Sun 2023 (`inputs/ukbppp/sun2023_MOESM3_ESM.xlsx`),
+  Ferkingstad 2021 (`inputs/decode/ferkingstad2021_MOESM4_ESM.xlsx`) and Sun 2018 supplementary
+  workbooks, the OpenGWAS listing, and the listing of the deCODE proteomics folder
+  (`inputs/decode/decode_proteomics_folder_listing_2026-09-30.json`: file name, size and ETag). Real runs mount it read-only at `/inputs`. ChEMBL 37 is read from
   `proteome-mr-claim-audit-inputs` at `/chembl_37/`, read-only, and never written.
 
 ## Who may read what
@@ -258,17 +268,73 @@ directory>`); the repository files stage A reads are baked into the image. Outpu
 | evidence_state_ukbppp, evidence_state_decode | the primary evidence rule applied with that source's instrument against the row's selected outcome GWAS (descriptive table 12, agreement where a gene has cis-pQTLs in both); equals `evidence_state` for the selected source; inconclusive where the source's regional file does not resolve; empty where the row names no assay in that source |
 
 Also `regional_manifest.tsv` (one row per regional extract: source, protein/study, window,
-variants, sha256), `run_info.json` (stage, run token, repository commit, code digest, and the tool
-versions the units ran under), `INPUTS.tsv`, `MANIFEST.tsv`. Regional extraction and coloc run on Modal with per-protein
-checkpoints. For table 12, each hypothesis's outcome GWAS is also colocalized with its UKB-PPP
+variants, sha256), `collected_files.tsv` (one row per collect record: source, key, status, name,
+bytes, sha256, md5, etag, last_modified, source_url, detail, utc), `run_info.json` (stage, run
+token, repository commit, code digest, and the tool versions the units ran under), `INPUTS.tsv`,
+`MANIFEST.tsv`. For table 12, each hypothesis's outcome GWAS is also colocalized with its UKB-PPP
 and deCODE instruments where it names assays in them; `unit_plan.json` maps each hypothesis to
 those units (`hypothesis_source_units`). The deCODE annotation and excluded-variant files are
 read from the `pqtl-v8-inputs` volume, mounted read-only.
 
+Stage B runs on Modal in three phases, each behind the run guard (`launch_stage_b.py`):
+
+1. `plan` (`modal_stage_b.py::plan_remote`, `stage_b/plan.py`) reads the sealed stage A files and
+   the five pinned instrument tables, each hashed against `modal_inputs_manifest.json` before it is
+   read, and writes `units.jsonl` and `unit_plan.json`. A deCODE instrument is located by its SeqId
+   in the pinned folder listing; a SeqId the listing does not name exactly once has no regional
+   file. A unit holds identities only: `pqtl_locator` (UKB-PPP OID, deCODE file name, INTERVAL
+   OpenGWAS id), `pqtl_listing` and `smp_listing` (name, size, ETag). No link or token is in
+   `units.jsonl`, `unit_plan.json`, a fingerprint or a log.
+2. `collect` (`collect_file`, `stage_b/collect.py`), one Modal call per whole file whatever the
+   number of units that read it: deCODE per-SeqId files (and the SMP-normalized ones for S16 where
+   a listing of that folder is pinned), UKB-PPP per-protein tars, UKB-PPP per-chromosome rsID maps,
+   and GWAS Catalog harmonised files without a tabix index. A file is written to
+   `/stage_b/raw/<source>/<name>` on the `pqtl-v8-stage-b` volume, resumed by HTTP Range, the
+   volume committed every 256 MB, and gets a record `/stage_b/collect/<source>/<key>.json`:
+   status, name, bytes, sha256, ETag, Last-Modified, the source address without query string or
+   token, UTC time. It is accepted only with the length the source declared, the size and ETag of
+   the pinned listing (deCODE), the MD5 the source declares (Synapse), and, for `.gz`, a stream
+   that decompresses to its end. The record has status `absent` for a file the source does not
+   hold and `remote_indexed` for a GWAS Catalog file that has a tabix index (queried by region).
+   A deCODE file is requested from `https://download.decode.is/s3/download?token=<token>&file=<Key>`
+   (the form deCODE's download page builds), whose reply is followed whether it redirects to a
+   signed address or carries one in a JSON body; the token and the signed address are never
+   written. The files under `/stage_b/raw/` are working copies: the plan stores no full file, and
+   `launch_stage_b.py purge` (`purge_raw_files`) deletes them once stage B's SEAL is logged, its
+   output verifies against the seal, every unit has its result and every planned file its record.
+   The records and the regional extracts stay.
+3. `spawn` (`run_unit`, `stage_b/pipeline.py`), one call per instrument unit, refused while a
+   planned file has no record. Whole files are read only from the volume, after their size and
+   sha256 match their record; a missing record raises `CollectError`. Queries by region stay
+   remote: OpenGWAS associations, tabix on FinnGen, indexed GWAS Catalog files and the eQTL
+   Catalogue (its EBI FTP paths read over HTTPS on the same host), bcftools on 1000 Genomes,
+   Ensembl, GTEx. Each step of a unit is checkpointed.
+
+Unavailable (`stage_b/remote.py`). A regional or outcome file is recorded as unavailable, and its
+hypotheses take the registered consequence, only on a definitive absence (`SourceAbsent`): HTTP 404
+or 410, a file its source's listing does not name, an accession without exactly one harmonised
+file, or Ensembl's HTTP 400 whose body says the id is not known (an rsID without a mapping on the
+other build has no position there; a lead variant without VEP output leaves `protein_altering`
+missing unless ST29 flags it). A refused credential (401/403), a rate limit (429), a server error (5xx), any
+other status, a timeout, a connection error, a failed tabix or bcftools call and a truncated or
+corrupt gzip or tar stream raise `RetryableSourceError` with that class: nothing is written for the
+step, the call fails and leaves a note under `/stage_b/errors/`, and the file or unit stays
+unfinished until a later call finishes it. Messages carry a source label and the exception type,
+never a URL.
+
+`launch_stage_b.py status` writes `inputs/stage_b/status/status_<utc>.json`: per source, the files
+collected, absent, queried by region, pending, failed (with the error class) and stranded, and the
+units done, pending, failed and stranded. It reads the volume, the state Modal reports for the
+latest call spawned for each file and unit, and whether the app is deployed, so unfinished work in
+an app that is gone is `stranded`, not `pending`.
+
 `unit_plan.json` also records what `plan` read and wrote: `a_outputs` (the sha256 of
-`hypotheses.csv` and `outcome_trait_coding.tsv`) and `units_sha256` (of `units.jsonl`). `spawn`
+`hypotheses.csv` and `outcome_trait_coding.tsv`), `tables` (the sha256 of each instrument table
+read: `ukbppp_st9`, `decode_st02`, `interval_st4`, `opengwas_gwasinfo`, `decode_listing`, and
+`decode_smp_listing` where used) and `units_sha256` (of `units.jsonl`). `collect`, `spawn`
 and `assemble` take `--run-token` and refuse unless `a_outputs` equals the sealed stage A hashes
-and `units.jsonl` is unchanged. Each unit directory on the `pqtl-v8-stage-b` volume holds
+and `units.jsonl` is unchanged; `assemble` also refuses while a planned file has no collect
+record. Each unit directory on the `pqtl-v8-stage-b` volume holds
 `FINGERPRINT.json` (the fingerprint and the tool versions it covers); `run_unit` refuses a directory
 written under another fingerprint or under none. `assemble` recomputes each unit's fingerprint from
 the unit record, the pins, the code and the plan it holds and the tool versions the unit recorded,

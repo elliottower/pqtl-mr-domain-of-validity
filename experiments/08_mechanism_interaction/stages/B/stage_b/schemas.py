@@ -4,7 +4,7 @@ Every threshold below is quoted from PREREG.md (freeze b946087); none is a tunin
 """
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 # ---- registered constants (PREREG §Measured variables, §Other planned analysis S15) ----------
 PRIMARY_P1 = 1e-4
@@ -34,6 +34,8 @@ NotRunReason = Literal["regional_file_unavailable", "outcome_file_unavailable",
                        "fewer_than_50_shared", "direction_ambiguous", ""]
 PlatformConcordance = Literal["concordant", "discordant", "untested"]
 Build = Literal["GRCh37", "GRCh38"]
+# Whole files the collect phase downloads once to the stage B volume (stage_b/collect.py).
+CollectSource = Literal["decode", "decode_smp", "ukbppp", "ukbppp_rsid_map", "gwas_catalog"]
 
 # Canonical regional table, one row per variant, alleles upper case, effect on `ea`.
 VARIANT_COLUMNS = ["rsid", "chrom", "pos", "ea", "oa", "eaf", "beta", "se", "p", "n"]
@@ -52,8 +54,29 @@ class AmbiguousInstrumentError(StageBError):
     """An instrument cannot be resolved to exactly one regional file."""
 
 
-class RetrievalError(StageBError):
-    """A regional file could not be retrieved after retries (the plan's 'unavailable')."""
+class SourceAbsent(StageBError):
+    """Definitive absence at the source, the only condition recorded as the plan's 'unavailable':
+    HTTP 404 or 410, a file its source's listing does not name, or an accession without a
+    harmonised file."""
+
+
+class RetryableSourceError(StageBError):
+    """A fault that says nothing about whether the source holds the file: authentication or
+    authorization (401/403), rate limit (429), server error (5xx), timeout, connection reset, or a
+    truncated or corrupt gzip stream. Never recorded as unavailable: the file or unit stays
+    unfinished and a later call retries it. `kind` names the class for the status report."""
+
+    def __init__(self, kind: str, message: str):
+        super().__init__(kind, message)
+        self.kind = kind
+
+    def __str__(self) -> str:
+        return f"[{self.kind}] {self.args[1]}"
+
+
+class CollectError(StageBError):
+    """The collect record of a file is missing, or a file on the volume is not the file its
+    record (or the pinned listing) describes. Not 'unavailable': the unit stops."""
 
 
 class LDReferenceError(StageBError):
@@ -119,8 +142,23 @@ class OutcomeSpec(_Row):
     risk_coded: bool
 
 
+class SourceFile(_Row):
+    """A source file as the source's own listing names it. Never a URL: a link or token may be
+    re-issued, the file's name, size and ETag stay."""
+
+    name: str
+    size: int | None = None
+    etag: str = ""
+
+
+def _not_a_url(value: str, what: str) -> None:
+    if any(mark in value for mark in ("://", "/", "?")):
+        raise ValueError(f"{what} must be a stable identifier, not a URL or path")
+
+
 class InstrumentUnit(_Row):
-    """One unit of Modal work: an instrument and every outcome GWAS paired with it."""
+    """One unit of Modal work: an instrument and every outcome GWAS paired with it. The record
+    holds identities only (it is hashed into the unit fingerprint): no URL, link or token."""
 
     unit_key: str
     source: InstrumentSource
@@ -129,9 +167,51 @@ class InstrumentUnit(_Row):
     gene_ensembl: str
     platform: Literal["Olink", "SomaScan"]
     sentinel: Sentinel
-    pqtl_locator: str             # Synapse entity id (UKB-PPP), URL (deCODE), OpenGWAS id (INTERVAL)
-    decode_smp_url: str = ""      # S16 only
+    pqtl_locator: str                        # UKB-PPP OID, deCODE file name, INTERVAL OpenGWAS id
+    pqtl_listing: SourceFile | None = None   # deCODE: the file's record in the pinned folder listing
+    smp_listing: SourceFile | None = None    # deCODE SMP-normalized file, S16 only
     outcomes: tuple[OutcomeSpec, ...]
+
+    @model_validator(mode="after")
+    def identities_only(self) -> "InstrumentUnit":
+        _not_a_url(self.pqtl_locator, "pqtl_locator")
+        for listing in (self.pqtl_listing, self.smp_listing):
+            if listing is not None:
+                _not_a_url(listing.name, "a listed file name")
+        return self
+
+
+class CollectTask(_Row):
+    """One whole file for the collect phase: `key` is the SeqId (deCODE), the OID (UKB-PPP), the
+    chromosome (UKB-PPP rsID map) or the accession (GWAS Catalog); name, size and ETag where the
+    pinned listing gives them."""
+
+    source: CollectSource
+    key: str
+    name: str = ""
+    size: int | None = None
+    etag: str = ""
+
+
+class CollectRecord(_Row):
+    """The sidecar of one collect task. `collected`: the file is at `path` (relative to the stage B
+    root on the volume) with these bytes and sha256. `absent`: the source does not hold it.
+    `remote_indexed`: a GWAS Catalog file with a tabix index, queried by region and not downloaded.
+    `source_url` carries no query string and no token."""
+
+    status: Literal["collected", "absent", "remote_indexed"]
+    source: CollectSource
+    key: str
+    name: str = ""
+    path: str = ""
+    bytes: int | None = None
+    sha256: str = ""
+    md5: str = ""
+    etag: str = ""
+    last_modified: str = ""
+    source_url: str = ""
+    detail: str = ""
+    utc: str = ""
 
 
 # ---- outputs ----------------------------------------------------------------------------------
@@ -188,3 +268,5 @@ class RegionalManifestRow(_Row):
 
 
 REGIONAL_MANIFEST_COLUMNS = list(RegionalManifestRow.model_fields)
+COLLECTED_FILES_COLUMNS = ["source", "key", "status", "name", "bytes", "sha256", "md5", "etag", "last_modified",
+                           "source_url", "detail", "utc"]

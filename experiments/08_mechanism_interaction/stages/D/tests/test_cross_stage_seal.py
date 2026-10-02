@@ -133,7 +133,8 @@ def sealed_copy(written: Path, tmp_path: Path) -> tuple[Path, Path]:
 
 
 def test_the_log_holds_the_chain_in_the_plans_order(written):
-    events = [e.event for e in parse_log((written / "PREREG_CHAIN.md").read_text()) if e.chained]
+    logged_before = len(parse_log(PREREG.read_text()))        # the plan's own log, which the writers extend
+    events = [e.event for e in parse_log((written / "PREREG_CHAIN.md").read_text())[logged_before:] if e.chained]
     chain = [e.split(" token=")[0].split(" manifest_sha256=")[0] for e in events if e.startswith(("RUN_START", "SEAL"))]
     assert chain == ["RUN_START stage=A", "SEAL stage=A", "RUN_START stage=B", "SEAL stage=B", "RUN_START stage=C",
                      "SEAL stage=C"]

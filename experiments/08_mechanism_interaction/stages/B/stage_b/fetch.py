@@ -1,43 +1,66 @@
-"""Remote retrieval for stage B (the Fetcher of pipeline.py). Runs inside the Modal image only:
-it needs synapseclient, `tabix` and `bcftools` on PATH, and credentials in the environment.
+"""Retrieval for stage B, in two halves that share one error classification (stage_b/remote.py).
 
-Everything is streamed and filtered to the window; no full summary-statistics file is kept.
-A UKB-PPP tar and an rsID map are downloaded to the container's scratch disk, read once, and
-deleted. Retrieval failures after retries raise RetrievalError, which pipeline.py records as the
-plan's "unavailable".
+`RemoteSources` is the collect phase's view of the sources of whole files (stage_b/collect.py):
+where each file is, under which name, and how to open it from a byte offset. It is the only code
+that holds a deCODE folder token or asks Synapse for a download link, and neither ever leaves it:
+`source_url` is the address without query string and with the token replaced by `<token>`.
+
+`VolumeFetcher` is the Fetcher of pipeline.py for the analyze phase. Whole files are read only from
+the stage B volume, through their collect records (`collect.read_record`, `collect.collected_file`);
+a missing record raises CollectError and a record of `absent` raises SourceAbsent. It queries by
+region what is served by region: OpenGWAS associations, tabix on FinnGen, on GWAS Catalog files that
+have an index and on the eQTL Catalogue, bcftools on 1000 Genomes, Ensembl and GTEx. Each of those
+raises SourceAbsent only on a definitive absence and RetryableSourceError on anything else. For
+Ensembl a definitive absence includes its HTTP 400 for an id it does not know (`ensembl_json`).
 
 Endpoints are the ones named in PREREG §Data collection. Two are not API calls any more:
 - eQTL Catalogue: the REST API is deprecated ("The RESTful API has now been deprecated and is no
   longer available", ebi.ac.uk/eqtl/Data_access, read 2026-09-30); regional queries use tabix on
-  the eQTL Catalogue's own per-dataset files, rate limited as that page asks. Set
-  EQTL_CATALOGUE_ENABLED = False to apply the frozen consequence instead (splicing_candidate
-  missing for every instrument).
+  the eQTL Catalogue's own per-dataset files, rate limited as that page asks. The path table
+  gives them as ftp://ftp.ebi.ac.uk/...; the same host serves the same paths over HTTPS, and both
+  the file and its index are read there (`https_path`), so HTTP statuses are classified as for
+  every other source. Set EQTL_CATALOGUE_ENABLED = False to apply the frozen consequence instead
+  (splicing_candidate missing for every instrument).
 - GTEx v8 median TPM (highest-expression tissue) comes from the GTEx Portal API v2.
+
+DECODE_FILE_URL is the address of one file of a deCODE folder link. deCODE mails
+`https://download.decode.is/folder/<token>`; its download-form script (main.a632ff70.js, sha256
+7ee76c3ae286a588592bce128eed92c17975368913a2fa33d74b1f08867c880f) builds each file's link as
+`/s3/download?token=<token>&file=<Key>`, Key being the file's key in the folder listing. The reply
+is followed whichever way it hands over the file: a redirect to a signed address, or a JSON body
+carrying one (`RemoteFile.open_at`). Size, ETag and range support are those of the final response;
+the signed address is used once and is never logged or stored. Whatever the address, a file is
+accepted only with the size and ETag of the pinned listing (collect.collect_one).
 """
 import csv
 import gzip
 import io
+import json
 import re
 import subprocess
 import tarfile
 import tempfile
 import time
-import urllib.request
+import urllib.parse
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 import numpy as np
 import pandas as pd
 import requests
-import synapseclient
-from synapseclient.core.exceptions import SynapseError
+from pydantic import BaseModel, ConfigDict
 
+from stage_b.collect import collected_file, read_record
 from stage_b.ld import parse_genotypes
 from stage_b.parsers import (decode_to_canonical, filter_decode, filter_decode_annotation, filter_decode_excluded,
                              filter_eqtl_catalogue, filter_finngen, filter_gwas_catalog, filter_ukbppp,
                              normalize_chrom, opengwas_to_canonical, parse_ukbppp_rsid_map, split_lines,
                              ukbppp_to_canonical)
-from stage_b.schemas import Build, InstrumentUnit, LDReferenceError, OutcomeSpec, RetrievalError, Sentinel
+from stage_b.remote import CORRUPT, attempt, check_status, http, http_json
+from stage_b.schemas import (Build, CollectError, CollectTask, InstrumentUnit, LDReferenceError, OutcomeSpec,
+                             RetryableSourceError, Sentinel, SourceAbsent)
 
 EQTL_CATALOGUE_ENABLED = True
 
@@ -84,203 +107,348 @@ GTEX_TO_EQTLCAT = {
 FIXED_TISSUES = ("liver", "blood")   # GTEx v8 liver and whole blood
 
 
-def retry(fn: Callable, what: str, attempts: int = 4, wait_s: float = 5.0):
-    last: Exception | None = None
-    for i in range(attempts):
-        try:
-            return fn()
-        except (requests.RequestException, OSError, subprocess.SubprocessError, SynapseError) as e:
-            last = e
-            time.sleep(wait_s * (2 ** i))
-    raise RetrievalError(f"{what}: {last}")
+DECODE_FILE_URL = "https://download.decode.is/s3/download?token={token}&file={key}"   # token and key URL-encoded
+ENSEMBL_UNKNOWN_ID = re.compile(r"not found|no variant found|unknown", re.IGNORECASE)
+EBI_FTP, EBI_HTTPS = "ftp://ftp.ebi.ac.uk/", "https://ftp.ebi.ac.uk/"
+
+
+class Endpoints(BaseModel):
+    """Where each source is reached. The defaults are the registered sources; the dry run and the
+    tests point them at a local server."""
+    model_config = ConfigDict(frozen=True)
+
+    opengwas_api: str = OPENGWAS_API
+    ensembl_rest: dict[str, str] = ENSEMBL_REST
+    gwascat_ftp: str = GWASCAT_FTP
+    finngen: str = FINNGEN_R12
+    kg_vcf: str = KG_VCF
+    kg_panel: str = KG_PANEL
+    eqtlcat_paths: str = EQTLCAT_PATHS
+    gtex_api: str = GTEX_API
+    decode_file: str = DECODE_FILE_URL
+    decode_smp_file: str = DECODE_FILE_URL
+
+
+class SynapseLike(Protocol):
+    def children(self, parent: str) -> list[dict]:
+        """The files of a Synapse folder, each {"name", "id"}."""
+
+    def file(self, entity_id: str) -> dict:
+        """{"name", "size", "md5", "url"} of a file entity; `url` is a fresh pre-signed link."""
 
 
 def _text_lines(raw) -> Iterator[str]:
     return io.TextIOWrapper(gzip.GzipFile(fileobj=raw), encoding="utf-8")
 
 
-def _header_and_rows(lines: Iterator[str], sep: str | None) -> tuple[list[str], Iterator[list[str]]]:
+def _header_and_rows(lines: Iterator[str], sep: str | None, what: str) -> tuple[list[str], Iterator[list[str]]]:
     rows = split_lines(lines, sep)
     try:
         header = next(rows)
-    except StopIteration as e:
-        raise RetrievalError("empty file") from e
+    except StopIteration:
+        raise RetryableSourceError("corrupt", f"{what}: the file has no header line") from None
     return header, rows
 
 
-def url_header(url: str) -> list[str]:
-    """First non-'##' line of a gzipped remote file (http, https or ftp)."""
+def _local(read: Callable[[], object], what: str):
+    """A read of a file on the volume; a truncated or corrupt stream raises, it is not 'unavailable'."""
+    try:
+        return read()
+    except CORRUPT as err:
+        raise RetryableSourceError("corrupt", f"{what}: {type(err).__name__}") from None
+
+
+def https_path(path: str) -> str:
+    """An EBI FTP path as the same path on the same host over HTTPS; any other address unchanged."""
+    return EBI_HTTPS + path[len(EBI_FTP):] if path.startswith(EBI_FTP) else path
+
+
+def ensembl_json(method: str, url: str, what: str, **kwargs):
+    """The JSON body of an Ensembl REST request. Ensembl answers HTTP 400 for an id it does not
+    know, with a body that says so: that is a definitive answer and raises SourceAbsent. A 400
+    whose body says anything else, and every other status, is classified as for any source."""
     def get():
-        with urllib.request.urlopen(url, timeout=120) as resp:
-            for line in _text_lines(resp):
-                if not line.startswith("##"):
-                    return line.rstrip("\n").split("\t")
-        raise RetrievalError(f"{url}: no header line")
-    return retry(get, f"header of {url}")
+        with requests.request(method, url, **kwargs) as r:
+            if r.status_code == 400 and ENSEMBL_UNKNOWN_ID.search(r.text[:2000]):
+                raise SourceAbsent(f"{what}: HTTP 400, the id is not known to Ensembl")
+            check_status(r.status_code, what)
+            return r.json()
+    return attempt(get, what)
 
 
-def tabix_rows(url: str, chrom: str, start: int, end: int, workdir: Path) -> list[list[str]]:
+def _link_in(reply) -> str | None:
+    """The first http(s) address in a JSON reply, wherever it sits."""
+    if isinstance(reply, str):
+        return reply if reply.startswith(("https://", "http://")) else None
+    for value in reply.values() if isinstance(reply, dict) else reply if isinstance(reply, list) else ():
+        found = _link_in(value)
+        if found is not None:
+            return found
+    return None
+
+
+def url_header(url: str, what: str) -> list[str]:
+    """First non-'##' line of a gzipped remote file."""
+    def first(lines: Iterator[str]) -> list[str]:
+        for line in lines:
+            if not line.startswith("##"):
+                return line.rstrip("\n").split("\t")
+        raise RetryableSourceError("corrupt", f"{what}: the file has no header line")
+
+    def get() -> list[str]:
+        with http("GET", url, what, stream=True, timeout=120) as r:
+            return first(_text_lines(r.raw))
+    return attempt(get, f"header of {what}")
+
+
+def tabix_rows(url: str, chrom: str, start: int, end: int, workdir: Path, what: str) -> list[list[str]]:
     """Rows of a tabix-indexed remote file in the region; tries the chromosome names in use
-    ('1', 'chr1'; for X also '23')."""
+    ('1', 'chr1'; for X also '23'). The file is known to exist (its header was read), so a tabix
+    failure is a retryable fault."""
     names = [chrom, f"chr{chrom}"] + (["23", "chr23"] if chrom == "X" else [])
     for name in names:
-        proc = retry(lambda n=name: subprocess.run(["tabix", url, f"{n}:{max(start, 1)}-{end}"], cwd=workdir,
-                                                   capture_output=True, text=True, timeout=1800, check=True),
-                     f"tabix {url}")
+        proc = attempt(lambda n=name: subprocess.run(["tabix", url, f"{n}:{max(start, 1)}-{end}"], cwd=workdir,
+                                                     capture_output=True, text=True, timeout=1800, check=True),
+                       f"tabix {what}")
         if proc.stdout:
             return [line.split("\t") for line in proc.stdout.splitlines() if line and not line.startswith("#")]
     return []
 
 
-class RemoteFetcher:
-    def __init__(self, synapse_token: str, opengwas_token: str, decode_annotation: Path, decode_excluded: Path,
-                 cache_dir: Path):
-        self.syn = synapseclient.Synapse(silent=True)
-        self.syn.login(authToken=synapse_token)
+# ---- collect phase: where the whole files are ------------------------------------------------------
+
+@dataclass(frozen=True)
+class RemoteFile:
+    """collect.Resolved: one whole file and how to open it. `url` is called at every (re)connection,
+    so a link that expires during a download is replaced by a fresh one. With `link_reply`, the
+    address may answer with the file (directly or through redirects, which are followed) or with a
+    JSON body carrying the file's address, which is then opened; neither address is kept."""
+    name: str
+    source_url: str
+    what: str
+    url: Callable[[], str]
+    indexed: bool = False
+    md5: str = ""
+    link_reply: bool = False
+
+    def open_at(self, offset: int) -> requests.Response:
+        headers = {"Range": f"bytes={offset}-"} if offset else {}
+        r = http("GET", self.url(), self.what, headers=headers, stream=True, timeout=600)
+        if self.link_reply and "json" in r.headers.get("Content-Type", "").lower():
+            with r:
+                link = _link_in(r.json())
+            if link is None:
+                raise RetryableSourceError("protocol", f"{self.what}: a JSON reply without a download address")
+            r = http("GET", link, self.what, headers=headers, stream=True, timeout=600)
+        return r
+
+
+def gwas_catalog_dir(base: str, accession: str) -> str:
+    num = int(re.sub(r"\D", "", accession))
+    lo = (num - 1) // 1000 * 1000 + 1
+    return f"{base}/GCST{lo:06d}-GCST{lo + 999:06d}/{accession}/harmonised/"
+
+
+class RemoteSources:
+    """collect.Sources over the registered sources. `synapse` is called once, on the first UKB-PPP
+    task, so a deCODE or GWAS Catalog call needs no Synapse login."""
+
+    def __init__(self, cache_dir: Path, decode_token: str, synapse: Callable[[], SynapseLike],
+                 endpoints: Endpoints = Endpoints(), decode_smp_token: str = ""):
+        self.cache, self.endpoints = cache_dir, endpoints
+        self.tokens = {"decode": decode_token, "decode_smp": decode_smp_token}
+        self._make_synapse, self._synapse = synapse, None
+
+    def resolve(self, task: CollectTask) -> RemoteFile:
+        if task.source in ("decode", "decode_smp"):
+            return self._decode(task)
+        if task.source == "ukbppp":
+            return self._synapse_file(SYNAPSE_UKBPPP_EUR, lambda name: f"_{task.key}_" in name, f"UKB-PPP {task.key}")
+        if task.source == "ukbppp_rsid_map":
+            tags = {f"_chr{task.key}_"} | ({"_chr23_"} if task.key == "X" else set())
+            return self._synapse_file(SYNAPSE_RSID_MAPS, lambda name: any(t in name for t in tags),
+                                      f"UKB-PPP rsID map chr{task.key}")
+        return self._gwas_catalog(task.key)
+
+    def _decode(self, task: CollectTask) -> RemoteFile:
+        if not task.name:
+            raise CollectError(f"{task.source} {task.key}: the task carries no file name from the pinned listing")
+        token = self.tokens[task.source]
+        if not token:
+            raise RetryableSourceError("auth", f"{task.source} {task.key}: no folder token is set")
+        template = self.endpoints.decode_file if task.source == "decode" else self.endpoints.decode_smp_file
+        key = urllib.parse.quote(task.name, safe="")
+        return RemoteFile(name=task.name, source_url=template.format(token="<token>", key=key), link_reply=True,
+                          what=f"{task.source} {task.key}",
+                          url=lambda: template.format(token=urllib.parse.quote(token, safe=""), key=key))
+
+    def synapse(self) -> SynapseLike:
+        if self._synapse is None:
+            self._synapse = self._make_synapse()
+        return self._synapse
+
+    def _children(self, parent: str) -> list[dict]:
+        path = self.cache / f"synapse_{parent}_children.json"
+        if not path.is_file():
+            kids = [{"name": k["name"], "id": k["id"]} for k in self.synapse().children(parent)]
+            self.cache.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(f".{path.name}.tmp")
+            tmp.write_text(json.dumps(kids))
+            tmp.replace(path)
+        return json.loads(path.read_text())
+
+    def _synapse_file(self, parent: str, match: Callable[[str], bool], what: str) -> RemoteFile:
+        hits = [c for c in self._children(parent) if match(c["name"])]
+        if len(hits) != 1:
+            raise SourceAbsent(f"{what}: the Synapse folder {parent} lists {len(hits)} files for it")
+        entity = hits[0]["id"]
+        meta = self.synapse().file(entity)
+        return RemoteFile(name=meta["name"], source_url=f"synapse:{entity}", what=what, md5=meta.get("md5") or "",
+                          url=lambda: self.synapse().file(entity)["url"])
+
+    def _gwas_catalog(self, accession: str) -> RemoteFile:
+        base = gwas_catalog_dir(self.endpoints.gwascat_ftp, accession)
+        what = f"GWAS Catalog {accession}"
+        with http("GET", base, f"{what} listing", timeout=120) as r:
+            names = set(re.findall(r'href="([^"]+)"', r.text))
+        files = sorted(n for n in names if n.endswith(".h.tsv.gz"))
+        if len(files) != 1:
+            raise SourceAbsent(f"{what}: {len(files)} harmonised files")
+        url = base + files[0]
+        return RemoteFile(name=files[0], source_url=url, what=what, url=lambda: url, indexed=f"{files[0]}.tbi" in names)
+
+
+# ---- analyze phase ---------------------------------------------------------------------------------
+
+class VolumeFetcher:
+    """pipeline.Fetcher: whole files from the stage B volume, regional queries from the network."""
+
+    def __init__(self, root: Path, opengwas_token: str, decode_annotation: Path, decode_excluded: Path,
+                 endpoints: Endpoints = Endpoints()):
+        self.root, self.endpoints = root, endpoints
         self.opengwas_token = opengwas_token
         self.decode_annotation = decode_annotation
         self.decode_excluded = decode_excluded
-        self.cache = cache_dir
+        self.cache = root / "cache"
         self.cache.mkdir(parents=True, exist_ok=True)
         self._last_eqtlcat = 0.0
+
+    def _collected(self, source: str, key: str) -> Path:
+        """The verified file of a collect task; SourceAbsent when collect recorded it absent."""
+        record = read_record(self.root, source, key)
+        if record.status == "absent":
+            raise SourceAbsent(record.detail or f"{source} {key}: absent at the source")
+        return collected_file(self.root, record)
 
     # ---- positions -------------------------------------------------------------------------
     def positions(self, sentinel: Sentinel) -> dict[str, int | None]:
         out: dict[str, int | None] = {"GRCh37": None, "GRCh38": None, sentinel.build: sentinel.pos}
         other: Build = "GRCh37" if sentinel.build == "GRCh38" else "GRCh38"
         if sentinel.rsid.startswith("rs"):
-            def get():
-                r = requests.get(f"{ENSEMBL_REST[other]}/variation/human/{sentinel.rsid}",
-                                 headers={"Content-Type": "application/json"}, timeout=60)
-                r.raise_for_status()
-                return r.json()
-            maps = [m for m in retry(get, f"Ensembl {other} {sentinel.rsid}").get("mappings", [])
+            try:
+                doc = ensembl_json("GET", f"{self.endpoints.ensembl_rest[other]}/variation/human/{sentinel.rsid}",
+                                   f"Ensembl {other} {sentinel.rsid}", headers={"Content-Type": "application/json"},
+                                   timeout=60)
+            except SourceAbsent:       # Ensembl does not know the rsID on this build: no mapping
+                doc = {}
+            maps = [m for m in doc.get("mappings", [])
                     if normalize_chrom(m.get("seq_region_name", "")) == sentinel.chrom
                     and m.get("assembly_name") == other]
             out[other] = int(maps[0]["start"]) if len(maps) == 1 else None
         return out
 
     # ---- pQTL --------------------------------------------------------------------------------
-    def _synapse_children(self, parent: str) -> list[dict]:
-        path = self.cache / f"{parent}_children.csv"
-        if not path.exists():
-            kids = retry(lambda: list(self.syn.getChildren(parent, includeTypes=["file"])), f"list {parent}")
-            pd.DataFrame([{"name": k["name"], "id": k["id"]} for k in kids]).to_csv(path, index=False)
-        return pd.read_csv(path, dtype=str).to_dict(orient="records")
-
-    def _synapse_download(self, entity_id: str, tmp: Path) -> Path:
-        ent = retry(lambda: self.syn.get(entity_id, downloadLocation=str(tmp)), f"download {entity_id}")
-        return Path(ent.path)
-
     def _ukbppp(self, unit: InstrumentUnit, chrom: str, center: int, half_width: int) -> pd.DataFrame:
-        oid = unit.assay_id
-        tars = [c for c in self._synapse_children(SYNAPSE_UKBPPP_EUR) if f"_{oid}_" in c["name"]]
-        if len(tars) != 1:
-            raise RetrievalError(f"UKB-PPP: {len(tars)} tars for {oid}")
+        what = f"UKB-PPP {unit.assay_id}"
+        tar_path = self._collected("ukbppp", unit.assay_id)
         chr_tags = {f"chr{chrom}_"} | ({"chr23_"} if chrom == "X" else set())
-        with tempfile.TemporaryDirectory() as tmp:
-            tar_path = self._synapse_download(tars[0]["id"], Path(tmp))
+
+        def window() -> list[dict]:
             with tarfile.open(tar_path) as tf:
                 members = [m for m in tf.getmembers() if any(t in Path(m.name).name for t in chr_tags)]
                 if len(members) != 1:
-                    raise RetrievalError(f"UKB-PPP tar {tars[0]['name']}: {len(members)} members for chr{chrom}")
-                header, rows = _header_and_rows(_text_lines(tf.extractfile(members[0])), None)
-                window = filter_ukbppp(rows, header, chrom, center, half_width)
-            tar_path.unlink()
-            maps = [c for c in self._synapse_children(SYNAPSE_RSID_MAPS)
-                    if any(re.search(rf"_{t}", c["name"]) for t in chr_tags)]
-            if len(maps) != 1:
-                raise RetrievalError(f"UKB-PPP rsID map: {len(maps)} files for chr{chrom}")
-            map_path = self._synapse_download(maps[0]["id"], Path(tmp))
-            with gzip.open(map_path, "rt") as fh:
-                header, rows = _header_and_rows(fh, "\t")
-                rsids = parse_ukbppp_rsid_map(rows, header, {r["ID"] for r in window})
-            map_path.unlink()
-        return ukbppp_to_canonical(window, rsids)
+                    raise SourceAbsent(f"{what}: the tar holds {len(members)} members for chr{chrom}")
+                header, rows = _header_and_rows(_text_lines(tf.extractfile(members[0])), None, what)
+                return filter_ukbppp(rows, header, chrom, center, half_width)
 
-    def _decode(self, url: str, chrom: str, center: int, half_width: int) -> pd.DataFrame:
-        def get():
-            with requests.get(url, stream=True, timeout=600) as r:
-                r.raise_for_status()
-                header, rows = _header_and_rows(_text_lines(r.raw), "\t")
-                return filter_decode(rows, header, chrom, center, half_width)
-        window = retry(get, f"deCODE {url.split('?')[0]}")
+        def rsids(wanted: set[str]) -> dict[str, str]:
+            with gzip.open(self._collected("ukbppp_rsid_map", chrom), "rt") as fh:
+                header, rows = _header_and_rows(fh, "\t", f"UKB-PPP rsID map chr{chrom}")
+                return parse_ukbppp_rsid_map(rows, header, wanted)
+
+        rows = _local(window, what)
+        return ukbppp_to_canonical(rows, _local(lambda: rsids({r["ID"] for r in rows}), f"UKB-PPP rsID map chr{chrom}"))
+
+    def _decode(self, unit: InstrumentUnit, smp: bool, chrom: str, center: int, half_width: int) -> pd.DataFrame:
+        source = "decode_smp" if smp else "decode"
+        what = f"{source} {unit.assay_id}"
+        path = self._collected(source, unit.assay_id)
+
+        def read(p: Path, parse: Callable):
+            with gzip.open(p, "rt") as fh:
+                header, rows = _header_and_rows(fh, "\t", what)
+                return parse(rows, header)
+
+        window = _local(lambda: read(path, lambda rows, header: filter_decode(rows, header, chrom, center, half_width)), what)
         names = {r["Name"] for r in window}
-        with gzip.open(self.decode_annotation, "rt") as fh:
-            header, rows = _header_and_rows(fh, "\t")
-            ann = filter_decode_annotation(rows, header, names)
-        with gzip.open(self.decode_excluded, "rt") as fh:
-            header, rows = _header_and_rows(fh, "\t")
-            excl = filter_decode_excluded(rows, header, names)
+        ann = read(self.decode_annotation, lambda rows, header: filter_decode_annotation(rows, header, names))
+        excl = read(self.decode_excluded, lambda rows, header: filter_decode_excluded(rows, header, names))
         df, _counts = decode_to_canonical(window, ann, excl)
         return df
 
     def _opengwas(self, dataset: str, chrom: str, center: int, half_width: int) -> pd.DataFrame:
-        def get():
-            r = requests.post(f"{OPENGWAS_API}/associations", timeout=600,
-                              headers={"Authorization": f"Bearer {self.opengwas_token}"},
-                              json={"variant": [f"{chrom}:{max(center - half_width, 1)}-{center + half_width}"],
-                                    "id": [dataset], "proxies": 0})
-            r.raise_for_status()
-            return r.json()
-        recs = retry(get, f"OpenGWAS {dataset}")
+        what = f"OpenGWAS {dataset}"
+        recs = http_json("POST", f"{self.endpoints.opengwas_api}/associations", what, timeout=600,
+                         headers={"Authorization": f"Bearer {self.opengwas_token}"},
+                         json={"variant": [f"{chrom}:{max(center - half_width, 1)}-{center + half_width}"],
+                               "id": [dataset], "proxies": 0})
         if not isinstance(recs, list):
-            raise RetrievalError(f"OpenGWAS {dataset}: unexpected response {str(recs)[:200]}")
+            raise RetryableSourceError("protocol", f"{what}: the response is not a list of associations")
         return opengwas_to_canonical(recs)
 
     def pqtl_region(self, unit: InstrumentUnit, chrom: str, center: int, half_width: int, smp: bool = False) -> pd.DataFrame:
         if unit.source == "ukbppp":
             return self._ukbppp(unit, chrom, center, half_width)
         if unit.source == "decode":
-            return self._decode(unit.decode_smp_url if smp else unit.pqtl_locator, chrom, center, half_width)
+            return self._decode(unit, smp, chrom, center, half_width)
         return self._opengwas(unit.pqtl_locator, chrom, center, half_width)
 
     # ---- outcomes ------------------------------------------------------------------------------
-    def _gwas_catalog_file(self, acc: str) -> tuple[str, bool]:
-        num = int(re.sub(r"\D", "", acc))
-        lo = (num - 1) // 1000 * 1000 + 1
-        base = f"{GWASCAT_FTP}/GCST{lo:06d}-GCST{lo + 999:06d}/{acc}/harmonised/"
-
-        def get():
-            r = requests.get(base, timeout=120)
-            r.raise_for_status()
-            return r.text
-        names = set(re.findall(r'href="([^"]+)"', retry(get, f"GWAS Catalog listing {acc}")))
-        files = sorted(n for n in names if n.endswith(".h.tsv.gz"))
-        if len(files) != 1:
-            raise RetrievalError(f"GWAS Catalog {acc}: {len(files)} harmonised files")
-        return base + files[0], f"{files[0]}.tbi" in names
-
     def outcome_region(self, spec: OutcomeSpec, chrom: str, center: int, half_width: int) -> pd.DataFrame:
         lo, hi = center - half_width, center + half_width
         if spec.source == "opengwas":
             return self._opengwas(spec.accession, chrom, center, half_width)
         if spec.source == "finngen":
-            url = FINNGEN_R12.format(endpoint=re.sub(r"^FINNGEN_R\d+_", "", spec.accession, flags=re.IGNORECASE))
+            what = f"FinnGen {spec.accession}"
+            url = self.endpoints.finngen.format(endpoint=re.sub(r"^FINNGEN_R\d+_", "", spec.accession, flags=re.IGNORECASE))
+            header = url_header(url, what)       # a 404 here is the endpoint's absence
             with tempfile.TemporaryDirectory() as tmp:
-                return filter_finngen(tabix_rows(url, chrom, lo, hi, Path(tmp)), url_header(url), chrom, center, half_width)
-        url, indexed = self._gwas_catalog_file(spec.accession)
-        header = url_header(url)
-        if indexed:
+                return filter_finngen(tabix_rows(url, chrom, lo, hi, Path(tmp), what), header, chrom, center, half_width)
+        what = f"GWAS Catalog {spec.accession}"
+        record = read_record(self.root, "gwas_catalog", spec.accession)
+        if record.status == "absent":
+            raise SourceAbsent(record.detail or f"{what}: absent at the source")
+        if record.status == "remote_indexed":
+            header = url_header(record.source_url, what)
             with tempfile.TemporaryDirectory() as tmp:
-                return filter_gwas_catalog(tabix_rows(url, chrom, lo, hi, Path(tmp)), header, chrom, center, half_width)
+                return filter_gwas_catalog(tabix_rows(record.source_url, chrom, lo, hi, Path(tmp), what), header, chrom,
+                                           center, half_width)
+        path = collected_file(self.root, record)
 
-        def stream():
-            with requests.get(url, stream=True, timeout=1800) as r:
-                r.raise_for_status()
-                h, rows = _header_and_rows(_text_lines(r.raw), "\t")
-                return filter_gwas_catalog(rows, h, chrom, center, half_width)
-        return retry(stream, f"GWAS Catalog {spec.accession}")
+        def read() -> pd.DataFrame:
+            with gzip.open(path, "rt") as fh:
+                header, rows = _header_and_rows(fh, "\t", what)
+                return filter_gwas_catalog(rows, header, chrom, center, half_width)
+        return _local(read, what)
 
     # ---- 1000 Genomes EUR ------------------------------------------------------------------------
     def _eur_samples(self) -> Path:
         path = self.cache / "1000g_eur_samples.txt"
         if not path.exists():
-            def get():
-                r = requests.get(KG_PANEL, timeout=120)
-                r.raise_for_status()
-                return r.text
-            rows = list(csv.DictReader(io.StringIO(retry(get, "1000G panel")), delimiter="\t"))
+            def get() -> str:
+                with http("GET", self.endpoints.kg_panel, "1000G panel", timeout=120) as r:
+                    return r.text
+            rows = list(csv.DictReader(io.StringIO(attempt(get, "1000G panel")), delimiter="\t"))
             eur = sorted(r["sample"] for r in rows if r.get("super_pop") == "EUR")
             if len(eur) != 503:
                 raise LDReferenceError(f"1000G panel lists {len(eur)} EUR samples, expected 503")
@@ -289,16 +457,16 @@ class RemoteFetcher:
 
     def ld_panel(self, chrom: str, center_grch38: int, half_width: int) -> tuple[pd.DataFrame, np.ndarray]:
         samples = self._eur_samples()
-        url = KG_VCF.format(chrom=chrom)
+        url = self.endpoints.kg_vcf.format(chrom=chrom)
         fmt = "%CHROM\t%POS\t%ID\t%REF\t%ALT[\t%GT]\n"
         with tempfile.TemporaryDirectory() as tmp:
             for name in (chrom, f"chr{chrom}"):
                 region = f"{name}:{max(center_grch38 - half_width, 1)}-{center_grch38 + half_width}"
                 cmd = (f"bcftools view -r {region} -S {samples} --force-samples -m2 -M2 -Ou '{url}' | "
                        f"bcftools query -f '{fmt}'")
-                proc = retry(lambda c=cmd: subprocess.run(["bash", "-o", "pipefail", "-c", c], cwd=tmp,
-                                                          capture_output=True, text=True, timeout=3600, check=True),
-                             f"1000G {region}")
+                proc = attempt(lambda c=cmd: subprocess.run(["bash", "-o", "pipefail", "-c", c], cwd=tmp,
+                                                            capture_output=True, text=True, timeout=3600, check=True),
+                               f"1000G {region}")
                 if proc.stdout:
                     return parse_genotypes(proc.stdout.splitlines())
         raise LDReferenceError(f"1000G EUR returned no records for chr{chrom}:{center_grch38}")
@@ -308,57 +476,44 @@ class RemoteFetcher:
         out = []
         for i in range(0, len(rsids), 200):
             batch = [r for r in rsids[i:i + 200] if r.startswith("rs")]
-
-            def post(b=batch):
-                r = requests.post(f"{ENSEMBL_REST[build]}/vep/human/id", json={"ids": b}, timeout=300,
-                                  headers={"Content-Type": "application/json", "Accept": "application/json"})
-                r.raise_for_status()
-                return r.json()
             if batch:
-                out += retry(post, f"VEP {build}")
+                out += ensembl_json("POST", f"{self.endpoints.ensembl_rest[build]}/vep/human/id", f"VEP {build}",
+                                    json={"ids": batch}, timeout=300,
+                                    headers={"Content-Type": "application/json", "Accept": "application/json"})
         return out
 
     # ---- eQTL Catalogue (GTEx v8) ------------------------------------------------------------------
     def _eqtlcat_paths(self) -> pd.DataFrame:
         path = self.cache / "eqtlcat_tabix_ftp_paths.tsv"
         if not path.exists():
-            def get():
-                r = requests.get(EQTLCAT_PATHS, timeout=120)
-                r.raise_for_status()
-                return r.text
-            path.write_text(retry(get, "eQTL Catalogue path table"))
+            def get() -> str:
+                with http("GET", self.endpoints.eqtlcat_paths, "eQTL Catalogue path table", timeout=120) as r:
+                    return r.text
+            path.write_text(attempt(get, "eQTL Catalogue path table"))
         return pd.read_csv(path, sep="\t", dtype=str)
 
     def _top_tpm_tissue(self, gene_ensembl: str) -> str:
-        def ref():
-            r = requests.get(f"{GTEX_API}/reference/gene", timeout=60,
-                             params={"geneId": gene_ensembl.split(".")[0], "gencodeVersion": "v26",
-                                     "genomeBuild": "GRCh38/hg38"})
-            r.raise_for_status()
-            return r.json()["data"]
-        genes = retry(ref, f"GTEx gene {gene_ensembl}")
+        genes = http_json("GET", f"{self.endpoints.gtex_api}/reference/gene", f"GTEx gene {gene_ensembl}", timeout=60,
+                          params={"geneId": gene_ensembl.split(".")[0], "gencodeVersion": "v26",
+                                  "genomeBuild": "GRCh38/hg38"})["data"]
         if len(genes) != 1:
-            raise RetrievalError(f"GTEx: {len(genes)} gencode ids for {gene_ensembl}")
-
-        def med():
-            r = requests.get(f"{GTEX_API}/expression/medianGeneExpression", timeout=60,
-                             params={"gencodeId": genes[0]["gencodeId"], "datasetId": "gtex_v8"})
-            r.raise_for_status()
-            return r.json()["data"]
-        rows = retry(med, f"GTEx median TPM {gene_ensembl}")
+            raise SourceAbsent(f"GTEx: {len(genes)} gencode ids for {gene_ensembl}")
+        rows = http_json("GET", f"{self.endpoints.gtex_api}/expression/medianGeneExpression",
+                         f"GTEx median TPM {gene_ensembl}", timeout=60,
+                         params={"gencodeId": genes[0]["gencodeId"], "datasetId": "gtex_v8"})["data"]
         if not rows:
-            raise RetrievalError(f"GTEx: no median TPM for {gene_ensembl}")
+            raise SourceAbsent(f"GTEx: no median TPM for {gene_ensembl}")
         top = max(rows, key=lambda x: (float(x["median"]), x["tissueSiteDetailId"]))["tissueSiteDetailId"]
         if top not in GTEX_TO_EQTLCAT:
-            raise RetrievalError(f"GTEx tissue {top} not in the eQTL Catalogue crosswalk")
+            raise SourceAbsent(f"GTEx tissue {top} not in the eQTL Catalogue crosswalk")
         group = GTEX_TO_EQTLCAT[top]
         if group is None:
-            raise RetrievalError(f"highest-median-TPM tissue {top} has no eQTL Catalogue GTEx dataset")
+            raise SourceAbsent(f"highest-median-TPM tissue {top} has no eQTL Catalogue GTEx dataset")
         return group
 
     def qtl_regions(self, gene_ensembl: str, chrom: str, center_grch38: int, half_width: int) -> dict[str, dict[str, pd.DataFrame]]:
         if not EQTL_CATALOGUE_ENABLED:
-            raise RetrievalError("eQTL Catalogue regional queries disabled (frozen consequence applies)")
+            raise SourceAbsent("eQTL Catalogue regional queries disabled (frozen consequence applies)")
         paths = self._eqtlcat_paths()
         gtex = paths[paths["study_label"] == "GTEx"]
         tissues = sorted(set(FIXED_TISSUES) | {self._top_tpm_tissue(gene_ensembl)})
@@ -369,13 +524,13 @@ class RemoteFetcher:
                 for qm in ("ge", "leafcutter"):
                     row = gtex[(gtex["sample_group"] == t) & (gtex["quant_method"] == qm)]
                     if len(row) != 1:
-                        raise RetrievalError(f"eQTL Catalogue: {len(row)} GTEx {qm} datasets for {t}")
-                    url = row["ftp_path"].iloc[0]
+                        raise SourceAbsent(f"eQTL Catalogue: {len(row)} GTEx {qm} datasets for {t}")
+                    url, what = https_path(row["ftp_path"].iloc[0]), f"eQTL Catalogue GTEx {t} {qm}"
                     wait = EQTLCAT_MIN_INTERVAL_S - (time.monotonic() - self._last_eqtlcat)
                     if wait > 0:
                         time.sleep(wait)
-                    header = url_header(url)
-                    rows = tabix_rows(url, chrom, center_grch38 - half_width, center_grch38 + half_width, Path(tmp))
+                    header = url_header(url, what)
+                    rows = tabix_rows(url, chrom, center_grch38 - half_width, center_grch38 + half_width, Path(tmp), what)
                     self._last_eqtlcat = time.monotonic()
                     out[t][qm] = filter_eqtl_catalogue(rows, header, chrom, center_grch38, half_width)
         return out

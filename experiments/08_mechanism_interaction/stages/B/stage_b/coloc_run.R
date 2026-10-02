@@ -15,9 +15,11 @@ req <- fromJSON(args[1], simplifyVector = TRUE, simplifyDataFrame = FALSE, simpl
 as_dataset <- function(d) {
   out <- list(snp = as.character(d$snp), beta = as.numeric(d$beta), varbeta = as.numeric(d$varbeta),
               N = as.numeric(d$N), type = as.character(d$type))
-  if (!is.null(d$MAF)) out$MAF <- as.numeric(d$MAF)
-  if (!is.null(d$sdY)) out$sdY <- as.numeric(d$sdY)
-  if (!is.null(d$s)) out$s <- as.numeric(d$s)
+  # `[[` matches a name exactly. `d$s` matches partially: in a quantitative dataset sent without
+  # `s` and `sdY` (the eQTL / sQTL side) it returns `snp`, and coloc then stops on a non-numeric `s`.
+  if (!is.null(d[["MAF"]])) out$MAF <- as.numeric(d[["MAF"]])
+  if (!is.null(d[["sdY"]])) out$sdY <- as.numeric(d[["sdY"]])
+  if (!is.null(d[["s"]])) out$s <- as.numeric(d[["s"]])
   out
 }
 

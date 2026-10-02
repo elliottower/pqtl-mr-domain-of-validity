@@ -1,25 +1,32 @@
 """Stage B behind the shared run guard (stages/run_guard/v8_run_guard.py), free of `modal` so the
-guard seam is testable: `launch_stage_b.py spawn` passes `modal.Function.spawn`, tests pass a fake.
+guard seam is testable: `launch_stage_b.py` passes `modal.Function.spawn`, tests pass a fake.
 
 `authorize` is the one check every entry point makes before reading anything: PREREG.md passes
 `prereg check`; its log holds `SEAL stage=A manifest_sha256=<sha256>` and, after it, `RUN_START
 stage=B token=<token>`; the seal equals the sha256 of stage A's MANIFEST.tsv; and the two stage A
 files stage B reads (hypotheses.csv, outcome_trait_coding.tsv) have the sha256 and row count that
-manifest lists. `launch_stage_b.py spawn` and `assemble` call it on the working tree, the Modal
-function on the copies baked into its image.
+manifest lists. `launch_stage_b.py` calls it on the working tree, each Modal function on the copies
+baked into its image.
 
-`spawn_units` then requires that unit_plan.json was planned from those sealed files and that
-units.jsonl is the file the plan wrote, so no unit derived from another hypotheses.csv is spawned.
-Each unit carries the token so the Modal function applies the same guard.
+`spawn_collect` and `spawn_units` then require that unit_plan.json was planned from those sealed
+files and that units.jsonl is the file the plan wrote, so no file is collected and no unit analyzed
+for another hypotheses.csv. `spawn_collect` starts one call per whole file (collect.collect_tasks);
+`spawn_units` starts one call per unit and refuses while any of those files has no collect record.
+Each call carries the token, so the Modal function applies the same guard.
+
+`sealed_stage_b` is the check before the collected whole files are deleted (collect.purge_raw): the
+log holds a chained `SEAL stage=B manifest_sha256=<sha256>` and, where the caller has stage B's
+MANIFEST.tsv, that file has the sealed sha256.
 """
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from pathlib import Path
 
 from v8_manifest import MANIFEST_NAME, sha256_file, verify_listed
-from v8_run_guard import require_run
+from v8_run_guard import RunNotAuthorized, check_plan, logged_seals, parse_log, require_run
 
-from stage_b.schemas import InputContractError, InstrumentUnit
+from stage_b.collect import collect_tasks
+from stage_b.schemas import CollectTask, InputContractError, InstrumentUnit
 
 A_FILES = ("hypotheses.csv", "outcome_trait_coding.tsv")
 
@@ -28,6 +35,22 @@ def authorize(prereg: Path, run_token: str, a_output: Path) -> dict[str, str]:
     """Raises unless stage B may run; returns the sealed sha256 of each file in A_FILES."""
     require_run(prereg, "B", run_token, manifests={"A": a_output / MANIFEST_NAME})
     return verify_listed(a_output, A_FILES)
+
+
+def sealed_stage_b(prereg: Path, manifest: Path | None = None) -> str:
+    """The sha256 stage B is sealed under; raises unless PREREG.md passes `prereg check` and its log
+    holds a chained SEAL for stage B (and, when `manifest` is given, unless that MANIFEST.tsv is the
+    sealed one)."""
+    text = prereg.read_text(encoding="utf-8")
+    check_plan(text)
+    entries = parse_log(text)
+    seal = logged_seals(entries, len(entries) + 1).get("B")
+    if seal is None:
+        raise RunNotAuthorized("the PREREG.md log holds no 'SEAL stage=B manifest_sha256=<sha256>'; the collected files "
+                               "are kept until stage B is sealed")
+    if manifest is not None and sha256_file(manifest) != seal:
+        raise RunNotAuthorized(f"{manifest} has sha256 {sha256_file(manifest)}, the log seals stage B as {seal}")
+    return seal
 
 
 def check_plan_inputs(unit_plan: Path, units: Path, sealed: dict[str, str]) -> None:
@@ -41,12 +64,38 @@ def check_plan_inputs(unit_plan: Path, units: Path, sealed: dict[str, str]) -> N
         raise InputContractError(f"{units} has sha256 {got}, {unit_plan} recorded {plan.get('units_sha256')}")
 
 
-def spawn_units(prereg: Path, run_token: str, units: Path, unit_plan: Path, a_output: Path,
-                spawn: Callable[[str, str], str]) -> list[dict]:
-    """`spawn(unit_json, run_token)` starts one call and returns its call id."""
+def planned_units(prereg: Path, run_token: str, units: Path, unit_plan: Path, a_output: Path) -> list[str]:
+    """The lines of units.jsonl, after the guard and the plan check."""
     check_plan_inputs(unit_plan, units, authorize(prereg, run_token, a_output))
+    return units.read_text().splitlines()
+
+
+def planned_tasks(lines: list[str]) -> list[CollectTask]:
+    return collect_tasks(InstrumentUnit.model_validate_json(line) for line in lines)
+
+
+def spawn_collect(prereg: Path, run_token: str, units: Path, unit_plan: Path, a_output: Path,
+                  spawn: Callable[[str, str], str], sources: Collection[str] = ()) -> list[dict]:
+    """`spawn(task_json, run_token)` starts one collect call and returns its call id. `sources`
+    restricts the calls to those sources (all when empty)."""
+    tasks = planned_tasks(planned_units(prereg, run_token, units, unit_plan, a_output))
+    return [{"source": t.source, "key": t.key, "call_id": spawn(t.model_dump_json(), run_token)}
+            for t in tasks if not sources or t.source in sources]
+
+
+def spawn_units(prereg: Path, run_token: str, units: Path, unit_plan: Path, a_output: Path,
+                spawn: Callable[[str, str], str], recorded: Collection[tuple[str, str]] | None = None) -> list[dict]:
+    """`spawn(unit_json, run_token)` starts one call and returns its call id. `recorded` is the set
+    of (source, key) that have a collect record on the volume; when given, nothing is spawned
+    unless it covers every file the units read."""
+    lines = planned_units(prereg, run_token, units, unit_plan, a_output)
+    if recorded is not None:
+        missing = [(t.source, t.key) for t in planned_tasks(lines) if (t.source, t.key) not in recorded]
+        if missing:
+            raise InputContractError(f"{len(missing)} files have no collect record (first: {missing[0]}); "
+                                     "the collect phase is not finished")
     calls = []
-    for line in units.read_text().splitlines():
+    for line in lines:
         u = InstrumentUnit.model_validate_json(line)
         calls.append({"unit_key": u.unit_key, "call_id": spawn(line, run_token)})
     return calls

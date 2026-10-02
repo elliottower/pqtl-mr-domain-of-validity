@@ -6,8 +6,13 @@ that wrote it, so each one carries the fingerprint of the run that may resume it
 
 `DirStore.bind` (pipeline.py) writes it to FINGERPRINT.json before the first step and refuses a
 directory holding another one, so a checkpoint written for a different unit record (another
-outcome list, another deCODE link), other pinned inputs, other code, another plan or another image
+outcome list, another source file), other pinned inputs, other code, another plan or another image
 is never resumed. `result.json` carries the same value and assembly checks it.
+
+The unit record names each source file by identity: the source, the assay or SeqId, and for a
+deCODE file its name, size and ETag in the pinned folder listing (schemas.InstrumentUnit, which
+refuses a URL). No link and no token is in it, so a re-issued deCODE folder link or a renewed
+Synapse or OpenGWAS token leaves every fingerprint, and so every finished checkpoint, as it was.
 
 Tool versions (`tool_versions`) are read where the unit runs, not copied from the image definition:
 Python and the Python packages, R, coloc, susieR and jsonlite as R reports them, bcftools with the

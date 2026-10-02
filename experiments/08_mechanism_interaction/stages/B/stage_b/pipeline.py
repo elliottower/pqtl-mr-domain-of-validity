@@ -3,8 +3,14 @@
 The unit is: sentinel positions -> pQTL region (±1 Mb) -> 1000G EUR LD -> each outcome region
 -> each colocalization -> VEP for each lead variant -> splicing flag -> S16 (deCODE only) ->
 result.json. Every step writes its file to the store and commits before the next starts; a
-restarted unit reads what is on disk and resumes at the first missing step. Network access is
-behind the Fetcher protocol (fetch.py on Modal, fakes in tests) and R behind ColocBackend.
+restarted unit reads what is on disk and resumes at the first missing step. Retrieval is behind
+the Fetcher protocol (fetch.VolumeFetcher on Modal, fakes in tests) and R behind ColocBackend.
+
+A step is recorded as unavailable only when the fetcher raises SourceAbsent, a definitive absence
+at the source (stage_b/remote.py). Every other retrieval fault (RetryableSourceError: an expired
+credential, a rate limit, a server error, a timeout, a broken or corrupt stream) and a missing
+collect record (CollectError) propagate out of `process_unit`: nothing is written for the step, the
+unit has no result.json, and a later call resumes at that step.
 
 Resuming is allowed only under the fingerprint the directory was written with
 (stage_b/checkpoint.py: the full unit record, the source pins, the code digest, the frozen plan
@@ -34,7 +40,7 @@ from stage_b.ld import aligned_ld, proxies
 from stage_b.parsers import restrict_window
 from stage_b.schemas import (PRIMARY_P1, ColocBackendError, PRIMARY_P2, PRIMARY_P12, S15A_P12, S15B_P12, VARIANT_COLUMNS,
                              WINDOW_PRIMARY, WINDOW_WIDE, Build, InstrumentUnit, LDReferenceError,
-                             OutcomeSpec, RetrievalError, Sentinel, StaleCheckpointError)
+                             OutcomeSpec, Sentinel, SourceAbsent, StaleCheckpointError)
 
 SOURCE_BUILD: dict[str, Build] = {"ukbppp": "GRCh38", "decode": "GRCh38", "interval": "GRCh37"}
 OUTCOME_BUILD: dict[str, Build] = {"gwas_catalog": "GRCh38", "finngen": "GRCh38", "opengwas": "GRCh37"}
@@ -148,7 +154,7 @@ def _region_step(store: DirStore, name: str, fetch: Callable[[], pd.DataFrame], 
         df = fetch()
         sha = store.put_table(f"{name}.tsv.gz", df[VARIANT_COLUMNS + [c for c in df.columns if c not in VARIANT_COLUMNS]])
         meta = {"status": "ok", "variants": int(len(df)), "sha256": sha, "window": window, "detail": ""}
-    except RetrievalError as e:
+    except SourceAbsent as e:
         meta = {"status": "unavailable", "variants": 0, "sha256": "", "window": window, "detail": str(e)}
     store.put_json(meta_name, {**meta, "retrieved_utc": pd.Timestamp.now(tz="UTC").isoformat()})
     return store.json(meta_name)
@@ -303,7 +309,7 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
             try:
                 hit = vep_protein_altering(fetcher.vep(rsids, SOURCE_BUILD[unit.source]), unit.gene_ensembl)
                 store.put_json(vname, {"rsids": rsids, "hit": hit, "detail": ""})
-            except RetrievalError as e:
+            except SourceAbsent as e:
                 store.put_json(vname, {"rsids": rsids, "hit": None, "detail": str(e)})
         vep[lead] = store.json(vname)
 
@@ -311,12 +317,12 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
         try:
             qtl = fetcher.qtl_regions(unit.gene_ensembl, s.chrom, pos38, WINDOW_PRIMARY)
             store.put_json("splicing.json", splicing_step(unit, p500, qtl, backend))
-        except RetrievalError as e:
+        except SourceAbsent as e:
             store.put_json("splicing.json", {"query_failed": True, "detail": str(e), "splicing_candidate": ""})
     splicing = store.json("splicing.json")
 
     s16 = {}
-    if unit.source == "decode" and unit.decode_smp_url:
+    if unit.source == "decode" and unit.smp_listing is not None:
         smeta = _region_step(store, "pqtl_smp", lambda: fetcher.pqtl_region(unit, s.chrom, s.pos, WINDOW_WIDE, smp=True),
                              f"{s.chrom}:{s.pos - WINDOW_WIDE}-{s.pos + WINDOW_WIDE} GRCh38")
         for spec in unit.outcomes:
@@ -348,8 +354,9 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
 
 def reset_unavailable(store: DirStore) -> list[str]:
     """Remove the unit's result.json and every regional step recorded as unavailable (and the
-    steps that consumed them), so a rerun retries them. Used only when a failure is shown to be
-    transient (e.g. an expired deCODE link); each use is logged below the line of PREREG.md."""
+    steps that consumed them), so a rerun retries them. Only a definitive absence is recorded as
+    unavailable, so this is for a source shown to hold the file after all; each use is logged
+    below the line of PREREG.md."""
     removed = []
     stale = [p for p in store.root.glob("*.meta.json") if json.loads(p.read_text())["status"] != "ok"]
     for meta in stale:

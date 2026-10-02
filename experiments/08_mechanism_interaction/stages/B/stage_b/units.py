@@ -4,13 +4,13 @@ outcome GWAS its hypotheses selected, so each pQTL region is extracted once.
 Reads only the hypotheses.csv columns in schemas.HYPOTHESIS_INPUT_COLUMNS.
 """
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pandas as pd
 
 from stage_b.schemas import (HYPOTHESIS_INPUT_COLUMNS, PLATFORM, TABLE12_SOURCES, AmbiguousInstrumentError,
-                             HypothesisInput, InputContractError, InstrumentUnit, OutcomeSpec, Sentinel)
+                             HypothesisInput, InputContractError, InstrumentUnit, OutcomeSpec, Sentinel, SourceFile)
 from stage_b.sentinels import select_assay
 
 TRUE = {"true", "1", "yes", "y"}
@@ -51,14 +51,18 @@ def _assays(ids: str) -> list[str]:
 
 
 def build_units(hyps: list[HypothesisInput], sentinels: dict[tuple[str, str], Sentinel],
-                locate: Callable[[Sentinel], str], risk_coded: dict[str, bool], smp_urls: dict[str, str]
+                locate: Callable[[Sentinel], str], risk_coded: dict[str, bool],
+                decode_files: Mapping[str, SourceFile], smp_files: Mapping[str, SourceFile]
                 ) -> tuple[list[InstrumentUnit], dict[str, str], dict[str, str], dict[str, dict[str, str]]]:
     """Returns (units, hypothesis_id -> unit_key, hypothesis_id -> reason it has no unit,
     hypothesis_id -> {source: unit_key} for UKB-PPP and deCODE).
 
-    `locate(sentinel)` gives the pQTL locator (UKB-PPP OID, deCODE URL, INTERVAL OpenGWAS id) and
-    raises AmbiguousInstrumentError when the source cannot name exactly one regional file; such a
-    hypothesis has no regional file and takes the inconclusive state (PREREG §Missing data).
+    `locate(sentinel)` gives the pQTL locator (UKB-PPP OID, deCODE file name, INTERVAL OpenGWAS id;
+    never a URL) and raises AmbiguousInstrumentError when the source cannot name exactly one
+    regional file; such a hypothesis has no regional file and takes the inconclusive state (PREREG
+    §Missing data). `decode_files` and `smp_files` map a SeqId to its record in the pinned deCODE
+    folder listing (non-normalized, and SMP-normalized for S16); a deCODE unit carries them, so
+    its fingerprint names the file by name, size and ETag.
 
     Descriptive table 12 compares evidence states where a gene has cis-pQTLs in both UKB-PPP and
     deCODE, so each hypothesis's outcome GWAS is also paired with its instrument in each of those
@@ -78,7 +82,8 @@ def build_units(hyps: list[HypothesisInput], sentinels: dict[tuple[str, str], Se
         u = by_unit.setdefault(k, {"unit_key": k, "source": s.source, "assay_id": s.assay_id,
                                    "gene_symbol": h.gene_symbol, "gene_ensembl": h.gene_ensembl,
                                    "platform": PLATFORM[s.source], "sentinel": s, "pqtl_locator": loc,
-                                   "decode_smp_url": smp_urls.get(s.assay_id, "") if s.source == "decode" else "",
+                                   "pqtl_listing": decode_files.get(s.assay_id) if s.source == "decode" else None,
+                                   "smp_listing": smp_files.get(s.assay_id) if s.source == "decode" else None,
                                    "outcomes": {}})
         if u["gene_ensembl"] != h.gene_ensembl:
             raise InputContractError(f"assay {s.assay_id} serves two genes: {u['gene_ensembl']}, {h.gene_ensembl}")

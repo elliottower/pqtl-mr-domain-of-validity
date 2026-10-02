@@ -7,6 +7,10 @@ the sentinel (S17); `evidence_state_ukbppp` / `evidence_state_decode` are the pr
 rule applied with each source's instrument (descriptive table 12), empty where the hypothesis
 names no assay in that source.
 
+`collected_files.tsv` lists every record of the collect phase (stage_b/collect.py): each whole file
+with its size, sha256, ETag and source address (no query, no token), and each file recorded absent
+or queried by region.
+
 `write_outputs` also writes run_info.json (run token, repository commit, code digest, the tool
 versions the units ran under) and puts the code digest and the commit in INPUTS.tsv as the
 `stage_code` row.
@@ -24,8 +28,8 @@ from stage_b.checkpoint import FINGERPRINT_NAME
 from stage_b.evidence import (evidence_score, evidence_state, platform_concordance, protein_altering,
                               st29_pav)
 from stage_b.pipeline import safe
-from stage_b.schemas import (EVIDENCE_COLUMNS, REGIONAL_MANIFEST_COLUMNS, TABLE12_SOURCES,
-                             EvidenceRow, EvidenceState, HypothesisInput, InputContractError, InstrumentUnit,
+from stage_b.schemas import (COLLECTED_FILES_COLUMNS, EVIDENCE_COLUMNS, REGIONAL_MANIFEST_COLUMNS, TABLE12_SOURCES,
+                             CollectRecord, EvidenceRow, EvidenceState, HypothesisInput, InputContractError, InstrumentUnit,
                              RegionalManifestRow, StaleCheckpointError)
 
 ST29_SHEET = "ST29_protein_classification"
@@ -187,8 +191,9 @@ def regional_rows(unit_metas: Mapping[str, list[dict]]) -> list[RegionalManifest
 
 def write_outputs(out_dir: Path, evidence: list[EvidenceRow], regional: list[RegionalManifestRow],
                   script_paths: list[Path], input_paths: Mapping[str, Path], roots: Sequence[tuple[str, Path]], *,
-                  script_root: Path, run_token: str, repo_commit: str, tools: Mapping[str, str]) -> Path:
-    """evidence.csv and regional_manifest.tsv first, then run_info.json, INPUTS.tsv (each input,
+                  script_root: Path, run_token: str, repo_commit: str, tools: Mapping[str, str],
+                  collected: Sequence[CollectRecord] = ()) -> Path:
+    """evidence.csv, regional_manifest.tsv and collected_files.tsv first, then run_info.json, INPUTS.tsv (each input,
     path relative to `roots`, and the `stage_code` row) and MANIFEST.tsv in the shared format
     (stages/run_guard/v8_manifest.py). `script_paths` lie under `script_root` (the stage B
     directory) and are hashed by their path relative to it, with the shared guard modules."""
@@ -199,6 +204,10 @@ def write_outputs(out_dir: Path, evidence: list[EvidenceRow], regional: list[Reg
                                               [r.model_dump() for r in evidence], ","),
         out_dir / "regional_manifest.tsv": write_table(out_dir / "regional_manifest.tsv", REGIONAL_MANIFEST_COLUMNS,
                                                        [r.model_dump() for r in regional], "\t"),
+        out_dir / "collected_files.tsv": write_table(
+            out_dir / "collected_files.tsv", COLLECTED_FILES_COLUMNS,
+            [{**r.model_dump(), "bytes": "" if r.bytes is None else r.bytes}
+             for r in sorted(collected, key=lambda r: (r.source, r.key))], "\t"),
     }
     run_info = out_dir / RUN_INFO_NAME
     run_info.write_text(json.dumps({"stage": "B", "run_token": run_token, "repo_commit": repo_commit,
@@ -234,3 +243,10 @@ def collect_unit_dir(unit: InstrumentUnit, unit_dir: Path, fingerprint: str) -> 
                           "sha256": m["sha256"], "status": m["status"], "detail": m["detail"],
                           "retrieved_utc": m["retrieved_utc"]})
     return result, metas
+
+
+def load_collect_records(collect_dir: Path) -> list[CollectRecord]:
+    """Every record under a copy of the volume's collect directory
+    (`modal volume get pqtl-v8-stage-b /stage_b/collect <dir>`), sorted by source and key."""
+    records = [CollectRecord.model_validate_json(p.read_text()) for p in sorted(collect_dir.rglob("*.json"))]
+    return sorted(records, key=lambda r: (r.source, r.key))

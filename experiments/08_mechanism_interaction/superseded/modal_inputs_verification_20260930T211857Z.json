@@ -1,7 +1,7 @@
 {
- "n_manifest": 29,
- "n_remote": 29,
- "n_match": 29,
+ "n_manifest": 26,
+ "n_remote": 26,
+ "n_match": 26,
  "n_mismatch_or_missing": 0,
  "n_not_stamped_uploaded": 0,
  "remote_not_in_manifest": [],
@@ -265,39 +265,9 @@
    "remote_bytes": 28990,
    "uploaded_at": "2026-09-30T21:18:29+00:00",
    "match": true
-  },
-  {
-   "path": "inputs/ukbppp/sun2023_MOESM3_ESM.xlsx",
-   "remote_path": "/08_mechanism_interaction/inputs/ukbppp/sun2023_MOESM3_ESM.xlsx",
-   "local_sha256": "e174964b81e0d16f84e485593d4b349e9c24790f60983724d4f9f37681938cc7",
-   "remote_sha256": "e174964b81e0d16f84e485593d4b349e9c24790f60983724d4f9f37681938cc7",
-   "local_bytes": 34411394,
-   "remote_bytes": 34411394,
-   "uploaded_at": "2026-10-02T16:08:25+00:00",
-   "match": true
-  },
-  {
-   "path": "inputs/decode/ferkingstad2021_MOESM4_ESM.xlsx",
-   "remote_path": "/08_mechanism_interaction/inputs/decode/ferkingstad2021_MOESM4_ESM.xlsx",
-   "local_sha256": "e3f907a11b452f979db8241ed852c1542d00ed5373c39b53c6a79702f8b80ef6",
-   "remote_sha256": "e3f907a11b452f979db8241ed852c1542d00ed5373c39b53c6a79702f8b80ef6",
-   "local_bytes": 44366108,
-   "remote_bytes": 44366108,
-   "uploaded_at": "2026-10-02T16:08:27+00:00",
-   "match": true
-  },
-  {
-   "path": "inputs/decode/decode_proteomics_folder_listing_2026-09-30.json",
-   "remote_path": "/08_mechanism_interaction/inputs/decode/decode_proteomics_folder_listing_2026-09-30.json",
-   "local_sha256": "60d12ba707ccf9bc2a8a907b7867cd5bdbce8a7edf87b8fca4c121d02899e26f",
-   "remote_sha256": "60d12ba707ccf9bc2a8a907b7867cd5bdbce8a7edf87b8fca4c121d02899e26f",
-   "local_bytes": 876004,
-   "remote_bytes": 876004,
-   "uploaded_at": "2026-10-02T16:08:30+00:00",
-   "match": true
   }
  ],
  "volume": "pqtl-v8-inputs",
- "verified_at": "2026-10-02T16:10:31+00:00",
+ "verified_at": "2026-09-30T21:18:57+00:00",
  "manifest_hashed_at": "2026-09-30T21:16:26+00:00"
 }

@@ -106,6 +106,21 @@ def test_r_coloc_abf_matches_the_closed_form():
 
 
 @needs_r
+def test_r_coloc_abf_estimates_sdy_for_a_quantitative_dataset_sent_without_one():
+    m, n2, sd_y = 80, 600.0, 2.0
+    ld = region(m, 0.7)
+    maf = 0.1 + 0.3 * (np.arange(m) % 5) / 4
+    v2 = sd_y ** 2 / (2 * n2 * maf * (1 - maf))          # the variance coloc's sdY estimate inverts exactly
+    z1, z2, se1 = 6.0 * ld[40], 5.0 * ld[40], 0.015
+    snp = [f"rs{i}" for i in range(m)]
+    d1 = ColocDataset(snp=snp, beta=list(z1 * se1), varbeta=[se1 ** 2] * m, N=30000.0, type="quant", MAF=list(maf), sdY=1.0)
+    d2 = ColocDataset(snp=snp, beta=list(z2 * np.sqrt(v2)), varbeta=list(v2), N=n2, type="quant", MAF=list(maf))
+    res = RscriptColoc(r_libs=R_LIBS).run([ColocTask(id="t", method="abf", p1=1e-4, p2=1e-4, p12=5e-6, d1=d1, d2=d2)])["t"]
+    pp, _ = closed_form_abf(z1, se1 ** 2, 0.15 ** 2, z2, v2, (0.15 * sd_y) ** 2, 1e-4, 1e-4, 5e-6)
+    assert list(res.pp) == pytest.approx(list(pp), rel=1e-6, abs=1e-10)
+
+
+@needs_r
 def test_r_coloc_abf_known_answers_shared_and_distinct_signals():
     ld = region(60, 0.6)
     d1, d2 = datasets(10 * ld[30], 10 * ld[30], 0.02, 0.02)

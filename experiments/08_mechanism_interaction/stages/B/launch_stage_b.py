@@ -1,59 +1,71 @@
-"""Stage B launcher: plan the units, spawn them on the deployed Modal app, assemble the outputs.
+"""Stage B launcher: plan, collect, analyze, status, assemble. Every step but `status` is part of the
+stage B run and needs `prereg log "SEAL stage=A manifest_sha256=<sha256>"`, then
+`prereg log "RUN_START stage=B token=<token>"`, a commit, and `modal deploy stages/B/modal_stage_b.py`
+after it (the image bakes PREREG.md and the sealed stage A files).
 
-    # 1. units from hypotheses.csv + the sources' sentinel tables (local, no network)
-    uv run --project stages/B --with modal==1.4.3 python stages/B/launch_stage_b.py plan \
-        --hypotheses stages/A/output/hypotheses.csv --trait-coding stages/A/output/outcome_trait_coding.tsv \
-        --ukbppp-st9 <Sun 2023 supplementary.xlsx> --decode-st02 <Ferkingstad 2021 MOESM4.xlsx> \
-        --interval-st4 <Sun 2018 MOESM4.xlsx> --opengwas-gwasinfo <gwasinfo_all.json> \
-        --decode-urls <urls.txt> [--decode-smp-urls <urls.txt>]
-    # 2. after `prereg log "SEAL stage=A manifest_sha256=<sha256>"` and then
-    #    `prereg log "RUN_START stage=B token=<token>"`, then `modal deploy stages/B/modal_stage_b.py`
-    #    (the image bakes PREREG.md and the sealed stage A files, so deploy after logging) and the
-    #    smoke function passes
-    uv run --project stages/B --with modal==1.4.3 python stages/B/launch_stage_b.py spawn --run-token <token>
-    # 3. after every call finishes: modal volume get pqtl-v8-stage-b /stage_b/units <UNITS_DIR>
-    uv run --project stages/B --with modal==1.4.3 python stages/B/launch_stage_b.py assemble \
-        --run-token <token> --units-dir <UNITS_DIR> --hypotheses ... --st29 <Eldjarn 2023 MOESM3.xlsx>
+    B="uv run --project stages/B --with modal==1.4.3 python stages/B/launch_stage_b.py"
+    # 1. units, on Modal, from the sealed stage A files and the pinned instrument tables
+    $B plan --run-token <token>          # writes B/output/unit_plan.json and inputs/stage_b/units.jsonl; commit the plan
+    # 2. collect: one call per whole file (deCODE files, UKB-PPP tars and rsID maps, GWAS Catalog
+    #    files without an index), each downloaded once to the stage B volume
+    $B collect --run-token <token> [--source decode ...]
+    $B status                            # until every file has a record
+    # 3. analyze: one call per instrument unit; refused while a file has no collect record
+    $B spawn --run-token <token>
+    $B status                            # until every unit is done
+    # 4. after `modal volume get pqtl-v8-stage-b /stage_b/units <UNITS_DIR>` and
+    #    `modal volume get pqtl-v8-stage-b /stage_b/collect <COLLECT_DIR>`
+    $B assemble --run-token <token> --units-dir <UNITS_DIR> --collect-dir <COLLECT_DIR> \
+        --hypotheses stages/A/output/hypotheses.csv --st29 <Eldjarn 2023 MOESM3.xlsx>
+    # 5. after `prereg log "SEAL stage=B manifest_sha256=<sha256>"`, a commit and a new deploy (the
+    #    image bakes the log): delete the collected whole files; the records and extracts stay
+    $B purge
 
-The OpenGWAS listing and the INTERVAL supplement live on the `pqtl-v8-inputs` volume
-(08_mechanism_interaction/feasibility/v2_all_indications/inputs/); `plan` reads local copies,
-fetched with `modal volume get pqtl-v8-inputs <remote path> <local path>` and checked against
-modal_inputs_manifest.json.
+`plan` reads no local table: the Modal function reads the stage A files baked into its image and
+the five tables pinned in modal_inputs_manifest.json on the `pqtl-v8-inputs` volume, and returns
+the plan (stage_b/plan.py). unit_plan.json records the sha256 of every file it read. units.jsonl
+holds identities only (file names, sizes, ETags; no link, no token); it lives in the gitignored
+inputs directory because B/output/ holds only what MANIFEST.tsv lists and unit_plan.json. A plan
+already on disk that differs is moved to inputs/stage_b/superseded/ first.
 
-`spawn` and `assemble` refuse to start unless `git status --porcelain` is empty for stages/ and
-PREREG.md (v8_run_guard.clean_commit; commit unit_plan.json after `plan`, and launch_log.jsonl
-after `spawn`). `assemble` writes that commit to run_info.json and INPUTS.tsv. Both also refuse
-unless PREREG.md passes `prereg check`, its log holds
-`SEAL stage=A manifest_sha256=<sha256>` and then `RUN_START stage=B token=<token>` for the
-`--run-token` given, the seal is the sha256 of stages/A/output/MANIFEST.tsv, and hypotheses.csv and
-outcome_trait_coding.tsv match that manifest (stage_b.launch.authorize, the shared guard in
-stages/run_guard); each Modal call makes the same check on its baked copies. `plan` records the
-sha256 of the stage A files it read and of units.jsonl in unit_plan.json; `spawn` refuses units
-planned from files other than the sealed ones. `assemble` accepts a unit directory only under the
-fingerprint of this run (stage_b/checkpoint.py), recomputed from the unit record, the pins, the
-code and the plan held here and the tool versions the unit recorded, and only when every unit ran
-under the same tool versions.
-Units carry deCODE links, which are credentials of a sort and expire, so units.jsonl lives in
-the gitignored inputs directory, never in stages/B/output/.
+The deCODE folder link is a credential: its token is in the Modal secret `pqtl-stage-b`
+(DECODE_FOLDER_TOKEN) and nowhere else. `collect` can be given `--source decode` to fetch the
+deCODE files first, while a link is valid; a link re-issued later changes no record, no unit and
+no fingerprint.
+
+`plan`, `collect`, `spawn` and `assemble` refuse to start unless `git status --porcelain` is empty
+for stages/ and PREREG.md (v8_run_guard.clean_commit; commit unit_plan.json after `plan`, and
+launch_log.jsonl after `collect` and `spawn`) and PREREG.md authorizes the run for the `--run-token`
+given (stage_b.launch.authorize, the shared guard in stages/run_guard); each Modal call makes the
+same check on its baked copies. `collect` and `spawn` refuse units planned from files other than
+the sealed ones. `assemble` accepts a unit directory only under the fingerprint of this run
+(stage_b/checkpoint.py), recomputed from the unit record, the pins, the code and the plan held here
+and the tool versions the unit recorded, only when every unit ran under the same tool versions, and
+only when every planned file has a collect record; it writes the commit to run_info.json and
+INPUTS.tsv and the collect records to collected_files.tsv.
+
+`status` writes inputs/stage_b/status/status_<utc>.json and prints its summary: per source, files
+collected, absent, pending and failed (with the error class), and units done, pending and failed.
+It asks Modal for the state of the deployed app and of every call the launcher spawned, so work
+that stopped because the app is gone is reported as stranded, not as pending.
 """
 import argparse
 import json
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 import modal
 
-from v8_manifest import sha256_file
+from v8_manifest import MANIFEST_NAME, sha256_file, verify_output_dir
 from v8_run_guard import PLAN_SHA256, clean_commit
 
-from stage_b.assemble import build_evidence, collect_unit_dir, load_st29, regional_rows, write_outputs
+from stage_b.assemble import (build_evidence, collect_unit_dir, load_collect_records, load_st29, regional_rows,
+                              write_outputs)
 from stage_b.checkpoint import common_tools, package_sha256, source_pins, unit_fingerprint, unit_tools
-from stage_b.launch import A_FILES, authorize, check_plan_inputs, spawn_units
-from stage_b.schemas import InputContractError, InstrumentUnit, Sentinel
-from stage_b.sentinels import (decode_sentinels, interval_opengwas_id, interval_sentinels, load_decode_st02,
-                               load_interval_st4, load_ukbppp_st9, ukbppp_sentinels)
-from stage_b.units import build_units, load_hypotheses, load_trait_coding
+from stage_b.launch import authorize, check_plan_inputs, planned_tasks, sealed_stage_b, spawn_collect, spawn_units
+from stage_b.schemas import InputContractError, InstrumentUnit
+from stage_b.status import error_of, status_report
+from stage_b.units import load_hypotheses
 
 HERE = Path(__file__).resolve().parent
 EXP = HERE.parents[1]
@@ -61,66 +73,139 @@ REPO = EXP.parents[1]
 PREREG = EXP / "PREREG.md"
 A_OUTPUT = HERE.parent / "A" / "output"
 INPUTS_MANIFEST = EXP / "modal_inputs_manifest.json"
-UNITS = EXP / "inputs" / "stage_b" / "units.jsonl"
+WORK = EXP / "inputs" / "stage_b"
+UNITS = WORK / "units.jsonl"
 PLAN_JSON = HERE / "output" / "unit_plan.json"
 LOG = HERE / "launch_log.jsonl"
 APP = "pqtl-v8-stage-b"
-DECODE_FILE = re.compile(r"/(\d+_\d+)_[^/?]+\.txt\.gz")
+VOLUME = "pqtl-v8-stage-b"
+STAGE_ROOT = "stage_b"     # the stage B root on the volume (modal_stage_b.ROOT without the mount point)
+FUNCTIONS = ("plan_remote", "collect_file", "run_unit", "stage_state", "purge_raw_files")
 
 
-def decode_url_map(path: Path | None) -> dict[str, str]:
-    if path is None:
-        return {}
-    out = {}
-    for line in path.read_text().split():
-        m = DECODE_FILE.search(line)
-        if not m:
-            raise InputContractError(f"cannot read a SeqId from deCODE link {line.split('?')[0]}")
-        out[m.group(1)] = line.strip()
-    return out
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def log_entry(entry: dict) -> None:
+    with LOG.open("a") as fh:
+        fh.write(json.dumps(entry) + "\n")
 
 
 def cmd_plan(a: argparse.Namespace) -> None:
-    hyps = load_hypotheses(a.hypotheses)
-    coding = load_trait_coding(a.trait_coding)
-    sents: list[Sentinel] = (ukbppp_sentinels(load_ukbppp_st9(a.ukbppp_st9)) + decode_sentinels(load_decode_st02(a.decode_st02))
-                             + interval_sentinels(load_interval_st4(a.interval_st4)))
-    by_key = {(s.source, s.assay_id): s for s in sents}
-    gwasinfo = json.loads(a.opengwas_gwasinfo.read_text())
-    gwasinfo = list(gwasinfo.values()) if isinstance(gwasinfo, dict) else gwasinfo
-    urls, smp = decode_url_map(a.decode_urls), decode_url_map(a.decode_smp_urls)
+    commit = clean_commit(REPO)
+    authorize(PREREG, a.run_token, A_OUTPUT)
+    out = modal.Function.from_name(APP, "plan_remote").remote(a.run_token)
+    units_text, plan = out["units_jsonl"], json.dumps(out["unit_plan"], indent=1, sort_keys=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    for path, text in ((UNITS, units_text), (PLAN_JSON, plan)):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and path.read_text() != text:
+            old = WORK / "superseded" / f"{path.stem}_{stamp}{path.suffix}"
+            old.parent.mkdir(parents=True, exist_ok=True)
+            path.rename(old)
+        path.write_text(text)
+    if sha256_file(UNITS) != out["unit_plan"]["units_sha256"]:
+        raise InputContractError(f"{UNITS} is not the units file the plan recorded")
+    log_entry({"what": "plan", "repo_commit": commit, "units_sha256": out["unit_plan"]["units_sha256"], "utc": utc_now()})
+    print(f"wrote {UNITS} ({out['unit_plan']['units']} units: {out['unit_plan']['units_by_source']}) and {PLAN_JSON}; "
+          f"{len(out['unit_plan']['unresolved'])} hypotheses without a regional file; "
+          f"files to collect: {out['unit_plan']['collect_tasks_by_source']}")
 
-    def locate(s: Sentinel) -> str:
-        if s.source == "ukbppp":
-            return s.assay_id
-        if s.source == "decode":
-            if s.assay_id not in urls:
-                raise InputContractError(f"no deCODE link supplied for SeqId {s.assay_id}")
-            return urls[s.assay_id]
-        return interval_opengwas_id(s.locator, gwasinfo)
 
-    units, hyp_unit, unresolved, source_units = build_units(hyps, by_key, locate, coding, smp)
-    UNITS.parent.mkdir(parents=True, exist_ok=True)
-    UNITS.write_text("".join(u.model_dump_json() + "\n" for u in units))
-    plan = {"generated_utc": datetime.now(timezone.utc).isoformat(), "hypotheses": len(hyps), "units": len(units),
-            "a_outputs": dict(zip(A_FILES, (sha256_file(a.hypotheses), sha256_file(a.trait_coding)))),
-            "units_sha256": sha256_file(UNITS),
-            "hypothesis_unit": hyp_unit, "unresolved": unresolved, "hypothesis_source_units": source_units,
-            "unit_ids": {u.unit_key: [u.source, u.assay_id] for u in units}}
-    PLAN_JSON.parent.mkdir(parents=True, exist_ok=True)
-    PLAN_JSON.write_text(json.dumps(plan, indent=1, sort_keys=True))
-    print(f"wrote {UNITS} ({len(units)} units) and {PLAN_JSON}; {len(unresolved)} hypotheses without a regional file")
+def cmd_collect(a: argparse.Namespace) -> None:
+    commit = clean_commit(REPO)
+    fn = modal.Function.from_name(APP, "collect_file")
+    calls = spawn_collect(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT, lambda task, token: fn.spawn(task, token).object_id,
+                          a.source or ())
+    log_entry({"what": "collect", "repo_commit": commit, "calls": calls, "utc": utc_now()})
+    print(f"{len(calls)} collect calls spawned at {utc_now()}")
 
 
 def cmd_spawn(a: argparse.Namespace) -> None:
     commit = clean_commit(REPO)
+    state = modal.Function.from_name(APP, "stage_state").remote()
     fn = modal.Function.from_name(APP, "run_unit")
-    calls = spawn_units(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT,
-                        lambda line, token: fn.spawn(line, token).object_id)
-    entry = {"what": "spawn", "repo_commit": commit, "calls": calls, "utc": datetime.now(timezone.utc).isoformat()}
-    with LOG.open("a") as fh:
-        fh.write(json.dumps(entry) + "\n")
-    print(f"{len(calls)} units spawned at {entry['utc']}")
+    calls = spawn_units(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT, lambda line, token: fn.spawn(line, token).object_id,
+                        recorded={(r["source"], r["key"]) for r in state["records"]})
+    log_entry({"what": "spawn", "repo_commit": commit, "calls": calls, "utc": utc_now()})
+    print(f"{len(calls)} units spawned at {utc_now()}")
+
+
+def app_state() -> dict:
+    """Whether the deployed app answers, and each function's backlog and running containers."""
+    functions = {}
+    for name in FUNCTIONS:
+        try:
+            stats = modal.Function.from_name(APP, name).get_current_stats()
+            functions[name] = {"backlog": stats.backlog, "runners": stats.num_total_runners}
+        except modal.exception.NotFoundError:
+            return {"deployed": False, "functions": functions}
+    return {"deployed": True, "functions": functions}
+
+
+def volume_state_without_the_app() -> dict:
+    """stage_b.status.volume_state read through the volume API, for when the app is not deployed and
+    its `stage_state` function cannot be called. One listing, then one read per small JSON record."""
+    vol = modal.Volume.from_name(VOLUME)
+    files = {e.path: e for e in vol.listdir(f"/{STAGE_ROOT}", recursive=True) if e.type == modal.volume.FileEntryType.FILE}
+
+    def read(path: str) -> dict:
+        return json.loads(b"".join(vol.read_file(path)))
+
+    def under(prefix: str, suffix: str) -> list[str]:
+        return sorted(p for p in files if p.startswith(f"{STAGE_ROOT}/{prefix}/") and p.endswith(suffix))
+
+    records = [{k: read(p)[k] for k in ("source", "key", "status")} for p in under("collect", ".json")]
+    partials = [{"source": Path(p).parent.name, "name": Path(p).name, "bytes": files[p].size} for p in under("raw", ".part")]
+    in_units = [Path(p).relative_to(f"{STAGE_ROOT}/units").parts for p in under("units", "")]
+    errors = {kind: {m["name"]: m for m in (read(p) for p in under(f"errors/{kind}", ".json"))} for kind in ("collect", "units")}
+    return {"records": records, "partials": partials, "errors": errors,
+            "units_done": sorted({parts[0] for parts in in_units if parts[1:] == ("result.json",)}),
+            "units_started": sorted({parts[0] for parts in in_units})}
+
+
+def call_state(call_id: str) -> dict:
+    """What Modal says of one spawned call: done, failed (with the error class) or pending."""
+    try:
+        modal.FunctionCall.from_id(call_id).get(timeout=0)
+    except TimeoutError:
+        return {"call_id": call_id, "state": "pending"}
+    except Exception as err:   # whatever the call raised, remotely or when its result was fetched
+        return {"call_id": call_id, "state": "failed", **error_of(err)}
+    return {"call_id": call_id, "state": "done"}
+
+
+def latest_calls() -> dict[str, dict[str, str]]:
+    """The last call id the launch log holds for each file (`collect`) and unit (`units`)."""
+    out: dict[str, dict[str, str]] = {"collect": {}, "units": {}}
+    for line in LOG.read_text().splitlines() if LOG.exists() else []:
+        entry = json.loads(line)
+        for c in entry.get("calls", []):
+            if entry["what"] == "collect":
+                out["collect"][f"{c['source']}/{c['key']}"] = c["call_id"]
+            elif entry["what"] == "spawn":
+                out["units"][c["unit_key"]] = c["call_id"]
+    return out
+
+
+def cmd_status(a: argparse.Namespace) -> None:
+    lines = UNITS.read_text().splitlines()
+    units = [InstrumentUnit.model_validate_json(line) for line in lines]
+    app = app_state()
+    volume = modal.Function.from_name(APP, "stage_state").remote() if app["deployed"] else volume_state_without_the_app()
+    finished_files = {f"{r['source']}/{r['key']}" for r in volume["records"]}
+    finished = {"collect": finished_files, "units": set(volume["units_done"])}
+    calls = {kind: {name: call_state(cid) for name, cid in ids.items() if name not in finished[kind]}
+             for kind, ids in latest_calls().items()}
+    report = {"utc": utc_now(), **status_report(planned_tasks(lines), units, volume, calls, app)}
+    out = WORK / "status" / f"status_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=1))
+    print(json.dumps({k: report[k] for k in ("app", "files_by_source", "units_by_source", "failures_by_error_class")}, indent=1))
+    print(f"partial downloads: {len(report['partial_downloads'])}; full report: {out}")
+    if not app["deployed"]:
+        print(f"APP {APP} IS NOT DEPLOYED: nothing that is not finished can make progress (stranded above).")
 
 
 def cmd_assemble(a: argparse.Namespace) -> None:
@@ -131,7 +216,13 @@ def cmd_assemble(a: argparse.Namespace) -> None:
         raise InputContractError(f"{a.hypotheses} is not the hypotheses.csv stage A sealed")
     hyps = load_hypotheses(a.hypotheses)
     plan = json.loads(PLAN_JSON.read_text())
-    units = [InstrumentUnit.model_validate_json(line) for line in UNITS.read_text().splitlines()]
+    lines = UNITS.read_text().splitlines()
+    units = [InstrumentUnit.model_validate_json(line) for line in lines]
+    collected = load_collect_records(a.collect_dir)
+    missing = {(t.source, t.key) for t in planned_tasks(lines)} - {(r.source, r.key) for r in collected}
+    if missing:
+        raise InputContractError(f"{len(missing)} planned files have no collect record in {a.collect_dir} "
+                                 f"(first: {sorted(missing)[0]}); stage B is not complete")
     pins, code = source_pins(INPUTS_MANIFEST), package_sha256(HERE / "stage_b")
     results, metas, tools = {}, {}, {}
     for u in units:
@@ -144,26 +235,35 @@ def cmd_assemble(a: argparse.Namespace) -> None:
     scripts = sorted((HERE / "stage_b").glob("*.py")) + [HERE / "stage_b" / "coloc_run.R", Path(__file__).resolve()]
     inputs = {"hypotheses": a.hypotheses, "st29_workbook": a.st29, "unit_plan": PLAN_JSON, "units": UNITS}
     manifest = write_outputs(HERE / "output", rows, regional_rows(metas), scripts, inputs, [("", REPO)],
-                             script_root=HERE, run_token=a.run_token, repo_commit=commit, tools=common_tools(tools))
+                             script_root=HERE, run_token=a.run_token, repo_commit=commit, tools=common_tools(tools),
+                             collected=collected)
     print(f"wrote {HERE / 'output' / 'evidence.csv'} ({len(rows)} rows) and {manifest}")
+
+
+def cmd_purge(a: argparse.Namespace) -> None:
+    """Delete the whole files on the volume, once stage B's output here is the sealed, intact one."""
+    commit = clean_commit(REPO)
+    seal = sealed_stage_b(PREREG, HERE / "output" / MANIFEST_NAME)
+    verify_output_dir(HERE / "output", ["evidence.csv", "regional_manifest.tsv", "collected_files.tsv"], ["unit_plan.json"])
+    out = modal.Function.from_name(APP, "purge_raw_files").remote(UNITS.read_text())
+    log_entry({"what": "purge", "repo_commit": commit, "stage_b_seal": seal, **out, "utc": utc_now()})
+    print(f"deleted {out['files_deleted']} whole files ({out['bytes_deleted']} bytes); {out['records_kept']} records kept")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("plan")
-    for name in ("hypotheses", "trait-coding", "ukbppp-st9", "decode-st02", "interval-st4", "opengwas-gwasinfo"):
-        p.add_argument(f"--{name}", type=Path, required=True)
-    p.add_argument("--decode-urls", type=Path, default=None)
-    p.add_argument("--decode-smp-urls", type=Path, default=None)
-    sp = sub.add_parser("spawn")
-    sp.add_argument("--run-token", required=True, help="token of the PREREG.md entry 'RUN_START stage=B token=<token>'")
-    s = sub.add_parser("assemble")
-    s.add_argument("--run-token", required=True, help="token of the PREREG.md entry 'RUN_START stage=B token=<token>'")
-    for name in ("hypotheses", "units-dir", "st29"):
-        s.add_argument(f"--{name}", type=Path, required=True)
+    token_help = "token of the PREREG.md entry 'RUN_START stage=B token=<token>'"
+    for name in ("plan", "collect", "spawn", "assemble"):
+        sub.add_parser(name).add_argument("--run-token", required=True, help=token_help)
+    sub.choices["collect"].add_argument("--source", nargs="*", help="collect only these sources (e.g. decode)")
+    for name in ("hypotheses", "units-dir", "collect-dir", "st29"):
+        sub.choices["assemble"].add_argument(f"--{name}", type=Path, required=True)
+    sub.add_parser("status")
+    sub.add_parser("purge")
     a = ap.parse_args()
-    {"plan": cmd_plan, "spawn": cmd_spawn, "assemble": cmd_assemble}[a.cmd](a)
+    {"plan": cmd_plan, "collect": cmd_collect, "spawn": cmd_spawn, "status": cmd_status, "assemble": cmd_assemble,
+     "purge": cmd_purge}[a.cmd](a)
 
 
 if __name__ == "__main__":

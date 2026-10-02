@@ -22,6 +22,11 @@ from stage_b.parsers import normalize_chrom
 from stage_b.schemas import AmbiguousInstrumentError, InputContractError, Sentinel
 
 OID = re.compile(r"(OID\d+)")
+# Sheet, header row and the columns read, per workbook (header newlines collapsed to spaces).
+UKBPPP_ST9 = ("ST9", 5, ("UKBPPP ProteinID", "rsID", "CHROM", "GENPOS (hg38)", "log10(p) (discovery)", "cis/trans"))
+DECODE_ST02 = ("ST02", 3, ("SeqId", "variant", "chr (var.)", "pos (var.)", "cis/ trans", "Rank (cond. sign.)", "-Log10(P) (adj.)"))
+INTERVAL_ST4 = ("ST4 - pQTL summary", 5, ("SOMAmer ID", "Target fullname", "Sentinel variant*", "Chr", "Pos", "cis/ trans",
+                                          "Meta-analysis"))
 
 
 def _pick(df: pd.DataFrame, key: str, score: str) -> dict[str, pd.Series]:
@@ -34,7 +39,7 @@ def _pick(df: pd.DataFrame, key: str, score: str) -> dict[str, pd.Series]:
 
 def ukbppp_sentinels(st9: pd.DataFrame) -> list[Sentinel]:
     """`st9` columns: UKBPPP ProteinID, rsID, CHROM, GENPOS (hg38), log10(p) (discovery), cis/trans."""
-    need = ["UKBPPP ProteinID", "rsID", "CHROM", "GENPOS (hg38)", "log10(p) (discovery)", "cis/trans"]
+    need = list(UKBPPP_ST9[2])
     miss = [c for c in need if c not in st9.columns]
     if miss:
         raise InputContractError(f"UKB-PPP ST9 lacks {miss}")
@@ -53,7 +58,7 @@ def decode_sentinels(st02: pd.DataFrame) -> list[Sentinel]:
     cis/ trans, Rank (cond. sign.), -Log10(P) (adj.)."""
     cols = {c: " ".join(str(c).split()) for c in st02.columns}
     d = st02.rename(columns=cols)
-    need = ["SeqId", "variant", "chr (var.)", "pos (var.)", "cis/ trans", "Rank (cond. sign.)", "-Log10(P) (adj.)"]
+    need = list(DECODE_ST02[2])
     miss = [c for c in need if c not in d.columns]
     if miss:
         raise InputContractError(f"deCODE ST02 lacks {miss}")
@@ -67,7 +72,7 @@ def decode_sentinels(st02: pd.DataFrame) -> list[Sentinel]:
 def interval_sentinels(st4: pd.DataFrame) -> list[Sentinel]:
     """`st4` columns: SOMAmer ID, Target fullname, Sentinel variant*, Chr, Pos, cis/ trans,
     meta_p (the meta-analysis p column, named by the loader)."""
-    need = ["SOMAmer ID", "Target fullname", "Sentinel variant*", "Chr", "Pos", "cis/ trans", "meta_p"]
+    need = [*INTERVAL_ST4[2][:-1], "meta_p"]
     miss = [c for c in need if c not in st4.columns]
     if miss:
         raise InputContractError(f"INTERVAL ST4 lacks {miss}")
@@ -107,16 +112,23 @@ def _sheet(path: Path, sheet: str, header_row: int) -> pd.DataFrame:
     return pd.DataFrame([r for r in rows if any(c is not None for c in r)], columns=header)
 
 
+def sheet_header(path: Path, sheet: str, header_row: int) -> list[str]:
+    """The header row of a sheet, newlines collapsed to spaces; no data row is read."""
+    ws = openpyxl.load_workbook(path, read_only=True)[sheet]
+    row = next(ws.iter_rows(min_row=header_row, max_row=header_row, values_only=True))
+    return [" ".join(str(c).split()) for c in row if c is not None]
+
+
 def load_ukbppp_st9(path: Path) -> pd.DataFrame:
-    return _sheet(path, "ST9", 5)
+    return _sheet(path, *UKBPPP_ST9[:2])
 
 
 def load_decode_st02(path: Path) -> pd.DataFrame:
-    return _sheet(path, "ST02", 3)
+    return _sheet(path, *DECODE_ST02[:2])
 
 
 def load_interval_st4(path: Path) -> pd.DataFrame:
-    df = _sheet(path, "ST4 - pQTL summary", 5)
+    df = _sheet(path, *INTERVAL_ST4[:2])
     cols = list(df.columns)
     if "Meta-analysis" not in cols:
         raise InputContractError("INTERVAL ST4 header lacks 'Meta-analysis'")

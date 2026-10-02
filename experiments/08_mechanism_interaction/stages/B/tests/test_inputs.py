@@ -10,7 +10,7 @@ from stage_b.parsers import (decode_to_canonical, filter_decode, filter_decode_a
                              filter_finngen, filter_gwas_catalog, filter_ukbppp, normalize_chrom,
                              parse_ukbppp_rsid_map, split_lines, ukbppp_to_canonical)
 from stage_b.schemas import (HYPOTHESIS_INPUT_COLUMNS, AmbiguousInstrumentError, HypothesisInput,
-                             InputContractError, LDReferenceError, Sentinel)
+                             InputContractError, LDReferenceError, Sentinel, SourceFile)
 from stage_b.sentinels import (decode_sentinels, interval_opengwas_id, interval_sentinels, select_assay,
                                ukbppp_sentinels)
 from stage_b.units import build_units, load_trait_coding
@@ -131,17 +131,19 @@ def hyp(hid: str, assay: str, acc: str, gene: str = "ENSG1") -> HypothesisInput:
 def test_build_units_groups_by_instrument_and_reports_unresolved():
     sents = {("decode", "a"): Sentinel(source="decode", assay_id="a", rsid="rs1", chrom="1", pos=1, build="GRCh38", neg_log10_p=10)}
     hyps = [hyp("h1", "a", "F1"), hyp("h2", "a", "F1"), hyp("h3", "a", "F2"), hyp("h4", "zz", "F1")]
-    units, hyp_unit, unresolved, source_units = build_units(hyps, sents, lambda s: "https://x/1_1_G_G.txt.gz",
-                                                            {"F1": True, "F2": False}, {})
+    listed = {"a": SourceFile(name="1_1_G_G.txt.gz", size=10, etag="e" * 32)}
+    units, hyp_unit, unresolved, source_units = build_units(hyps, sents, lambda s: "1_1_G_G.txt.gz",
+                                                            {"F1": True, "F2": False}, listed, {})
+    assert (units[0].pqtl_locator, units[0].pqtl_listing, units[0].smp_listing) == ("1_1_G_G.txt.gz", listed["a"], None)
     assert len(units) == 1 and [o.accession for o in units[0].outcomes] == ["F1", "F2"]
     assert units[0].outcomes[1].risk_coded is False
     assert set(hyp_unit) == {"h1", "h2", "h3"} and set(unresolved) == {"h4"}
     assert source_units == {"h1": {"decode": "decode__a"}, "h2": {"decode": "decode__a"},
                             "h3": {"decode": "decode__a"}, "h4": {"decode": ""}}
     with pytest.raises(InputContractError):
-        build_units(hyps, sents, lambda s: "u", {"F1": True}, {})
+        build_units(hyps, sents, lambda s: "u", {"F1": True}, {}, {})
     with pytest.raises(InputContractError):
-        build_units([hyp("h1", "a", "F1"), hyp("h2", "a", "F1", gene="ENSG2")], sents, lambda s: "u", {"F1": True}, {})
+        build_units([hyp("h1", "a", "F1"), hyp("h2", "a", "F1", gene="ENSG2")], sents, lambda s: "u", {"F1": True}, {}, {})
 
 
 def test_build_units_pairs_the_outcome_with_the_other_sources_instrument():
@@ -152,7 +154,7 @@ def test_build_units_pairs_the_outcome_with_the_other_sources_instrument():
     missing_ukb = hyp("h2", "a", "F2").model_copy(update={"ukbppp_assay_ids": "OID9"})
     decode_only = hyp("h3", "a", "F3")
     units, hyp_unit, unresolved, source_units = build_units(
-        [both, missing_ukb, decode_only], sents, lambda s: f"loc:{s.assay_id}", {"F1": True, "F2": True, "F3": True}, {})
+        [both, missing_ukb, decode_only], sents, lambda s: f"loc:{s.assay_id}", {"F1": True, "F2": True, "F3": True}, {}, {})
     by_key = {u.unit_key: u for u in units}
     assert set(by_key) == {"decode__a", "ukbppp__OID1"}
     assert (by_key["ukbppp__OID1"].platform, by_key["decode__a"].platform) == ("Olink", "SomaScan")
