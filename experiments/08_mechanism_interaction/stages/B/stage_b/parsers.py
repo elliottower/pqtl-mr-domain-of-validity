@@ -7,6 +7,7 @@ UKB-PPP REGENIE output as described in Sun et al. 2023 ST9 abbreviations; FinnGe
 Catalog harmonised headers). A header missing a required column raises InputContractError.
 """
 import math
+import re
 from collections.abc import Iterable, Iterator
 
 import numpy as np
@@ -21,6 +22,8 @@ def normalize_chrom(value: str | int) -> str:
     """'chr1' / '1' -> '1'; '23' / 'chrX' -> 'X'."""
     c = str(value).strip()
     c = c[3:] if c.lower().startswith("chr") else c
+    if re.fullmatch(r"\d+\.0+", c):     # a chromosome column read as float by a spreadsheet loader: 5.0
+        c = c.split(".", 1)[0]
     return {"23": "X", "24": "Y", "x": "X", "y": "Y"}.get(c, c)
 
 

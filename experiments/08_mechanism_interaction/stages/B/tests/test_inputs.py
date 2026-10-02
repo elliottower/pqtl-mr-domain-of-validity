@@ -29,6 +29,7 @@ def rows(text: str, sep: str | None = "\t"):
 
 def test_normalize_chrom():
     assert [normalize_chrom(c) for c in ("chr1", "1", "23", "chrX", "x")] == ["1", "1", "X", "X", "X"]
+    assert [normalize_chrom(c) for c in (5.0, "5.0", 23.0, 5, "chr5.0")] == ["5", "5", "X", "5", "5"]
 
 
 def test_ukbppp_window_filter_rsid_join_and_log10p():
@@ -290,3 +291,22 @@ def test_load_hypotheses_refuses_a_repeated_hypothesis_id(tmp_path):
     pd.DataFrame([row, row]).to_csv(path, index=False)
     with pytest.raises(_InputContractError, match="repeats hypothesis ids"):
         _load_hypotheses(path)
+
+
+def test_interval_sentinel_with_a_float_chromosome_and_a_zero_p_survives_units_json():
+    st4 = pd.DataFrame({"SOMAmer ID": ["G.1.2.3", "G.1.2.3"], "Target fullname": ["Prot G"] * 2,
+                        "Sentinel variant*": ["rs8", "rs9"], "Chr": [5.0, 5.0], "Pos": [5, 6],
+                        "cis/ trans": ["cis", "cis"], "meta_p": [1e-10, 0.0]})
+    s = interval_sentinels(st4)[0]
+    assert (s.rsid, s.chrom, s.neg_log10_p) == ("rs9", "5", math.inf)     # p = 0 is the strongest
+    back = Sentinel.model_validate_json(s.model_dump_json())
+    assert back == s and back.neg_log10_p == math.inf
+
+
+def test_sentinel_refuses_an_unnamed_chromosome_and_a_nan_score():
+    ok = dict(source="interval", assay_id="a", rsid="rs1", pos=1, build="GRCh37")
+    for bad in ("5.0", "chr5", "MT", ""):
+        with pytest.raises(ValueError, match="chromosome"):
+            Sentinel(chrom=bad, neg_log10_p=1.0, **ok)
+    with pytest.raises(ValueError, match="NaN"):
+        Sentinel(chrom="5", neg_log10_p=math.nan, **ok)

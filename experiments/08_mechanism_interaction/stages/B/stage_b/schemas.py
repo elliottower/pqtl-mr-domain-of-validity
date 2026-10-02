@@ -2,6 +2,7 @@
 
 Every threshold below is quoted from PREREG.md (freeze b946087); none is a tuning choice.
 """
+import math
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -93,8 +94,13 @@ class ColocBackendError(StageBError):
     """The R coloc backend failed or returned a malformed result."""
 
 
+SENTINEL_CHROMS = frozenset([*map(str, range(1, 23)), "X", "Y"])
+
+
 class _Row(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    # ser_json_inf_nan: a sentinel whose reported p is 0 has neg_log10_p = inf, which must not be
+    # written as null (units.jsonl is read back with validate_json)
+    model_config = ConfigDict(extra="forbid", frozen=True, ser_json_inf_nan="constants")
 
 
 # ---- inputs -----------------------------------------------------------------------------------
@@ -134,6 +140,14 @@ class Sentinel(_Row):
     build: Build
     neg_log10_p: float
     locator: str = ""   # UKB-PPP protein id (GENE:UNIPROT:OID:v1), deCODE SeqId, INTERVAL target full name
+
+    @model_validator(mode="after")
+    def _named_chromosome(self) -> "Sentinel":
+        if self.chrom not in SENTINEL_CHROMS:
+            raise ValueError(f"sentinel chromosome {self.chrom!r} is not one of 1-22, X, Y")
+        if math.isnan(self.neg_log10_p):
+            raise ValueError("sentinel neg_log10_p is NaN")
+        return self
 
 
 class OutcomeSpec(_Row):
