@@ -12,9 +12,9 @@ from pathlib import Path
 import pytest
 import requests
 from fake_remote import FakeRemote, FakeSynapse
-from synthetic_unit import (CHROM, DECODE_KEY, DISTINCT, ENSEMBL_EXPECTED, ENSEMBL_REPLIES, EXCLUDED_INDEX, GRCH37, N_VARIANTS,
-                            NO_DIR, NO_FILE, OID, SENTINEL_INDEX, SHARED, TAR_NAME, TOKENS, build_world, ensembl_outcomes,
-                            rsid, same_size_other_bytes)
+from synthetic_unit import (CHROM, DECODE_KEY, DISTINCT, ENSEMBL_EXPECTED, ENSEMBL_REPLIES, EXCLUDED_INDEX, GENE, GRCH37,
+                            N_VARIANTS, NO_DIR, NO_FILE, OID, SECOND_GENE, SENTINEL_INDEX, SHARED, TAR_NAME, TOKENS, build_world,
+                            ensembl_outcomes, rsid, same_size_other_bytes, second_gene_unit)
 from test_pipeline import COLLECT, H4, SENTINEL, TOOLS, FakeFetcher, StubBackend, fp
 
 from stage_b import collect as collect_module
@@ -121,6 +121,32 @@ def test_tasks_are_one_per_file_whatever_the_number_of_units_that_read_it(world)
     decode = task(world, "decode", "0_0")
     assert (decode.name, decode.size, decode.etag) == (DECODE_KEY, len(world.remote.files[f"/decode/{DECODE_KEY}"]),
                                                        world.remote.etag(f"/decode/{DECODE_KEY}"))
+
+
+def test_a_file_the_units_of_two_genes_read_is_downloaded_once_and_each_unit_keeps_its_own_checkpoint(world, tmp_path):
+    root, path = tmp_path / "vol", f"/decode/{DECODE_KEY}"
+    first = decode_unit(world)
+    second = second_gene_unit(first)
+    assert (first.gene_ensembl, second.gene_ensembl) == (GENE, SECOND_GENE)
+    assert (first.unit_key, second.unit_key) == (f"decode__0_0__{GENE}", f"decode__0_0__{SECOND_GENE}")
+    assert (first.sentinel, first.pqtl_locator, first.pqtl_listing) == (second.sentinel, second.pqtl_locator, second.pqtl_listing)
+    tasks = collect_tasks([first, second])
+    assert tasks == collect_tasks([first]) and [(t.source, t.key) for t in tasks].count(("decode", "0_0")) == 1
+    for t in tasks:
+        collect_one(t, world.sources(root / "cache"), root, checkpoint_bytes=2048)
+    assert len([p for _m, p, _r in world.remote.log if p == path]) == 1          # one download for the two units
+    fetcher, mark = world.fetcher(root), len(world.remote.log)
+    regions = [fetcher.pqtl_region(u, CHROM, 50_000_000, WINDOW_WIDE) for u in (first, second)]
+    assert world.remote.log[mark:] == [] and regions[0].equals(regions[1]) and len(regions[0]) == N_VARIANTS - 1
+    digests = {u.unit_key: volume_collect_digest(root, u) for u in (first, second)}
+    assert fp(first, collect=digests[first.unit_key]) != fp(second, collect=digests[second.unit_key])
+    assert fp(first) != fp(second)                                               # the unit record alone tells them apart
+    stores = {u.unit_key: DirStore(root / "units" / u.unit_key) for u in (first, second)}
+    stores[first.unit_key].bind(fp(first), TOOLS, COLLECT)
+    with pytest.raises(StaleCheckpointError):                                    # one gene's checkpoint is not the other's
+        DirStore(root / "units" / first.unit_key).bind(fp(second), TOOLS, COLLECT)
+    stores[second.unit_key].bind(fp(second), TOOLS, COLLECT)
+    assert sorted(p.name for p in (root / "units").iterdir()) == sorted(stores)
 
 
 def test_a_collected_file_is_the_source_file_and_its_record_holds_no_token(world, tmp_path):
@@ -611,15 +637,16 @@ def test_status_tells_finished_failed_pending_and_stranded_apart(world, tmp_path
     world.remote.tokens["decode_smp"] = "smp-two"
     with pytest.raises(RetryableSourceError):
         marked(root, "collect", "decode_smp__0_0", "decode_smp/0_0", lambda: collect(world, root, "decode_smp", "0_0"), lambda: None)
-    (root / "units" / "ukbppp__OID00000").mkdir(parents=True)
-    (root / "units" / "ukbppp__OID00000" / "result.json").write_text("{}")
-    (root / "units" / "decode__0_0").mkdir()
+    decode_key, ukb_key = (next(u.unit_key for u in world.units if u.source == s) for s in ("decode", "ukbppp"))
+    (root / "units" / ukb_key).mkdir(parents=True)
+    (root / "units" / ukb_key / "result.json").write_text("{}")
+    (root / "units" / decode_key).mkdir()
     state = volume_state(root)
-    assert state["errors"]["collect"]["decode_smp/0_0"]["kind"] == "auth" and state["units_done"] == ["ukbppp__OID00000"]
+    assert state["errors"]["collect"]["decode_smp/0_0"]["kind"] == "auth" and state["units_done"] == [ukb_key]
     failed = {"call_id": "fc-1", "state": "failed", **error_of(RetryableSourceError("auth", "decode_smp 0_0: HTTP 403"))}
     calls = {"collect": {"decode/0_0": {"call_id": "fc-0", "state": "done"}, "decode_smp/0_0": failed,
                          f"ukbppp/{OID}": {"call_id": "fc-2", "state": "pending"}},
-             "units": {"decode__0_0": {"call_id": "fc-3", "state": "pending"}}}
+             "units": {decode_key: {"call_id": "fc-3", "state": "pending"}}}
     live = status_report(tasks, world.units, state, calls, {"deployed": True})
     assert live["files"]["decode/0_0"] == {"state": "done", "record": "collected"}
     assert live["files"]["decode_smp/0_0"] == {"state": "failed", "call_id": "fc-1", "error_class": "RetryableSourceError",
@@ -629,7 +656,7 @@ def test_status_tells_finished_failed_pending_and_stranded_apart(world, tmp_path
     assert live["units_by_source"] == {"decode": {"pending": 1}, "interval": {"not_started": 1}, "ukbppp": {"done": 1}}
     assert live["failures_by_error_class"] == {"RetryableSourceError:auth": 1}
     dead = status_report(tasks, world.units, state, calls, {"deployed": False})   # the same volume, the app gone
-    assert dead["files"][f"ukbppp/{OID}"]["state"] == "stranded" and dead["units"]["decode__0_0"]["state"] == "stranded"
+    assert dead["files"][f"ukbppp/{OID}"]["state"] == "stranded" and dead["units"][decode_key]["state"] == "stranded"
     assert dead["failures_by_error_class"] == {"RetryableSourceError:auth": 1, "stranded": 2}
     assert json.dumps(dead)                                              # the report is plain JSON
     marked(root, "collect", "decode_smp__0_0", "decode_smp/0_0", lambda: None, lambda: None)   # a later success clears the note

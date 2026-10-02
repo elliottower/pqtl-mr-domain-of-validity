@@ -2,6 +2,7 @@
 own sheet layouts, the OpenGWAS listing, the deCODE folder listing, and a stage A output."""
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import openpyxl
@@ -80,15 +81,18 @@ def stage_a(tmp_path) -> tuple[Path, Path]:
 def test_plan_locates_each_instrument_by_identity_and_records_every_file_it_read(tables, stage_a):
     units_text, plan = make_plan(*stage_a, tables)
     units = {u.unit_key: u for u in map(InstrumentUnit.model_validate_json, units_text.splitlines())}
-    assert set(units) == {"decode__1_1", "ukbppp__OID1", "interval__G5.5.5.3"}
-    decode = units["decode__1_1"]
+    decode_key, ukb_key, interval_key = "decode__1_1__ENSG1_1", "ukbppp__OID1__ENSGOID1", "interval__G5.5.5.3__ENSGG5.5.5.3"
+    assert set(units) == {decode_key, ukb_key, interval_key}
+    decode = units[decode_key]
     assert decode.pqtl_locator == "1_1_G1_Protein_one.txt.gz" and decode.smp_listing is None
     assert decode.pqtl_listing == SourceFile(name="1_1_G1_Protein_one.txt.gz", size=950_000_001, etag=ETAG)
     assert (decode.sentinel.rsid, [o.accession for o in decode.outcomes]) == ("rs21", ["FINNGEN_R12_X", "GCST1"])
-    assert (units["ukbppp__OID1"].pqtl_locator, units["ukbppp__OID1"].sentinel.rsid) == ("OID1", "rs11")
-    assert (units["interval__G5.5.5.3"].pqtl_locator, units["interval__G5.5.5.3"].sentinel.build) == ("prot-a-5", "GRCh37")
+    assert (units[ukb_key].pqtl_locator, units[ukb_key].sentinel.rsid) == ("OID1", "rs11")
+    assert (units[interval_key].pqtl_locator, units[interval_key].sentinel.build) == ("prot-a-5", "GRCh37")
     assert "http" not in units_text and "token" not in units_text.lower()
-    assert plan["hypothesis_unit"] == {"h1": "decode__1_1", "h2": "decode__1_1", "h5": "ukbppp__OID1", "h6": "interval__G5.5.5.3"}
+    assert plan["hypothesis_unit"] == {"h1": decode_key, "h2": decode_key, "h5": ukb_key, "h6": interval_key}
+    assert plan["unit_ids"] == {decode_key: ["decode", "1_1", "ENSG1_1"], ukb_key: ["ukbppp", "OID1", "ENSGOID1"],
+                                interval_key: ["interval", "G5.5.5.3", "ENSGG5.5.5.3"]}
     assert set(plan["unresolved"]) == {"h3", "h4"}                    # two files for the SeqId; no file for the SeqId
     assert all(r.startswith("regional_file_unavailable: the deCODE folder listing names no single file") for r in plan["unresolved"].values())
     assert plan["tables"] == {name: sha256_file(path) for name, path in tables.items()} and set(plan["tables"]) == set(PLAN_TABLES)
@@ -98,6 +102,46 @@ def test_plan_locates_each_instrument_by_identity_and_records_every_file_it_read
     assert plan["collect_tasks_by_source"] == {"decode": 1, "gwas_catalog": 2, "ukbppp": 1, "ukbppp_rsid_map": 1}
     assert [(t.source, t.key, t.name) for t in collect_tasks(units.values())][0] == ("decode", "1_1", "1_1_G1_Protein_one.txt.gz")
     assert make_plan(*stage_a, tables)[0] == units_text               # the same inputs give the same units
+
+
+def test_plan_gives_an_assay_that_serves_two_genes_one_unit_per_gene_and_an_assay_placeholder_none(tables, tmp_path):
+    out = tmp_path / "A2"
+    out.mkdir()
+    complex_a = {"gene_symbol": "LA", "gene_ensembl": "ENSG_A"}
+    complex_c = {"gene_symbol": "LC", "gene_ensembl": "ENSG_C"}
+    rows = [hypothesis("a1", "interval", "G5.5.5.3", "FINNGEN_R12_X", "finngen", **complex_a),
+            hypothesis("c1", "interval", "G5.5.5.3", "FINNGEN_R12_X", "finngen", **complex_c),
+            hypothesis("c2", "interval", "G5.5.5.3", "GCST1", "gwas_catalog", **complex_c),
+            hypothesis("d1", "decode", "1_1", "GCST1", "gwas_catalog", gene_ensembl="ENSG_D"),
+            hypothesis("e1", "decode", "1_1", "GCST2", "gwas_catalog", gene_ensembl="ENSG_E"),
+            hypothesis("n1", "interval", "epigraphdb:no_assay", "GCST1", "gwas_catalog", gene_ensembl="ENSG_N1"),
+            hypothesis("n2", "interval", "epigraphdb:no_assay", "GCST1", "gwas_catalog", gene_ensembl="ENSG_N2")]
+    pd.DataFrame(rows).to_csv(out / "hypotheses.csv", index=False)
+    pd.DataFrame({"outcome_accession": ["GCST1", "GCST2", "FINNGEN_R12_X"], "risk_coded": [True] * 3}).to_csv(
+        out / "outcome_trait_coding.tsv", sep="\t", index=False)
+    units_text, plan = make_plan(out / "hypotheses.csv", out / "outcome_trait_coding.tsv", tables)
+    units = {u.unit_key: u for u in map(InstrumentUnit.model_validate_json, units_text.splitlines())}
+    assert set(units) == {"interval__G5.5.5.3__ENSG_A", "interval__G5.5.5.3__ENSG_C", "decode__1_1__ENSG_D", "decode__1_1__ENSG_E"}
+    a, c = units["interval__G5.5.5.3__ENSG_A"], units["interval__G5.5.5.3__ENSG_C"]
+    assert (a.gene_ensembl, a.gene_symbol, [o.accession for o in a.outcomes]) == ("ENSG_A", "LA", ["FINNGEN_R12_X"])
+    assert (c.gene_ensembl, c.gene_symbol, [o.accession for o in c.outcomes]) == ("ENSG_C", "LC", ["FINNGEN_R12_X", "GCST1"])
+    assert (a.sentinel, a.pqtl_locator) == (c.sentinel, c.pqtl_locator) == (a.sentinel, "prot-a-5") and a.sentinel.rsid == "rs51"
+    d, e = units["decode__1_1__ENSG_D"], units["decode__1_1__ENSG_E"]
+    assert (d.sentinel, d.pqtl_locator, d.pqtl_listing) == (e.sentinel, e.pqtl_locator, e.pqtl_listing)
+    assert plan["hypothesis_unit"] == {"a1": "interval__G5.5.5.3__ENSG_A", "c1": "interval__G5.5.5.3__ENSG_C",
+                                       "c2": "interval__G5.5.5.3__ENSG_C", "d1": "decode__1_1__ENSG_D", "e1": "decode__1_1__ENSG_E"}
+    assert plan["hypothesis_source_units"] == {"d1": {"decode": "decode__1_1__ENSG_D"}, "e1": {"decode": "decode__1_1__ENSG_E"}}
+    assert plan["unit_ids"]["interval__G5.5.5.3__ENSG_C"] == ["interval", "G5.5.5.3", "ENSG_C"]
+    assert (plan["units"], plan["units_by_source"]) == (4, {"decode": 2, "interval": 2})
+    # the two deCODE units read one file: one task, and one task per GWAS Catalog accession
+    assert plan["collect_tasks_by_source"] == {"decode": 1, "gwas_catalog": 2}
+    assert [(t.source, t.key) for t in collect_tasks(units.values())] == [("decode", "1_1"), ("gwas_catalog", "GCST1"),
+                                                                           ("gwas_catalog", "GCST2")]
+    # the EpiGraphDB placeholder names no assay: no sentinel, no unit, whatever the number of genes carrying it
+    assert set(plan["unresolved"]) == {"n1", "n2"}
+    assert all(r == "regional_file_unavailable: no interval sentinel for assays ['epigraphdb:no_assay']"
+               for r in plan["unresolved"].values())
+    assert all(re.fullmatch(r"[A-Za-z0-9_.-]+", k) for k in units)
 
 
 def test_the_smp_listing_is_used_only_when_given(tables, stage_a, tmp_path):

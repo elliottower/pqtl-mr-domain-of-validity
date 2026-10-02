@@ -1,19 +1,25 @@
 import math
+import re
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from test_pipeline import fp
+
+from stage_b.collect import collect_tasks
 from stage_b.ld import aligned_ld, parse_genotypes, proxies
 from stage_b.parsers import (decode_to_canonical, filter_decode, filter_decode_annotation, filter_decode_excluded,
                              filter_finngen, filter_gwas_catalog, filter_ukbppp, normalize_chrom,
                              parse_ukbppp_rsid_map, split_lines, ukbppp_to_canonical)
 from stage_b.schemas import (HYPOTHESIS_INPUT_COLUMNS, AmbiguousInstrumentError, HypothesisInput,
                              InputContractError, LDReferenceError, Sentinel, SourceFile)
+from stage_b.schemas import InputContractError as _InputContractError
+from stage_b.units import load_hypotheses as _load_hypotheses
 from stage_b.sentinels import (decode_sentinels, interval_opengwas_id, interval_sentinels, select_assay,
                                ukbppp_sentinels)
-from stage_b.units import build_units, load_trait_coding
+from stage_b.units import build_units, load_trait_coding, unit_key
 
 
 def rows(text: str, sep: str | None = "\t"):
@@ -135,15 +141,71 @@ def test_build_units_groups_by_instrument_and_reports_unresolved():
     units, hyp_unit, unresolved, source_units = build_units(hyps, sents, lambda s: "1_1_G_G.txt.gz",
                                                             {"F1": True, "F2": False}, listed, {})
     assert (units[0].pqtl_locator, units[0].pqtl_listing, units[0].smp_listing) == ("1_1_G_G.txt.gz", listed["a"], None)
-    assert len(units) == 1 and [o.accession for o in units[0].outcomes] == ["F1", "F2"]
+    assert len(units) == 1 and [o.accession for o in units[0].outcomes] == ["F1", "F2"]      # one gene, one assay: one unit
+    assert (units[0].unit_key, units[0].gene_ensembl) == ("decode__a__ENSG1", "ENSG1")
     assert units[0].outcomes[1].risk_coded is False
-    assert set(hyp_unit) == {"h1", "h2", "h3"} and set(unresolved) == {"h4"}
-    assert source_units == {"h1": {"decode": "decode__a"}, "h2": {"decode": "decode__a"},
-                            "h3": {"decode": "decode__a"}, "h4": {"decode": ""}}
+    assert hyp_unit == {h: "decode__a__ENSG1" for h in ("h1", "h2", "h3")} and set(unresolved) == {"h4"}
+    assert source_units == {"h1": {"decode": "decode__a__ENSG1"}, "h2": {"decode": "decode__a__ENSG1"},
+                            "h3": {"decode": "decode__a__ENSG1"}, "h4": {"decode": ""}}
     with pytest.raises(InputContractError):
         build_units(hyps, sents, lambda s: "u", {"F1": True}, {}, {})
-    with pytest.raises(InputContractError):
-        build_units([hyp("h1", "a", "F1"), hyp("h2", "a", "F1", gene="ENSG2")], sents, lambda s: "u", {"F1": True}, {}, {})
+
+
+def test_an_assay_serving_two_genes_gives_one_unit_per_gene_sharing_the_sentinel_and_the_file():
+    sents = {("decode", "a"): Sentinel(source="decode", assay_id="a", rsid="rs1", chrom="1", pos=1, build="GRCh38", neg_log10_p=10)}
+    listed = {"a": SourceFile(name="1_1_G_G.txt.gz", size=10, etag="e" * 32)}
+    smp = {"a": SourceFile(name="1_1_G_G.txt.gz", size=9, etag="f" * 32)}
+    hyps = [hyp("h1", "a", "F1"), hyp("h2", "a", "F1", gene="ENSG2"), hyp("h3", "a", "F2", gene="ENSG2"), hyp("h4", "a", "F3")]
+    units, hyp_unit, unresolved, source_units = build_units(hyps, sents, lambda s: listed[s.assay_id].name,
+                                                            {"F1": True, "F2": True, "F3": True}, listed, smp)
+    by_key = {u.unit_key: u for u in units}
+    assert list(by_key) == ["decode__a__ENSG1", "decode__a__ENSG2"]
+    one, two = by_key["decode__a__ENSG1"], by_key["decode__a__ENSG2"]
+    assert (one.gene_ensembl, [o.accession for o in one.outcomes]) == ("ENSG1", ["F1", "F3"])
+    assert (two.gene_ensembl, [o.accession for o in two.outcomes]) == ("ENSG2", ["F1", "F2"])
+    for field in ("source", "assay_id", "platform", "sentinel", "pqtl_locator", "pqtl_listing", "smp_listing"):
+        assert getattr(one, field) == getattr(two, field), field
+    assert (one.pqtl_listing, one.smp_listing) == (listed["a"], smp["a"])
+    # each hypothesis goes to the unit of its own gene
+    assert hyp_unit == {"h1": "decode__a__ENSG1", "h2": "decode__a__ENSG2", "h3": "decode__a__ENSG2", "h4": "decode__a__ENSG1"}
+    assert source_units == {h: {"decode": k} for h, k in hyp_unit.items()} and unresolved == {}
+    # the shared file is one collect task (and one for its SMP-normalized release), whatever the number of genes
+    assert [(t.source, t.key, t.name, t.size) for t in collect_tasks(units)] == [("decode", "a", "1_1_G_G.txt.gz", 10),
+                                                                              ("decode_smp", "a", "1_1_G_G.txt.gz", 9)]
+    assert collect_tasks(units) == collect_tasks([one]) == collect_tasks([two])
+    assert fp(one) != fp(two)                                        # two checkpoints, never resumed as each other
+
+
+def test_a_seqid_on_two_genes_lists_gives_each_gene_its_own_unit_in_the_cross_source_pairing():
+    sents = {("decode", "a"): Sentinel(source="decode", assay_id="a", rsid="rs1", chrom="4", pos=1, build="GRCh38", neg_log10_p=90),
+             ("decode", "b"): Sentinel(source="decode", assay_id="b", rsid="rs3", chrom="4", pos=9, build="GRCh38", neg_log10_p=10),
+             ("ukbppp", "OID1"): Sentinel(source="ukbppp", assay_id="OID1", rsid="rs2", chrom="4", pos=5, build="GRCh38",
+                                          neg_log10_p=40)}
+    selected = hyp("c1", "a", "F1", gene="ENSG_C").model_copy(update={"decode_assay_ids": "a"})
+    paired = hyp("b1", "OID1", "F2", gene="ENSG_B").model_copy(update={
+        "instrument_source": "ukbppp", "platform": "Olink", "ukbppp_assay_ids": "OID1", "decode_assay_ids": "a;b"})
+    units, hyp_unit, unresolved, source_units = build_units([selected, paired], sents, lambda s: f"loc_{s.assay_id}",
+                                                            {"F1": True, "F2": True}, {}, {})
+    by_key = {u.unit_key: u for u in units}
+    assert set(by_key) == {"decode__a__ENSG_C", "decode__a__ENSG_B", "ukbppp__OID1__ENSG_B"}
+    assert [o.accession for o in by_key["decode__a__ENSG_C"].outcomes] == ["F1"]
+    assert [o.accession for o in by_key["decode__a__ENSG_B"].outcomes] == ["F2"]
+    assert by_key["decode__a__ENSG_B"].sentinel == by_key["decode__a__ENSG_C"].sentinel == sents[("decode", "a")]
+    assert hyp_unit == {"c1": "decode__a__ENSG_C", "b1": "ukbppp__OID1__ENSG_B"} and unresolved == {}
+    assert source_units == {"c1": {"decode": "decode__a__ENSG_C"},
+                            "b1": {"ukbppp": "ukbppp__OID1__ENSG_B", "decode": "decode__a__ENSG_B"}}
+
+
+def test_a_unit_key_is_a_file_name_and_never_stands_for_two_instruments():
+    assert unit_key("interval", "LAMA1.LAMB1.LAMC1.2728.62.2", "ENSG00000101680") == (
+        "interval__LAMA1.LAMB1.LAMC1.2728.62.2__ENSG00000101680")
+    assert unit_key("decode", "15525_294", "ENSG00000196616") == "decode__15525_294__ENSG00000196616"
+    assert unit_key("interval", "a/b:c d", "ENS G/1") == "interval__a_b_c_d__ENS_G_1"
+    assert re.fullmatch(r"[A-Za-z0-9_.-]+", unit_key("interval", "../x\\y?*", "é"))
+    sents = {("decode", a): Sentinel(source="decode", assay_id=a, rsid="rs1", chrom="1", pos=1, build="GRCh38", neg_log10_p=10)
+             for a in ("a:b", "a_b")}
+    with pytest.raises(InputContractError, match="names two instruments"):       # two assay ids that give one file name
+        build_units([hyp("h1", "a:b", "F1"), hyp("h2", "a_b", "F1")], sents, lambda s: "u", {"F1": True}, {}, {})
 
 
 def test_build_units_pairs_the_outcome_with_the_other_sources_instrument():
@@ -156,13 +218,13 @@ def test_build_units_pairs_the_outcome_with_the_other_sources_instrument():
     units, hyp_unit, unresolved, source_units = build_units(
         [both, missing_ukb, decode_only], sents, lambda s: f"loc:{s.assay_id}", {"F1": True, "F2": True, "F3": True}, {}, {})
     by_key = {u.unit_key: u for u in units}
-    assert set(by_key) == {"decode__a", "ukbppp__OID1"}
-    assert (by_key["ukbppp__OID1"].platform, by_key["decode__a"].platform) == ("Olink", "SomaScan")
-    assert [o.accession for o in by_key["ukbppp__OID1"].outcomes] == ["F1"]
-    assert [o.accession for o in by_key["decode__a"].outcomes] == ["F1", "F2", "F3"]
-    assert hyp_unit == {"h1": "decode__a", "h2": "decode__a", "h3": "decode__a"} and unresolved == {}
-    assert source_units == {"h1": {"ukbppp": "ukbppp__OID1", "decode": "decode__a"},
-                            "h2": {"ukbppp": "", "decode": "decode__a"}, "h3": {"decode": "decode__a"}}
+    decode, ukb = "decode__a__ENSG1", "ukbppp__OID1__ENSG1"
+    assert set(by_key) == {decode, ukb}
+    assert (by_key[ukb].platform, by_key[decode].platform) == ("Olink", "SomaScan")
+    assert [o.accession for o in by_key[ukb].outcomes] == ["F1"]
+    assert [o.accession for o in by_key[decode].outcomes] == ["F1", "F2", "F3"]
+    assert hyp_unit == {"h1": decode, "h2": decode, "h3": decode} and unresolved == {}
+    assert source_units == {"h1": {"ukbppp": ukb, "decode": decode}, "h2": {"ukbppp": "", "decode": decode}, "h3": {"decode": decode}}
 
 
 # ---- LD ---------------------------------------------------------------------------------------
@@ -220,3 +282,11 @@ def test_trait_coding_file_in_stage_a_layout_loads(tmp_path):
                   "outcome_source": ["gwas_catalog", "finngen"], "trait": ["t", "u"], "n_case": [10, 20],
                   "n_control": [100, 200], "coding_basis": ["a", "b"]}).to_csv(p, sep="\t", index=False)
     assert load_trait_coding(p) == {"GCST1": True, "FINNGEN_R12_X": False}
+
+
+def test_load_hypotheses_refuses_a_repeated_hypothesis_id(tmp_path):
+    row = {c: "x" for c in HYPOTHESIS_INPUT_COLUMNS}
+    path = tmp_path / "hypotheses.csv"
+    pd.DataFrame([row, row]).to_csv(path, index=False)
+    with pytest.raises(_InputContractError, match="repeats hypothesis ids"):
+        _load_hypotheses(path)

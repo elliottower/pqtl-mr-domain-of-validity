@@ -159,8 +159,9 @@ def _not_a_url(value: str, what: str) -> None:
 
 
 class InstrumentUnit(_Row):
-    """One unit of Modal work: an instrument and every outcome GWAS paired with it. The record
-    holds identities only (it is hashed into the unit fingerprint): no URL, link or token."""
+    """One unit of Modal work: an instrument for one gene and every outcome GWAS paired with it.
+    The record holds identities only (it is hashed into the unit fingerprint): no URL, link or
+    token. `unit_key` is units.unit_key of source, assay and gene."""
 
     unit_key: str
     source: InstrumentSource

@@ -11,11 +11,13 @@ EUR panel's own correlation matrix, so summary statistics and LD reference agree
 Three units, one per instrument source, with the same pQTL signals (z 12 at the sentinel, z 7
 200 kb upstream):
 
-    decode__0_0            a deCODE folder file (collected through the download endpoint's redirect), its
-                           SMP-normalized release (S16; that endpoint answers with a JSON link), the
-                           annotation and excluded-variant files; one variant is on the excluded list
-    ukbppp__OID00000       a UKB-PPP tar and the chromosome's rsID map (collected through pre-signed links)
-    interval__SYNTH.1.2.3  an OpenGWAS regional query, GRCh37 sentinel
+    decode__0_0__<gene>            a deCODE folder file (collected through the download endpoint's redirect),
+                                   its SMP-normalized release (S16; that endpoint answers with a JSON link),
+                                   the annotation and excluded-variant files; one variant is on the excluded list
+    ukbppp__OID00000__<gene>       a UKB-PPP tar and the chromosome's rsID map (collected through pre-signed links)
+    interval__SYNTH.1.2.3__<gene>  an OpenGWAS regional query, GRCh37 sentinel
+
+each for the gene GENE (unit keys are `<source>__<assay>__<gene>`, stage_b.units.unit_key),
 
 and these outcomes:
 
@@ -28,6 +30,11 @@ and these outcomes:
     GCST90000004            a directory without a harmonised file             -> outcome_file_unavailable
 
 The splicing step finds a liver sQTL signal at the sentinel and no eQTL signal (splicing_candidate).
+
+The deCODE assay also serves a second gene, SECOND_GENE (`second_gene_unit`): a unit of its own with
+the same sentinel, window and collected file. For that gene the eQTL Catalogue holds introns and no
+expression trait, and VEP reports no consequence, so its unit has the same colocalization, no VEP hit
+and a missing splicing flag.
 
 `scenario` is the dry run: collect under injected faults (broken connections, an expired folder
 token, a rate limit), a re-issued folder link between collect and analyze, an expired OpenGWAS token
@@ -74,6 +81,7 @@ SENTINEL_INDEX, SECOND_INDEX, DISTINCT_INDEX, EXCLUDED_INDEX = 120, 80, 160, 5
 CHROM, CENTER_GRCH38, GRCH37_SHIFT = "1", 50_000_000, -12_345
 AR1, ALLELE_FREQUENCY = 0.9, 0.3
 GENE = "ENSG00000000000"
+SECOND_GENE = "ENSG00000000001"     # a second gene the deCODE assay serves: introns in the eQTL Catalogue, no eQTL, no VEP hit
 PQTL_N, QTL_AN, N_CASE, N_CONTROL = 35_000.0, 1000, 20_000, 80_000
 TISSUES = {"blood": "Whole_Blood", "liver": "Liver", "thyroid": "Thyroid"}
 DECODE_KEY, OID, SOMAMER = "0_0_SYNTH_Synthetic.txt.gz", "OID00000", "SYNTH.1.2.3"
@@ -344,7 +352,7 @@ def build_world(remote: FakeRemote, work: Path, indexed: bool = True) -> World:
 
             traits = {"ge": [(GENE, GENE, qtl(flat))],
                       "leafcutter": [(f"{tissue}_intron_a", GENE, qtl(lead)), (f"{tissue}_intron_b", GENE, qtl(flat)),
-                                     (f"{tissue}_other_gene_intron", "ENSG00000000001", qtl(signal((11.0, DISTINCT_INDEX))))]}
+                                     (f"{tissue}_other_gene_intron", SECOND_GENE, qtl(signal((11.0, DISTINCT_INDEX))))]}
             for method, rows in traits.items():
                 name = f"GTEx_{tissue}_{method}.all.tsv.gz"
                 for n, d in bgzip_tabix(eqtl_catalogue_text(rows), tbx, name, ["-s", "2", "-b", "3", "-e", "3", "-S", "1"]).items():
@@ -371,13 +379,21 @@ def build_world(remote: FakeRemote, work: Path, indexed: bool = True) -> World:
         pos = CENTER_GRCH38 + (GRCH37_SHIFT if build == "GRCh37" else 0)
         sentinel = Sentinel(source=source, assay_id=assay, rsid=rsid(SENTINEL_INDEX), chrom=CHROM, pos=pos, build=build,
                             neg_log10_p=30.0, locator=assay)
-        return InstrumentUnit(unit_key=unit_key(source, assay), source=source, assay_id=assay, gene_symbol="SYNTH",
+        return InstrumentUnit(unit_key=unit_key(source, assay, GENE), source=source, assay_id=assay, gene_symbol="SYNTH",
                               gene_ensembl=GENE, platform="Olink" if source == "ukbppp" else "SomaScan", sentinel=sentinel,
                               pqtl_locator=locator, outcomes=_outcomes(UNIT_OUTCOMES[source]), **extra)
 
     units = [unit("decode", "0_0", DECODE_KEY, "GRCh38", pqtl_listing=listed("decode"), smp_listing=listed("decode_smp")),
              unit("interval", SOMAMER, "prot-a-9001", "GRCh37"), unit("ukbppp", OID, OID, "GRCh38")]
     return World(remote=remote, units=units, endpoints=endpoints, folders=folders, annotation=annotation, excluded=excluded)
+
+
+def second_gene_unit(unit: InstrumentUnit) -> InstrumentUnit:
+    """The unit of `unit`'s assay for SECOND_GENE, as units.build_units forms it for an assay that
+    serves two genes: the same sentinel, locator and listings, its own gene and key, and SHARED as
+    its one outcome."""
+    return unit.model_copy(update={"unit_key": unit_key(unit.source, unit.assay_id, SECOND_GENE), "gene_symbol": "SYNTH2",
+                                   "gene_ensembl": SECOND_GENE, "outcomes": _outcomes((SHARED,))})
 
 
 # ---- known answers -----------------------------------------------------------------------------------
@@ -403,8 +419,8 @@ def check_unit(unit: InstrumentUnit, unit_dir: Path, result: dict, collect_sha25
     from the unit's collect records, as assembly recomputes it."""
     collected, metas = collect_unit_dir(unit, unit_dir, result["fingerprint"], collect_sha256)
     hyps = hypotheses(unit)
-    rows = build_evidence(hyps, {h.hypothesis_id: unit.unit_key for h in hyps}, {unit.unit_key: (unit.source, unit.assay_id)},
-                          {unit.unit_key: collected}, {})
+    rows = build_evidence(hyps, {h.hypothesis_id: unit.unit_key for h in hyps},
+                          {unit.unit_key: (unit.source, unit.assay_id, unit.gene_ensembl)}, {unit.unit_key: collected}, {})
     state = {h.outcome_accession: r.evidence_state for h, r in zip(hyps, rows)}
     out = result["outcomes"]
     names = [o.accession for o in unit.outcomes]
@@ -618,6 +634,40 @@ def scenario(world: World, root: Path, analyze: Callable[[InstrumentUnit, Volume
         unit_reports = {u.unit_key: check_unit(u, root / "units" / u.unit_key, results[u.source], volume_collect_digest(root, u))
                         for u in units}
         checks.update({f"{k}: {name}": ok for k, rep in unit_reports.items() for name, ok in rep["checks"].items()})
+        # 7a. the deCODE assay serves a second gene: one more unit, no more files; the same extract and
+        #     colocalization under another checkpoint, and the gene-specific steps run for its own gene
+        second = second_gene_unit(decode_unit)
+        second_dir = root / "units" / second.unit_key
+        checks["second_gene_unit_adds_no_file_to_collect"] = collect_tasks([*units, second]) == list(tasks.values())
+        mark = len(remote.log)
+        second_result = analyze(second, world.fetcher(root, opengwas_token="opengwas-token-two"), root / "units")
+        checks["second_gene_unit_reads_the_collected_file_and_none_from_the_network"] = not any(
+            p.startswith(("/decode", "/synapse")) for p in remote.paths_read(mark))
+        first_shared, second_shared = results["decode"]["outcomes"][SHARED], second_result["outcomes"][SHARED]
+        pqtl_sha = [json.loads((d / "pqtl.meta.json").read_text())["sha256"] for d in (unit_dir, second_dir)]
+        checks["second_gene_unit_has_its_own_directory_and_fingerprint"] = (
+            second_dir != unit_dir and (second_dir / "result.json").is_file()
+            and second_result["fingerprint"] != results["decode"]["fingerprint"])
+        checks["second_gene_unit_has_the_same_pqtl_extract_and_colocalization"] = (
+            pqtl_sha[0] == pqtl_sha[1] and second_shared["pp"] == first_shared["pp"]
+            and second_shared["lead_variant"] == first_shared["lead_variant"])
+        lead = second_shared["lead_variant"]
+        checks["vep_hit_is_for_the_units_own_gene"] = (
+            results["decode"]["vep"][lead]["hit"] is True and second_result["vep"][lead]["hit"] is False)
+        events["second_gene_splicing"] = second_result["splicing"]
+        checks["splicing_flag_is_for_the_units_own_gene"] = (
+            results["decode"]["splicing"]["splicing_candidate"] is True and second_result["splicing"]["splicing_candidate"] == ""
+            and {t: v["lead_event"] for t, v in second_result["splicing"]["tissues"].items()}
+            == {t: f"{t}_other_gene_intron" for t in TISSUES}
+            and {v["eqtl_n_shared"] for v in second_result["splicing"]["tissues"].values()} == {0})
+        ids = {u.unit_key: (u.source, u.assay_id, u.gene_ensembl) for u in (decode_unit, second)}
+        both = {decode_unit.unit_key: results["decode"], second.unit_key: second_result}
+        own = build_evidence(hypotheses(second), {h.hypothesis_id: second.unit_key for h in hypotheses(second)}, ids, both, {})
+        events["other_genes_unit"] = _raised(lambda: build_evidence(
+            hypotheses(second), {h.hypothesis_id: decode_unit.unit_key for h in hypotheses(second)}, ids, both, {}))
+        checks["a_hypothesis_takes_its_flags_from_its_own_genes_unit_and_is_refused_on_the_other"] = (
+            [(r.evidence_state, r.protein_altering, r.splicing_candidate) for r in own] == [("supportive", False, "")]
+            and events["other_genes_unit"].get("error_class") == "InputContractError")
         # 7b. Ensembl: only its unknown-identifier message naming the requested rsID is an absence
         events["ensembl"] = ensembl_outcomes(world, world.fetcher(root, opengwas_token="opengwas-token-two"), decode_unit.sentinel)
         checks["ensembl_400_is_an_absence_only_for_the_unknown_id_message_naming_the_requested_rsid"] = (

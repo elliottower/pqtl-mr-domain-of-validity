@@ -21,7 +21,8 @@ records the file's name, size and ETag and no address: the link and token of the
 credential of the collect phase (stage_b/fetch.py) and appear in no plan, unit or fingerprint.
 
 `make_plan` returns the text of units.jsonl and the content of unit_plan.json, which records the
-sha256 of every file read (`a_outputs`, `tables`) and of units.jsonl.
+sha256 of every file read (`a_outputs`, `tables`) and of units.jsonl, and `unit_ids`: the source,
+assay and gene of each unit key.
 """
 import hashlib
 import json
@@ -113,5 +114,5 @@ def make_plan(hypotheses: Path, trait_coding: Path, tables: Mapping[str, Path]) 
             "tables": {name: sha256_file(path) for name, path in sorted(tables.items())},
             "units_sha256": hashlib.sha256(units_text.encode()).hexdigest(),
             "hypothesis_unit": hyp_unit, "unresolved": unresolved, "hypothesis_source_units": source_units,
-            "unit_ids": {u.unit_key: [u.source, u.assay_id] for u in units}}
+            "unit_ids": {u.unit_key: [u.source, u.assay_id, u.gene_ensembl] for u in units}}
     return units_text, plan

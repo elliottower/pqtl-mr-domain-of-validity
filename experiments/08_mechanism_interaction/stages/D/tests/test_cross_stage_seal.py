@@ -57,8 +57,8 @@ sealed = authorize(prereg, token, root / "stages" / "A" / "output")
 assert set(sealed) == {"hypotheses.csv", "outcome_trait_coding.tsv"}
 run(unit(("F_ok",)), FakeFetcher(), StubBackend(H4), DirStore(root / "b_units"))
 res, _ = collect_unit_dir(unit(("F_ok",)), root / "b_units", fp(unit(("F_ok",))), COLLECT)
-rows = build_evidence([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1"}, {"decode__1_1": ("decode", "1_1")},
-                      {"decode__1_1": res}, {})
+rows = build_evidence([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1__ENSG1"}, {"decode__1_1__ENSG1": ("decode", "1_1", "ENSG1")},
+                      {"decode__1_1__ENSG1": res}, {})
 (root / "stages" / "B" / "output").mkdir(parents=True)
 (root / "stages" / "B" / "output" / "unit_plan.json").write_text("{}")     # the side file `plan` leaves there
 write_outputs(root / "stages" / "B" / "output", rows, [], sorted(Path("stage_b").resolve().glob("*.py")),

@@ -147,23 +147,29 @@ def source_state(h: HypothesisInput, k: str, results: Mapping[str, dict]) -> Evi
     return evidence_state(True, o["pp"][4], h.direction, int(o["genetic_direction"]))
 
 
-def build_evidence(hyps: list[HypothesisInput], hyp_unit: Mapping[str, str], unit_ids: Mapping[str, tuple[str, str]],
+def build_evidence(hyps: list[HypothesisInput], hyp_unit: Mapping[str, str], unit_ids: Mapping[str, tuple[str, str, str]],
                    results: Mapping[str, dict], st29: Mapping[tuple[str, str], dict],
                    source_units: Mapping[str, Mapping[str, str]] | None = None) -> list[EvidenceRow]:
     """One row per hypothesis in hypotheses.csv, in its order. A hypothesis without a unit (no
-    sentinel or no resolvable regional file) is regional_file_unavailable. `source_units` is the
-    fourth value of units.build_units (hypothesis -> {ukbppp|decode: unit_key})."""
+    sentinel or no resolvable regional file) is regional_file_unavailable. `unit_ids` gives each
+    unit key's source, assay and gene (unit_plan.json); `source_units` is the fourth value of
+    units.build_units (hypothesis -> {ukbppp|decode: unit_key}). A hypothesis mapped to a unit of
+    another gene raises: the unit's VEP and splicing steps were run for that other gene."""
     rows = []
     for h in hyps:
         k = hyp_unit.get(h.hypothesis_id)
+        per = (source_units or {}).get(h.hypothesis_id, {})
+        for key in filter(None, [k, *per.values()]):
+            if unit_ids[key][2] != h.gene_ensembl:
+                raise InputContractError(f"hypothesis {h.hypothesis_id} ({h.gene_ensembl}) is mapped to unit {key}, "
+                                         f"which is an instrument for {unit_ids[key][2]}")
         if k is None:
             row = evidence_row(h, h.instrument_source, h.instrument_assay_id.split(";")[0], None, st29)
         elif k not in results:
             raise InputContractError(f"unit {k} has no result; stage B is not complete")
         else:
-            source, assay = unit_ids[k]
+            source, assay, _gene = unit_ids[k]
             row = evidence_row(h, source, assay, results[k], st29)
-        per = (source_units or {}).get(h.hypothesis_id, {})
         row = row.model_copy(update={f"evidence_state_{src}": source_state(h, per[src], results)
                                      for src in TABLE12_SOURCES if src in per})
         rows.append(EvidenceRow.model_validate(row.model_dump()))

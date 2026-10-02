@@ -526,7 +526,7 @@ def dry_run() -> dict:
     with tempfile.TemporaryDirectory() as tmp, FakeRemote() as remote:
         report = scenario(build_world(remote, Path(tmp)), root, lambda unit, fetcher, units_root:
                           checkpointed_unit(unit, fetcher, pins, units_root), vol.commit)
-    decode_dir = root / "units" / "decode__0_0"
+    decode_dir = root / "units" / next(k for k in report["units"] if k.startswith("decode__"))
     sessions = {k: u["coloc_session"].get("coloc") for k, u in report["units"].items()}
     report["checks"]["r_session_is_the_pinned_coloc"] = set(sessions.values()) == {R_PACKAGES["coloc"]}
     report.update({"synthetic": True, "stage": "B", "utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),

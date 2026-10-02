@@ -273,8 +273,9 @@ directory>`); the repository files stage A reads are baked into the image. Outpu
 | s17_sentinel_p | outcome-association p-value at the instrument's sentinel variant (rsID match in the outcome region, direction ignored), S17; empty where the outcome file is unavailable, lacks the sentinel, or lists it with two p-values |
 | evidence_state_ukbppp, evidence_state_decode | the primary evidence rule applied with that source's instrument against the row's selected outcome GWAS (descriptive table 12, agreement where a gene has cis-pQTLs in both); equals `evidence_state` for the selected source; inconclusive where the source's regional file does not resolve; empty where the row names no assay in that source |
 
-Also `regional_manifest.tsv` (one row per regional extract: source, protein/study, window,
-variants, sha256), `collected_files.tsv` (one row per collect record: source, key, status, name,
+Also `regional_manifest.tsv` (one row per regional extract of a unit: source, protein/study, window,
+variants, sha256; units that extract the same region, such as the units of an assay that serves
+several genes, each give a row), `collected_files.tsv` (one row per collect record: source, key, status, name,
 bytes, sha256, md5, etag, last_modified, source_url, detail, utc; `source_url` holds only the host
 of the record's address, for every source, such as `download.decode.is` or `ftp.ebi.ac.uk`, and
 `synapse` for a Synapse entity, whose address has no host, while the record on the private volume
@@ -303,6 +304,17 @@ Stage B runs on Modal in three phases, each behind the run guard (`launch_stage_
    file. A unit holds identities only: `pqtl_locator` (UKB-PPP OID, deCODE file name, INTERVAL
    OpenGWAS id), `pqtl_listing` and `smp_listing` (name, size, ETag). No link or token is in
    `units.jsonl`, `unit_plan.json`, a fingerprint or a log.
+   A unit is one instrument for one gene: a source, an assay and a gene, with every outcome GWAS
+   that gene's hypotheses pair with the instrument. Its key is
+   `<source>__<assay>__<gene_ensembl>`, each part with every character outside `[A-Za-z0-9_.-]`
+   replaced by `_` (`stage_b.units.unit_key`); the key names the unit's directory
+   `/stage_b/units/<unit_key>/` and is never parsed, and `unit_plan.json` gives each key's source,
+   assay and gene (`unit_ids`). An assay that serves several genes (a SOMAmer for a protein
+   complex, a SeqId that two genes' lists name) has one unit per gene. The sentinel is selected
+   by source and assay alone, so those units carry the same sentinel, window and regional file,
+   which `collect` downloads once, and differ in gene and outcomes; each runs the VEP lookup and
+   the splicing flag for its own gene, and `assemble` refuses a hypothesis mapped to a unit of
+   another gene.
 2. `collect` (`collect_file`, `stage_b/collect.py`), one Modal call per whole file whatever the
    number of units that read it: deCODE per-SeqId files (and the SMP-normalized ones for S16 where
    a listing of that folder is pinned), UKB-PPP per-protein tars, UKB-PPP per-chromosome rsID maps,

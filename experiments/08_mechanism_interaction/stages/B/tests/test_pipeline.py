@@ -125,7 +125,7 @@ class FakeFetcher:
 
 
 def unit(outcomes=("F_ok", "F_small", "F_missing")) -> InstrumentUnit:
-    return InstrumentUnit(unit_key="decode__1_1", source="decode", assay_id="1_1", gene_symbol="G", gene_ensembl="ENSG1",
+    return InstrumentUnit(unit_key="decode__1_1__ENSG1", source="decode", assay_id="1_1", gene_symbol="G", gene_ensembl="ENSG1",
                           platform="SomaScan", sentinel=SENTINEL, pqtl_locator="1_1_G_G.txt.gz",
                           pqtl_listing=SourceFile(name="1_1_G_G.txt.gz", size=950_000_000, etag="a" * 32),
                           smp_listing=SourceFile(name="1_1_G_G.txt.gz", size=940_000_000, etag="b" * 32),
@@ -150,8 +150,8 @@ def test_unit_to_evidence_rows(tmp_path):
     st29 = {("soma", "1_1"): {"N platforms tested": 2, "cis pQTL on both and high correlation (> 0.5)": "Y",
                               "PAV olink": "N", "PAV soma": "N"}}
     rows = {r.hypothesis_id: r for r in build_evidence(
-        hyps, {h: "decode__1_1" for h in ("h1", "h2", "h3", "h4", "h5")}, {"decode__1_1": ("decode", "1_1")},
-        {"decode__1_1": res}, st29)}
+        hyps, {h: "decode__1_1__ENSG1" for h in ("h1", "h2", "h3", "h4", "h5")}, {"decode__1_1__ENSG1": ("decode", "1_1", "ENSG1")},
+        {"decode__1_1__ENSG1": res}, st29)}
     h1 = rows["h1"]
     assert (h1.coloc_run, h1.evidence_state, h1.S, h1.E, h1.lead_variant, h1.genetic_direction) == \
         (True, "supportive", 1, pytest.approx(0.9), "rs60", 1)
@@ -239,8 +239,8 @@ def test_regional_unavailable_unit(tmp_path):
             raise SourceAbsent("deCODE 1_1: HTTP 404")
 
     res = run(unit(("F_ok",)), NoPqtl(), StubBackend(H4), DirStore(tmp_path / "u"))
-    row = build_evidence([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1"}, {"decode__1_1": ("decode", "1_1")},
-                         {"decode__1_1": res}, {})[0]
+    row = build_evidence([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1__ENSG1"}, {"decode__1_1__ENSG1": ("decode", "1_1", "ENSG1")},
+                         {"decode__1_1__ENSG1": res}, {})[0]
     assert (row.coloc_run, row.not_run_reason, row.S, row.E, row.s16_evidence_state) == \
         (False, "regional_file_unavailable", 0, 0.0, "")
 
@@ -264,8 +264,8 @@ def test_evidence_columns_match_interfaces_md():
 
 def test_outputs_and_manifest(tmp_path):
     res = run(unit(("F_ok",)), FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "u"))
-    rows = build_evidence([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1"}, {"decode__1_1": ("decode", "1_1")},
-                          {"decode__1_1": res}, {})
+    rows = build_evidence([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1__ENSG1"}, {"decode__1_1__ENSG1": ("decode", "1_1", "ENSG1")},
+                          {"decode__1_1__ENSG1": res}, {})
     src = tmp_path / "in.csv"
     src.write_text("x")
     manifest = write_outputs(tmp_path / "out", rows, [], [src], {"hypotheses": src}, [("", tmp_path)],
@@ -299,14 +299,14 @@ def test_s17_sentinel_p_is_the_outcome_p_at_the_sentinel(tmp_path):
     assert res["outcomes"]["F_ok"]["s17_sentinel_p"] == pytest.approx(1e-3)
     assert res["outcomes"]["F_small"]["s17_sentinel_p"] is None      # rs60 is not among the 30 outcome variants
     hyps = [hyp("h1", "decrease", "F_ok"), hyp("h4", "decrease", "F_small"), hyp("h5", "decrease", "F_missing")]
-    rows = {r.hypothesis_id: r for r in build_evidence(hyps, {h.hypothesis_id: "decode__1_1" for h in hyps},
-                                                       {"decode__1_1": ("decode", "1_1")}, {"decode__1_1": res}, {})}
+    rows = {r.hypothesis_id: r for r in build_evidence(hyps, {h.hypothesis_id: "decode__1_1__ENSG1" for h in hyps},
+                                                       {"decode__1_1__ENSG1": ("decode", "1_1", "ENSG1")}, {"decode__1_1__ENSG1": res}, {})}
     assert (rows["h1"].s17_sentinel_p, rows["h4"].s17_sentinel_p, rows["h5"].s17_sentinel_p) == (pytest.approx(1e-3), "", "")
 
 
 def ukb_unit() -> InstrumentUnit:
     s = SENTINEL.model_copy(update={"source": "ukbppp", "assay_id": "OID1"})
-    return unit(("F_ok",)).model_copy(update={"unit_key": "ukbppp__OID1", "source": "ukbppp", "assay_id": "OID1",
+    return unit(("F_ok",)).model_copy(update={"unit_key": "ukbppp__OID1__ENSG1", "source": "ukbppp", "assay_id": "OID1",
                                               "platform": "Olink", "sentinel": s, "pqtl_locator": "OID1",
                                               "pqtl_listing": None, "smp_listing": None})
 
@@ -314,14 +314,14 @@ def ukb_unit() -> InstrumentUnit:
 def test_per_source_states_apply_the_primary_rule_with_each_instrument(tmp_path):
     dec = run(unit(("F_ok",)), FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "d"))
     ukb = run(ukb_unit(), FakeFetcher(), StubBackend({**H4, "primary": 0.5}), DirStore(tmp_path / "k"))
-    results = {"decode__1_1": dec, "ukbppp__OID1": ukb}
-    ids = {"decode__1_1": ("decode", "1_1"), "ukbppp__OID1": ("ukbppp", "OID1")}
+    results = {"decode__1_1__ENSG1": dec, "ukbppp__OID1__ENSG1": ukb}
+    ids = {"decode__1_1__ENSG1": ("decode", "1_1", "ENSG1"), "ukbppp__OID1__ENSG1": ("ukbppp", "OID1", "ENSG1")}
     hyps = [hyp("both", "decrease", "F_ok"), hyp("opp", "increase", "F_ok"), hyp("nofile", "decrease", "F_ok"),
             hyp("decode_only", "decrease", "F_ok")]
-    source_units = {"both": {"decode": "decode__1_1", "ukbppp": "ukbppp__OID1"},
-                    "opp": {"decode": "decode__1_1", "ukbppp": "ukbppp__OID1"},
-                    "nofile": {"decode": "decode__1_1", "ukbppp": ""}, "decode_only": {"decode": "decode__1_1"}}
-    rows = {r.hypothesis_id: r for r in build_evidence(hyps, {h.hypothesis_id: "decode__1_1" for h in hyps}, ids,
+    source_units = {"both": {"decode": "decode__1_1__ENSG1", "ukbppp": "ukbppp__OID1__ENSG1"},
+                    "opp": {"decode": "decode__1_1__ENSG1", "ukbppp": "ukbppp__OID1__ENSG1"},
+                    "nofile": {"decode": "decode__1_1__ENSG1", "ukbppp": ""}, "decode_only": {"decode": "decode__1_1__ENSG1"}}
+    rows = {r.hypothesis_id: r for r in build_evidence(hyps, {h.hypothesis_id: "decode__1_1__ENSG1" for h in hyps}, ids,
                                                        results, {}, source_units)}
     for r in rows.values():
         assert r.evidence_state_decode == r.evidence_state          # the selected source reproduces the primary state
@@ -330,9 +330,38 @@ def test_per_source_states_apply_the_primary_rule_with_each_instrument(tmp_path)
     assert rows["nofile"].evidence_state_ukbppp == "inconclusive"
     assert rows["decode_only"].evidence_state_ukbppp == ""
     ukb_supportive = run(ukb_unit(), FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "k2"))
-    row = build_evidence([hyps[0]], {"both": "decode__1_1"}, ids, {**results, "ukbppp__OID1": ukb_supportive}, {},
+    row = build_evidence([hyps[0]], {"both": "decode__1_1__ENSG1"}, ids, {**results, "ukbppp__OID1__ENSG1": ukb_supportive}, {},
                          {"both": source_units["both"]})[0]
     assert row.evidence_state_ukbppp == "supportive"
+
+
+def test_two_units_of_one_assay_run_the_gene_specific_steps_each_for_its_own_gene(tmp_path):
+    class Recording(FakeFetcher):                         # VEP and the eQTL Catalogue hold the gene ENSG1 only
+        def qtl_regions(self, gene, chrom, center, half_width):
+            self.genes = [*getattr(self, "genes", []), gene]
+            return super().qtl_regions(gene, chrom, center, half_width)
+
+    one = unit(("F_ok",))
+    two = one.model_copy(update={"unit_key": "decode__1_1__ENSG2", "gene_symbol": "G2", "gene_ensembl": "ENSG2"})
+    assert fp(one) != fp(two)
+    fetchers = {one.unit_key: Recording(), two.unit_key: Recording()}
+    results = {u.unit_key: run(u, fetchers[u.unit_key], StubBackend(H4), DirStore(tmp_path / u.unit_key)) for u in (one, two)}
+    r1, r2 = results[one.unit_key], results[two.unit_key]
+    assert (fetchers[one.unit_key].genes, fetchers[two.unit_key].genes) == (["ENSG1"], ["ENSG2"])
+    assert r1["outcomes"]["F_ok"]["pp"] == r2["outcomes"]["F_ok"]["pp"] and (r1["unit_key"], r2["unit_key"]) == (one.unit_key, two.unit_key)
+    assert (r1["vep"]["rs60"]["hit"], r2["vep"]["rs60"]["hit"]) == (True, False)
+    assert (r1["splicing"]["splicing_candidate"], r2["splicing"]["splicing_candidate"]) == (True, "")
+    assert {t["lead_event"] for t in r2["splicing"]["tissues"].values()} == {None}
+    h1, h2 = hyp("h1", "decrease", "F_ok"), hyp("h2", "decrease", "F_ok").model_copy(update={"gene_ensembl": "ENSG2"})
+    ids = {one.unit_key: ("decode", "1_1", "ENSG1"), two.unit_key: ("decode", "1_1", "ENSG2")}
+    rows = build_evidence([h1, h2], {"h1": one.unit_key, "h2": two.unit_key}, ids, results, {},
+                          {"h1": {"decode": one.unit_key}, "h2": {"decode": two.unit_key}})
+    assert [(r.evidence_state, r.protein_altering, r.splicing_candidate, r.evidence_state_decode) for r in rows] == [
+        ("supportive", True, True, "supportive"), ("supportive", False, "", "supportive")]
+    with pytest.raises(InputContractError, match="is an instrument for ENSG1"):       # the other gene's unit is refused
+        build_evidence([h2], {"h2": one.unit_key}, ids, results, {})
+    with pytest.raises(InputContractError, match="is an instrument for ENSG1"):
+        build_evidence([h2], {"h2": two.unit_key}, ids, results, {}, {"h2": {"decode": one.unit_key}})
 
 
 # ---- checkpoints bound to the run fingerprint ----------------------------------------------------
@@ -640,7 +669,7 @@ def tables(tmp: Path, u: InstrumentUnit, unit_dir: Path) -> dict[str, bytes]:
     res, metas = collect_unit_dir(u, unit_dir, fp(u), COLLECT)
     hyps = [hyp("h1", "decrease", "F_ok"), hyp("h2", "increase", "F_ok"), hyp("h4", "decrease", "F_small"),
             hyp("h5", "decrease", "F_missing")]
-    rows = build_evidence(hyps, {h.hypothesis_id: u.unit_key for h in hyps}, {u.unit_key: (u.source, u.assay_id)},
+    rows = build_evidence(hyps, {h.hypothesis_id: u.unit_key for h in hyps}, {u.unit_key: (u.source, u.assay_id, u.gene_ensembl)},
                           {u.unit_key: res}, {}, {"h1": {"decode": u.unit_key}})
     for m in metas:
         m["retrieved_utc"] = "fixed"
@@ -734,8 +763,8 @@ def test_a_unit_record_cannot_hold_a_url_and_the_fingerprint_reads_the_record_on
 
 def test_collected_files_are_listed_in_the_outputs(tmp_path):
     res = run(unit(("F_ok",)), FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "u"))
-    rows = build_evidence([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1"}, {"decode__1_1": ("decode", "1_1")},
-                          {"decode__1_1": res}, {})
+    rows = build_evidence([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1__ENSG1"}, {"decode__1_1__ENSG1": ("decode", "1_1", "ENSG1")},
+                          {"decode__1_1__ENSG1": res}, {})
     src = tmp_path / "in.csv"
     src.write_text("x")
     records = [CollectRecord(status="collected", source="decode", key="1_1", name="1_1_G_G.txt.gz", path="raw/decode/1_1_G_G.txt.gz",
@@ -774,7 +803,7 @@ def test_a_variant_ensembl_does_not_know_leaves_protein_altering_missing_unless_
 
     res = run(unit(("F_ok",)), NoVep(), StubBackend(H4), DirStore(tmp_path / "u"))
     assert res["vep"]["rs60"]["hit"] is None and res["outcomes"]["F_ok"]["coloc_run"] is True
-    args = ([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1"}, {"decode__1_1": ("decode", "1_1")}, {"decode__1_1": res})
+    args = ([hyp("h1", "decrease", "F_ok")], {"h1": "decode__1_1__ENSG1"}, {"decode__1_1__ENSG1": ("decode", "1_1", "ENSG1")}, {"decode__1_1__ENSG1": res})
     assert build_evidence(*args, {})[0].protein_altering == ""
     flagged = {("soma", "1_1"): {"N platforms tested": 1, "cis pQTL on both and high correlation (> 0.5)": "N",
                                  "PAV olink": "N", "PAV soma": "Y"}}
@@ -886,9 +915,9 @@ def test_without_an_smp_listing_s16_fetches_nothing_and_its_column_is_empty_for_
     hyps = [hyp("h1", "decrease", "F_ok"), hyp("h4", "decrease", "F_small"), hyp("h5", "decrease", "F_missing"),
             hyp("h6", "decrease", "F_ok", "9_9"),
             hyp("k1", "decrease", "F_ok", "OID1").model_copy(update={"instrument_source": "ukbppp", "platform": "Olink"})]
-    rows = build_evidence(hyps, {"h1": "decode__1_1", "h4": "decode__1_1", "h5": "decode__1_1", "k1": "ukbppp__OID1"},
-                          {"decode__1_1": ("decode", "1_1"), "ukbppp__OID1": ("ukbppp", "OID1")},
-                          {"decode__1_1": res, "ukbppp__OID1": ukb}, {})
+    rows = build_evidence(hyps, {"h1": "decode__1_1__ENSG1", "h4": "decode__1_1__ENSG1", "h5": "decode__1_1__ENSG1", "k1": "ukbppp__OID1__ENSG1"},
+                          {"decode__1_1__ENSG1": ("decode", "1_1", "ENSG1"), "ukbppp__OID1__ENSG1": ("ukbppp", "OID1", "ENSG1")},
+                          {"decode__1_1__ENSG1": res, "ukbppp__OID1__ENSG1": ukb}, {})
     assert [r.s16_evidence_state for r in rows] == [""] * 5
     assert [r.evidence_state for r in rows] == ["supportive", "inconclusive", "inconclusive", "inconclusive", "supportive"]
 
@@ -898,7 +927,7 @@ def test_s16_state_is_set_only_for_a_decode_instrument_with_an_smp_colocalizatio
     ukb = run(ukb_unit(), FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "k"))
     hyps = [hyp("d1", "decrease", "F_ok"),
             hyp("k1", "decrease", "F_ok", "OID1").model_copy(update={"instrument_source": "ukbppp", "platform": "Olink"})]
-    rows = build_evidence(hyps, {"d1": "decode__1_1", "k1": "ukbppp__OID1"},
-                          {"decode__1_1": ("decode", "1_1"), "ukbppp__OID1": ("ukbppp", "OID1")},
-                          {"decode__1_1": dec, "ukbppp__OID1": ukb}, {})
+    rows = build_evidence(hyps, {"d1": "decode__1_1__ENSG1", "k1": "ukbppp__OID1__ENSG1"},
+                          {"decode__1_1__ENSG1": ("decode", "1_1", "ENSG1"), "ukbppp__OID1__ENSG1": ("ukbppp", "OID1", "ENSG1")},
+                          {"decode__1_1__ENSG1": dec, "ukbppp__OID1__ENSG1": ukb}, {})
     assert [(r.evidence_state, r.s16_evidence_state) for r in rows] == [("supportive", "contradictory"), ("supportive", "")]
