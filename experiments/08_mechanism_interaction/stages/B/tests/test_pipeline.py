@@ -739,14 +739,31 @@ def test_collected_files_are_listed_in_the_outputs(tmp_path):
     src = tmp_path / "in.csv"
     src.write_text("x")
     records = [CollectRecord(status="collected", source="decode", key="1_1", name="1_1_G_G.txt.gz", path="raw/decode/1_1_G_G.txt.gz",
-                             bytes=5, sha256="d" * 64, etag="a" * 32, source_url="https://download.example/folder/<token>/1_1_G_G.txt.gz",
+                             bytes=5, sha256="d" * 64, etag="a" * 32,
+                             source_url="https://download.decode.is/s3/download?token=<token>&file=1_1_G_G.txt.gz",
                              utc="2026-10-02T00:00:00+00:00"),
-               CollectRecord(status="absent", source="gwas_catalog", key="GCST1", detail="GWAS Catalog GCST1 listing: HTTP 404")]
+               CollectRecord(status="absent", source="gwas_catalog", key="GCST1", detail="GWAS Catalog GCST1 listing: HTTP 404"),
+               CollectRecord(status="remote_indexed", source="gwas_catalog", key="GCST2", name="2-GCST2-EFO_2.h.tsv.gz",
+                             source_url="https://ftp.ebi.ac.uk/pub/databases/gwas/summary_statistics/GCST000001-GCST001000/"
+                                        "GCST2/harmonised/2-GCST2-EFO_2.h.tsv.gz"),
+               CollectRecord(status="collected", source="ukbppp", key="OID1", name="G_P_OID1_v1.tar", path="raw/ukbppp/G_P_OID1_v1.tar",
+                             bytes=7, sha256="e" * 64, md5="b" * 32, source_url="synapse:syn900001"),
+               CollectRecord(status="collected", source="decode_smp", key="1_1", name="1_1_G_G.txt.gz",
+                             path="raw/decode_smp/1_1_G_G.txt.gz", bytes=6, sha256="f" * 64,
+                             source_url="http://127.0.0.1:8765/decode_smp/s3/download?token=<token>&file=1_1_G_G.txt.gz")]
     write_outputs(tmp_path / "out", rows, [], [src], {"hypotheses": src}, [("", tmp_path)], script_root=tmp_path,
                   run_token="stageb-token-0001", repo_commit=COMMIT, tools=TOOLS, collected=records)
+    text = (tmp_path / "out" / "collected_files.tsv").read_text()
     table = pd.read_csv(tmp_path / "out" / "collected_files.tsv", sep="\t", dtype=str, keep_default_na=False)
-    assert table[["source", "key", "status", "bytes", "sha256"]].values.tolist() == [
-        ["decode", "1_1", "collected", "5", "d" * 64], ["gwas_catalog", "GCST1", "absent", "", ""]]
+    assert table[["source", "key", "status", "bytes", "sha256", "source_url"]].values.tolist() == [
+        ["decode", "1_1", "collected", "5", "d" * 64, "download.decode.is"],
+        ["decode_smp", "1_1", "collected", "6", "f" * 64, "127.0.0.1"],
+        ["gwas_catalog", "GCST1", "absent", "", "", ""],
+        ["gwas_catalog", "GCST2", "remote_indexed", "", "", "ftp.ebi.ac.uk"],
+        ["ukbppp", "OID1", "collected", "7", "e" * 64, "synapse"]]
+    # the table publishes the host only: no scheme, port, path, query, token placeholder or Synapse entity
+    assert not any(part in text for part in ("://", "/s3/", "token", "?", "8765", "harmonised", "syn900001"))
+    assert records[0].source_url.startswith("https://download.decode.is/s3/download?")   # the record keeps its own
     assert "collected_files.tsv" in verify_output_dir(tmp_path / "out", ["evidence.csv"])
 
 

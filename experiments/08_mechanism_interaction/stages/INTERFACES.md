@@ -275,7 +275,10 @@ directory>`); the repository files stage A reads are baked into the image. Outpu
 
 Also `regional_manifest.tsv` (one row per regional extract: source, protein/study, window,
 variants, sha256), `collected_files.tsv` (one row per collect record: source, key, status, name,
-bytes, sha256, md5, etag, last_modified, source_url, detail, utc), `run_info.json` (stage, run
+bytes, sha256, md5, etag, last_modified, source_url, detail, utc; `source_url` holds only the host
+of the record's address, for every source, such as `download.decode.is` or `ftp.ebi.ac.uk`, and
+`synapse` for a Synapse entity, whose address has no host, while the record on the private volume
+keeps the address it was written with: `stage_b.assemble.source_host`), `run_info.json` (stage, run
 token, repository commit, code digest, and the tool versions the units ran under), `INPUTS.tsv`,
 `MANIFEST.tsv`. For table 12, each hypothesis's outcome GWAS is also colocalized with its UKB-PPP
 and deCODE instruments where it names assays in them; `unit_plan.json` maps each hypothesis to
@@ -475,7 +478,10 @@ set's exclusion report, S16 the S1 rows with `s16_evidence_state` in place of th
 where stage B wrote one (not formed, and reported as not run, when it is empty for every S1
 hypothesis), and table 12 the cross-source agreement from
 `evidence_state_ukbppp` / `evidence_state_decode`; the join raises if the selected source's state
-differs from `evidence_state`. S5 keeps only `protein_altering` false, S11 only
+differs from `evidence_state`. When S16 is formed it holds every held-out S1 row and not only the
+rows with an `s16_evidence_state`: a row with one takes it as its state and every other row keeps
+its primary `evidence_state` (`stage_d/sets.py`, `s16_evidence_state` filled from `evidence_state`
+over the S1 mask; the set's `replaced` note counts the rows that took the SMP-normalized state). S5 keeps only `protein_altering` false, S11 only
 `splicing_candidate` false and S15f only `low_coverage` false; a hypothesis whose flag is missing
 is excluded from that set and counted in the set's `flag_missing_excluded` note. Work files live
 in one directory per run (`--work`, default `D/work/run`; `/vol/work` on Modal) bound to the run

@@ -7,7 +7,9 @@ reads back the right ones. Point R at a library with STAGE_B_R_LIBS if coloc is 
 default one.
 
 Every R process started here runs under conftest.py's profile: `options(warnPartialMatchDollar =
-TRUE)`, and a partial-match warning is an error.
+TRUE)`, and a partial-match warning is an error. coloc_run.R sets the three partial-match options
+itself and makes each such warning an error, so every R test that runs the script also checks that
+jsonlite, coloc and susieR match no `$`, argument or attribute name partially on the way.
 """
 import json
 import os
@@ -170,6 +172,30 @@ def test_r_started_by_the_tests_treats_a_partial_dollar_match_as_an_error():
     exact = subprocess.run(["Rscript", "-e", 'd <- list(snp = c("a", "b"), beta = 1); cat(is.null(d[["s"]]))'],
                            capture_output=True, text=True)
     assert exact.returncode == 0 and exact.stdout == "TRUE"
+
+
+@needs_rscript
+@pytest.mark.parametrize("snippet,warning", [
+    ('d <- list(snp = c("a", "b")); x <- d$s', "partial match of 's' to 'snp'"),
+    ("f <- function(value) value; x <- f(val = 1)", "partial argument match of 'val' to 'value'"),
+    ('x <- structure(1, names = "a"); y <- attr(x, "nam")', "partial match of 'nam' to 'names'"),
+], ids=["dollar", "argument", "attribute"])
+def test_the_r_script_itself_makes_each_kind_of_partial_match_an_error_its_task_handler_cannot_catch(tmp_path, snippet, warning):
+    head = R_SCRIPT.read_text().split("suppressPackageStartupMessages", 1)[0]     # what the script runs before any library
+    assert "options(warnPartialMatchDollar = TRUE, warnPartialMatchArgs = TRUE, warnPartialMatchAttr = TRUE)" in head
+    caught = 'res <- tryCatch({ %s; "ran" }, error = function(e) "caught")\ncat(res)\n'      # the script's per-task handler
+    script = tmp_path / "head.R"
+    for body, expected in ((snippet, None), ("x <- 1", "ran")):
+        script.write_text(head + caught % body)
+        res = subprocess.run(["Rscript", "--vanilla", str(script)], capture_output=True, text=True)   # no profile of the tests
+        if expected is None:
+            assert res.returncode != 0 and res.stdout == ""
+            assert f"partial matching is an error in coloc_run.R: {warning}" in res.stderr
+        else:
+            assert res.returncode == 0 and res.stdout == expected
+    script.write_text(caught % snippet)                               # without the script's first lines R matches partially
+    plain = subprocess.run(["Rscript", "--vanilla", str(script)], capture_output=True, text=True)
+    assert plain.returncode == 0 and plain.stdout == "ran"
 
 
 def _request() -> dict:

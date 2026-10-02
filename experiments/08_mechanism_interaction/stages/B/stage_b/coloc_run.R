@@ -7,6 +7,18 @@
 # Every field is read with `[[ ]]`, which matches a name exactly. `$` matches partially: on a
 # quantitative dataset sent without `s` and `sdY` (the eQTL / sQTL side), `d$s` returns `snp`. No
 # `$` is used in this file, and the required fields of the request are checked right after parsing.
+#
+# Partial matching is an error in this process, wherever it happens: R reports a partial match by
+# `$`, of an argument name or of an attribute name as a warning, and the handler below turns that
+# warning into an error. A global calling handler runs below every tryCatch of this file, so the
+# per-task handler does not catch the error: Rscript exits non-zero and writes no response.
+options(warnPartialMatchDollar = TRUE, warnPartialMatchArgs = TRUE, warnPartialMatchAttr = TRUE)
+globalCallingHandlers(warning = function(w) {
+  if (grepl("partial (argument )?match of", conditionMessage(w))) {
+    stop(sprintf("partial matching is an error in coloc_run.R: %s", conditionMessage(w)), call. = FALSE)
+  }
+})
+
 suppressPackageStartupMessages({
   library(jsonlite)
   library(coloc)

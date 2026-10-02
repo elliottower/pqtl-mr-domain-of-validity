@@ -11,8 +11,9 @@ for every instrument of another source, and for every hypothesis when no SMP-nor
 pinned.
 
 `collected_files.tsv` lists every record of the collect phase (stage_b/collect.py): each whole file
-with its size, sha256, ETag and source address (no query, no token), and each file recorded absent
-or queried by region.
+with its size, sha256 and ETag, and each file recorded absent or queried by region. Its `source_url`
+column holds the host of the record's address only (`source_host`), for every source; the record on
+the volume keeps the address it has.
 
 The output directory holds tables of hashes and derived summary results only. No regional extract
 (a unit directory's `*.tsv.gz` or `ld.npz`, which hold rows of the source files) and no whole file
@@ -24,6 +25,7 @@ versions the units ran under) and puts the code digest and the commit in INPUTS.
 """
 import csv
 import json
+import urllib.parse
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Literal
@@ -188,6 +190,15 @@ def write_table(path: Path, columns: list[str], rows: list[dict], sep: str) -> i
     return len(rows)
 
 
+def source_host(address: str) -> str:
+    """What collected_files.tsv publishes of a collect record's `source_url`: the host of an address
+    that has one (`https://download.decode.is/s3/download?...` -> `download.decode.is`), without
+    port, path or query; the scheme of an address without a host (`synapse:syn1` -> `synapse`); ""
+    for a record without an address."""
+    parts = urllib.parse.urlsplit(address)
+    return parts.hostname or parts.scheme
+
+
 def regional_rows(unit_metas: Mapping[str, list[dict]]) -> list[RegionalManifestRow]:
     """unit_key -> list of {source, protein_or_study, window, variants, sha256, status, detail,
     retrieved_utc} as collected from each unit's *.meta.json."""
@@ -211,7 +222,7 @@ def write_outputs(out_dir: Path, evidence: list[EvidenceRow], regional: list[Reg
                                                        [r.model_dump() for r in regional], "\t"),
         out_dir / "collected_files.tsv": write_table(
             out_dir / "collected_files.tsv", COLLECTED_FILES_COLUMNS,
-            [{**r.model_dump(), "bytes": "" if r.bytes is None else r.bytes}
+            [{**r.model_dump(), "bytes": "" if r.bytes is None else r.bytes, "source_url": source_host(r.source_url)}
              for r in sorted(collected, key=lambda r: (r.source, r.key))], "\t"),
     }
     run_info = out_dir / RUN_INFO_NAME
