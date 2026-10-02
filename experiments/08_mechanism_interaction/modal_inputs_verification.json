@@ -1,0 +1,273 @@
+{
+ "n_manifest": 26,
+ "n_remote": 26,
+ "n_match": 26,
+ "n_mismatch_or_missing": 0,
+ "n_not_stamped_uploaded": 0,
+ "remote_not_in_manifest": [],
+ "files": [
+  {
+   "path": "inputs/decode/assocvariants.annotated.txt.gz",
+   "remote_path": "/08_mechanism_interaction/inputs/decode/assocvariants.annotated.txt.gz",
+   "local_sha256": "c5d5f9a73b5ce20e4a2faa9e00cab5d9a86cc94e6db20ac098ba6310f7c45e38",
+   "remote_sha256": "c5d5f9a73b5ce20e4a2faa9e00cab5d9a86cc94e6db20ac098ba6310f7c45e38",
+   "local_bytes": 441697192,
+   "remote_bytes": 441697192,
+   "uploaded_at": "2026-09-30T21:17:29+00:00",
+   "match": true
+  },
+  {
+   "path": "inputs/decode/assocvariants.excluded.txt.gz",
+   "remote_path": "/08_mechanism_interaction/inputs/decode/assocvariants.excluded.txt.gz",
+   "local_sha256": "b0d42ba122a9c570343a03cc6179f705f45fac61a6bc16aa0943f24da14d951d",
+   "remote_sha256": "b0d42ba122a9c570343a03cc6179f705f45fac61a6bc16aa0943f24da14d951d",
+   "local_bytes": 53551092,
+   "remote_bytes": 53551092,
+   "uploaded_at": "2026-09-30T21:17:29+00:00",
+   "match": true
+  },
+  {
+   "path": "inputs/decode/sha256_2026-09-30.txt",
+   "remote_path": "/08_mechanism_interaction/inputs/decode/sha256_2026-09-30.txt",
+   "local_sha256": "ff8373dbb6fa19afe5550f40b08630e1c08c62c6eb89f0da5b27804b60783eb3",
+   "remote_sha256": "ff8373dbb6fa19afe5550f40b08630e1c08c62c6eb89f0da5b27804b60783eb3",
+   "local_bytes": 193,
+   "remote_bytes": 193,
+   "uploaded_at": "2026-09-30T21:17:29+00:00",
+   "match": true
+  },
+  {
+   "path": "inputs/karim2026/sha256_2026-09-30.txt",
+   "remote_path": "/08_mechanism_interaction/inputs/karim2026/sha256_2026-09-30.txt",
+   "local_sha256": "3a77ae2c4ece9157efdc9e29c60ef89b54e058054fa68bde4575b52860783966",
+   "remote_sha256": "3a77ae2c4ece9157efdc9e29c60ef89b54e058054fa68bde4575b52860783966",
+   "local_bytes": 140,
+   "remote_bytes": 140,
+   "uploaded_at": "2026-09-30T21:17:37+00:00",
+   "match": true
+  },
+  {
+   "path": "inputs/karim2026/v2_supp_tables.xlsx",
+   "remote_path": "/08_mechanism_interaction/inputs/karim2026/v2_supp_tables.xlsx",
+   "local_sha256": "3ce92b387c82c89046dbbcc30cf1ee2f7073a4e490e17e2a0e6fcb8451b4ccbd",
+   "remote_sha256": "3ce92b387c82c89046dbbcc30cf1ee2f7073a4e490e17e2a0e6fcb8451b4ccbd",
+   "local_bytes": 20093604,
+   "remote_bytes": 20093604,
+   "uploaded_at": "2026-09-30T21:17:37+00:00",
+   "match": true
+  },
+  {
+   "path": "inputs/ot_26.09/clinical_report.parquet",
+   "remote_path": "/08_mechanism_interaction/inputs/ot_26.09/clinical_report.parquet",
+   "local_sha256": "ba0ea48b129182de119f5d676bb1483e6225ba65857a31b7319b65c0e6b8fa25",
+   "remote_sha256": "ba0ea48b129182de119f5d676bb1483e6225ba65857a31b7319b65c0e6b8fa25",
+   "local_bytes": 75924085,
+   "remote_bytes": 75924085,
+   "uploaded_at": "2026-09-30T21:17:39+00:00",
+   "match": true
+  },
+  {
+   "path": "inputs/ukbppp/sha256_2026-09-30.txt",
+   "remote_path": "/08_mechanism_interaction/inputs/ukbppp/sha256_2026-09-30.txt",
+   "local_sha256": "d88e820685d1acb804141d6ade490367fabbd12b017145f050692ae39e8f5fbe",
+   "remote_sha256": "d88e820685d1acb804141d6ade490367fabbd12b017145f050692ae39e8f5fbe",
+   "local_bytes": 144,
+   "remote_bytes": 144,
+   "uploaded_at": "2026-09-30T21:17:42+00:00",
+   "match": true
+  },
+  {
+   "path": "inputs/ukbppp/ukbppp_cis_pqtl_genes.json",
+   "remote_path": "/08_mechanism_interaction/inputs/ukbppp/ukbppp_cis_pqtl_genes.json",
+   "local_sha256": "d40fa2f56ebc0b49100cc7e4d7d96cf4a7b000951210174300ccae7a3a9ec1d7",
+   "remote_sha256": "d40fa2f56ebc0b49100cc7e4d7d96cf4a7b000951210174300ccae7a3a9ec1d7",
+   "local_bytes": 17723,
+   "remote_bytes": 17723,
+   "uploaded_at": "2026-09-30T21:17:42+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-ancestries-r2026-09-13.tsv",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-ancestries-r2026-09-13.tsv",
+   "local_sha256": "bc55cd544f6e928c440c8e4c79de53168c0f5a85d03b401e21d2b5603b6d35a7",
+   "remote_sha256": "bc55cd544f6e928c440c8e4c79de53168c0f5a85d03b401e21d2b5603b6d35a7",
+   "local_bytes": 53445127,
+   "remote_bytes": 53445127,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-studies-r2026-09-13.tsv",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-studies-r2026-09-13.tsv",
+   "local_sha256": "8b5aa02a1da7ff72b3d4e7f9d45375486016bf6070014bfb5d0b248834f56f21",
+   "remote_sha256": "8b5aa02a1da7ff72b3d4e7f9d45375486016bf6070014bfb5d0b248834f56f21",
+   "local_bytes": 129219103,
+   "remote_bytes": 129219103,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-unpublished-ancestries-r2026-09-13.tsv",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-unpublished-ancestries-r2026-09-13.tsv",
+   "local_sha256": "398e0935b51c2f4bab7c09376c282d83147de1cdba59b32765f5b1bbec3cf919",
+   "remote_sha256": "398e0935b51c2f4bab7c09376c282d83147de1cdba59b32765f5b1bbec3cf919",
+   "local_bytes": 6820024,
+   "remote_bytes": 6820024,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-unpublished-studies-r2026-09-13.tsv",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/gwas_catalog/gwas-catalog-v1.0.3.1-unpublished-studies-r2026-09-13.tsv",
+   "local_sha256": "81fee11f6d0c19719ffb23d86324d046202b869a47b2fb9d7da45934e82fd1d1",
+   "remote_sha256": "81fee11f6d0c19719ffb23d86324d046202b869a47b2fb9d7da45934e82fd1d1",
+   "local_bytes": 8150250,
+   "remote_bytes": 8150250,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/hgnc/hgnc_complete_set.txt",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/hgnc/hgnc_complete_set.txt",
+   "local_sha256": "91d0ad20c34f26fb12c8cce3f80a65a6fc694f3a508040b19f6bfa29ae0d889e",
+   "remote_sha256": "91d0ad20c34f26fb12c8cce3f80a65a6fc694f3a508040b19f6bfa29ae0d889e",
+   "local_bytes": 16953545,
+   "remote_bytes": 16953545,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/hpa/proteinatlas.tsv.zip",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/hpa/proteinatlas.tsv.zip",
+   "local_sha256": "ad401f8519ecdee5b67b0ad3bf28175d402d1ea0ad6c542b90fcab2bee39b470",
+   "remote_sha256": "ad401f8519ecdee5b67b0ad3bf28175d402d1ea0ad6c542b90fcab2bee39b470",
+   "local_bytes": 7460135,
+   "remote_bytes": 7460135,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/interval/sun2018_MOESM4_ESM.xlsx",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/interval/sun2018_MOESM4_ESM.xlsx",
+   "local_sha256": "d7bfada3eab1e2be15fdde9bc5a62e2d2563c111db5b2e7f242dfb9ea492b9d5",
+   "remote_sha256": "d7bfada3eab1e2be15fdde9bc5a62e2d2563c111db5b2e7f242dfb9ea492b9d5",
+   "local_bytes": 2219218,
+   "remote_bytes": 2219218,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/opengwas/gwasinfo_all.json",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/opengwas/gwasinfo_all.json",
+   "local_sha256": "382c5b4cab3c7a342bfdf4bb506356e2c600d1b0fc8fd9fb90d9cb431e845b62",
+   "remote_sha256": "382c5b4cab3c7a342bfdf4bb506356e2c600d1b0fc8fd9fb90d9cb431e845b62",
+   "local_bytes": 20917306,
+   "remote_bytes": 20917306,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/opengwas/gwasinfo_all.retrieval.json",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/opengwas/gwasinfo_all.retrieval.json",
+   "local_sha256": "e81c226b9c415c59e83c4f525a6ce322467efaf312955a0ed5e79c8da4d30c50",
+   "remote_sha256": "e81c226b9c415c59e83c4f525a6ce322467efaf312955a0ed5e79c8da4d30c50",
+   "local_bytes": 117,
+   "remote_bytes": 117,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/ot_26.09/clinical_indication.parquet",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/clinical_indication.parquet",
+   "local_sha256": "e10ced7ce09495cd3fa6e7cb94e81e083aed78ee399424730d567243b49a38d8",
+   "remote_sha256": "e10ced7ce09495cd3fa6e7cb94e81e083aed78ee399424730d567243b49a38d8",
+   "local_bytes": 4989955,
+   "remote_bytes": 4989955,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/ot_26.09/disease.parquet",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/disease.parquet",
+   "local_sha256": "a89b8b8b89bad168016e6ff8302d2bcc8d9b7f9cbb35c459ef847c36a4f17aed",
+   "remote_sha256": "a89b8b8b89bad168016e6ff8302d2bcc8d9b7f9cbb35c459ef847c36a4f17aed",
+   "local_bytes": 6346458,
+   "remote_bytes": 6346458,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/ot_26.09/drug_mechanism_of_action.parquet",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/drug_mechanism_of_action.parquet",
+   "local_sha256": "8484accd3383837e0eaac2164eed89991daf58dc93f0a599072fb7e5ef4f6c28",
+   "remote_sha256": "8484accd3383837e0eaac2164eed89991daf58dc93f0a599072fb7e5ef4f6c28",
+   "local_bytes": 322830,
+   "remote_bytes": 322830,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/ot_26.09/drug_molecule.parquet",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/drug_molecule.parquet",
+   "local_sha256": "be65749aa1dbcc68d0930f8ac18126cec5c2bc2c0f232f11e8530dad4ba0585c",
+   "remote_sha256": "be65749aa1dbcc68d0930f8ac18126cec5c2bc2c0f232f11e8530dad4ba0585c",
+   "local_bytes": 6867467,
+   "remote_bytes": 6867467,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/ot_26.09/study.parquet",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/study.parquet",
+   "local_sha256": "158296ab630ae2dbedc14d5a7c0393f92837d99ba59fd76d3c2f363327e48d40",
+   "remote_sha256": "158296ab630ae2dbedc14d5a7c0393f92837d99ba59fd76d3c2f363327e48d40",
+   "local_bytes": 97748879,
+   "remote_bytes": 97748879,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/uniprot/secreted_KW-0964.meta.json",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/uniprot/secreted_KW-0964.meta.json",
+   "local_sha256": "1c77491772678acd8795c5d31fe7ef87c91a4ba125cc351b5b2bc4128f34b9c7",
+   "remote_sha256": "1c77491772678acd8795c5d31fe7ef87c91a4ba125cc351b5b2bc4128f34b9c7",
+   "local_bytes": 207,
+   "remote_bytes": 207,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/uniprot/secreted_KW-0964.tsv",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/uniprot/secreted_KW-0964.tsv",
+   "local_sha256": "93c885b7d7d2bf22a2257adea81f737a60bf25e99813de5ca39c4a0a4bdaa8e0",
+   "remote_sha256": "93c885b7d7d2bf22a2257adea81f737a60bf25e99813de5ca39c4a0a4bdaa8e0",
+   "local_bytes": 28990,
+   "remote_bytes": 28990,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/uniprot/secreted_SL-0243.meta.json",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/uniprot/secreted_SL-0243.meta.json",
+   "local_sha256": "5834ab53a29ac0d32b52f66622d25d4754fc669b899f51d28dc192210254bf03",
+   "remote_sha256": "5834ab53a29ac0d32b52f66622d25d4754fc669b899f51d28dc192210254bf03",
+   "local_bytes": 211,
+   "remote_bytes": 211,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  },
+  {
+   "path": "feasibility/v2_all_indications/inputs/uniprot/secreted_SL-0243.tsv",
+   "remote_path": "/08_mechanism_interaction/feasibility/v2_all_indications/inputs/uniprot/secreted_SL-0243.tsv",
+   "local_sha256": "d165b1587e6d5f489b18b7bc036e74fa6a001c5323cff9e395a75a8165d3517c",
+   "remote_sha256": "d165b1587e6d5f489b18b7bc036e74fa6a001c5323cff9e395a75a8165d3517c",
+   "local_bytes": 28990,
+   "remote_bytes": 28990,
+   "uploaded_at": "2026-09-30T21:18:29+00:00",
+   "match": true
+  }
+ ],
+ "volume": "pqtl-v8-inputs",
+ "verified_at": "2026-09-30T21:18:57+00:00",
+ "manifest_hashed_at": "2026-09-30T21:16:26+00:00"
+}

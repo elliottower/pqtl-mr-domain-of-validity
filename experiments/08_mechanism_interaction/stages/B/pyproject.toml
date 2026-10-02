@@ -1,0 +1,28 @@
+[project]
+name = "exp08-stage-b"
+version = "0.1.0"
+description = "V8 stage B: regional extraction, harmonization, colocalization and evidence states (PREREG.md, freeze b946087)"
+requires-python = "==3.12.*"
+dependencies = [
+    "numpy==2.1.3",
+    "pandas==2.2.3",
+    "pydantic==2.13.5",
+    "requests==2.32.3",
+    "openpyxl==3.1.5",
+    "pytest==9.1.1",
+    "v8-run-guard==0.1.0",
+]
+
+[project.optional-dependencies]
+# Linux only, installed in the Modal image (modal_stage_b.py); fetch.py imports it.
+remote = ["synapseclient==4.12.0"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+v8-run-guard = { path = "../run_guard", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

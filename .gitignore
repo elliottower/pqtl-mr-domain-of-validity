@@ -54,3 +54,7 @@ experiments/08_mechanism_interaction/inputs/
 
 # V8 all-indications feasibility count inputs (OT, GWAS Catalog, OpenGWAS, FinnGen, HPA, UniProt)
 experiments/08_mechanism_interaction/feasibility/v2_all_indications/inputs/
+
+# V8 stages: lockfiles are committed; the prereg lock file is not
+!experiments/08_mechanism_interaction/stages/*/uv.lock
+experiments/08_mechanism_interaction/PREREG.md.provenance-lock

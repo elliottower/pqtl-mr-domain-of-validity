@@ -1,0 +1,25 @@
+[project]
+name = "v8-stage-c"
+version = "0.1.0"
+description = "Experiment 08 stage C: outcome coding"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "pandas==2.2.3",
+    "pyarrow==21.0.0",
+    "pydantic==2.11.7",
+    "requests==2.32.3",
+    "v8-run-guard==0.1.0",
+]
+
+[dependency-groups]
+dev = ["pytest==8.4.2"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+v8-run-guard = { path = "../run_guard", editable = true }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

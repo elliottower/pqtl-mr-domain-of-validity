@@ -1,0 +1,3 @@
+trials_snapshot/*.json
+!trials_snapshot/manifest.jsonl
+!trials_snapshot/not_found.jsonl

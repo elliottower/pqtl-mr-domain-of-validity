@@ -1,0 +1,30 @@
+[project]
+name = "v8-stage-d"
+version = "0.1.0"
+description = "V8 stage D: join of stages A-C and every registered analysis (PREREG.md, freeze b946087)"
+requires-python = "==3.12.*"
+dependencies = [
+    "numpy==2.5.3",
+    "scipy==1.18.1",
+    "pandas==3.0.6",
+    "statsmodels==0.15.0",
+    "tqdm==4.70.1",
+    "matplotlib==3.11.2",
+    "pydantic==2.13.5",
+    "pytest==9.1.1",
+    "v8-run-guard==0.1.0",
+]
+
+[project.optional-dependencies]
+# Linux only (Modal image in modal_stage_d.py); PyMC does not install on the local Intel Mac.
+bayes = ["pymc==5.28.5", "pytensor==2.38.2", "arviz==0.23.4"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+v8-run-guard = { path = "../run_guard", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "../../power/power_v9"]
