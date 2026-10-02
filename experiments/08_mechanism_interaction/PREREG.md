@@ -2,7 +2,7 @@
 
 **Status:** FROZEN at `b946087070e4`
 **Plan sha256:** `6cbba0840b213f586ef455b33e569a84a94fc676103b74adef6c46e2e0e70040`
-**Log:** 24 entries, head `6898bd6d`
+**Log:** 26 entries, head `25b24dca`
 **Frozen:** 2026-09-30
 
 Sections use the [OSF Preregistration](https://osf.io/prereg/) question titles verbatim, so
@@ -940,4 +940,6 @@ decide which word to use: `nothing run`, `no results seen`, `results not opened`
 2026-10-02  Pre-stage note (A, port of count_v4.py): stage A forms the instrument lists, mechanism classes and intervention directions as feasibility/v4_round3/count_v4.py does, except where the frozen plan states the operative rule. To reproduce that script, the UKB-PPP `UniProt2` field is tested without splitting its value; an empty deCODE ST02 gene cell is kept through the script's string conversion; an empty EpiGraphDB token is kept; and the supplementary workbooks are read over their recorded sheet dimensions without resetting them. The kept empty deCODE cell and empty EpiGraphDB token are not gene symbols and change no membership. The class table reads the Open Targets action type as supplied. The class and direction of a drug program and target come only from mechanism rows connected to Phase II or later drug and indication rows.  nothing run  ·56b9f0e9
 2026-10-02  RUN_START stage=A token=f7014df548d04781  nothing run  ·4d8ac19a
 2026-10-02  Stage A start under token f7014df548d04781 did not execute: the Modal container failed while importing the wrapper (modal_stage_a.py imports v8_test_report, which was baked only into the test image), so no stage A code ran, no input was read and the output volume is empty. Wrapper fixed in commit 8d007bc (one added file in the run image; stage_a/ and run_stage_a.py unchanged). Stage A is started again under the same token  nothing run  ·6898bd6d
+2026-10-02  Stage A ran on Modal under token f7014df548d04781 from commit dd7751f (app ap-daeFFmkgjMqwewI4jDH3BU); all 19 registered counts matched (registered_count_check.json); output committed; stage A reads no outcome and no evidence  no results seen  ·f2acc375
+2026-10-02  SEAL stage=A manifest_sha256=651ac6439cc724e2e4f34c1979c17c97a2e6486c6b4ba37e9cc2a17ba65a39ff  no results seen  ·25b24dca
 ```
