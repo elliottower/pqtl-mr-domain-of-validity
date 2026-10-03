@@ -26,8 +26,9 @@ and these outcomes:
     GCST90000001            GWAS Catalog without an index (collected once, read by two units),
                             signal 200 kb downstream                          -> PP.H3, inconclusive
     GCST90000002            GWAS Catalog with an index (tabix), 30 variants   -> fewer_than_50_shared
-    GCST90000003            no harmonised directory (404)                     -> outcome_file_unavailable
-    GCST90000004            a directory without a harmonised file             -> outcome_file_unavailable
+    GCST90000003            no study directory (404)                          -> outcome_file_unavailable
+    GCST90000004            a study directory with neither a harmonised file nor
+                            a summary-statistics file                         -> outcome_file_unavailable
 
 The splicing step finds a liver sQTL signal at the sentinel and no eQTL signal (splicing_candidate).
 
@@ -69,7 +70,8 @@ from stage_b import remote as remote_errors
 from stage_b.assemble import build_evidence, collect_unit_dir, regional_rows
 from stage_b.checkpoint import volume_collect_digest
 from stage_b.collect import collect_one, collect_tasks, purge_raw, read_record
-from stage_b.fetch import SYNAPSE_RSID_MAPS, SYNAPSE_UKBPPP_EUR, Endpoints, RemoteSources, VolumeFetcher, gwas_catalog_dir
+from stage_b.fetch import (SYNAPSE_RSID_MAPS, SYNAPSE_UKBPPP_EUR, Endpoints, RemoteSources, VolumeFetcher, gwas_catalog_dir,
+                           gwas_catalog_study_dir)
 from stage_b.schemas import (WINDOW_PRIMARY, CollectTask, HypothesisInput, InstrumentUnit, OutcomeSpec,
                              RetryableSourceError, Sentinel, SourceAbsent, SourceFile, StageBError)
 from stage_b.status import error_of, status_report, volume_state
@@ -303,6 +305,7 @@ def build_world(remote: FakeRemote, work: Path, indexed: bool = True) -> World:
     remote.files[gwascat] = listing(whole, "readme.txt")
     remote.files[gwascat + whole] = _gz(gwas_catalog_text(distinct))
     remote.files[gwas_catalog_dir("/gwascat", NO_FILE)] = listing("readme.txt")
+    remote.files[gwas_catalog_study_dir("/gwascat", NO_FILE)] = listing("harmonised/", "readme.txt")
 
     # JSON endpoints: Ensembl, OpenGWAS, GTEx
     index = {rs: i for i, rs in enumerate(meta["rsid"])}

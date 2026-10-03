@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from stage_b.schemas import CollectTask, InstrumentUnit, RetryableSourceError, StageBError
+from stage_b.validate import REPORT_NAME, VALIDATION_DIR
 
 
 def error_of(err: BaseException) -> dict:
@@ -56,7 +57,9 @@ def marked(root: Path, kind: str, name: str, label: str, call: Callable[[], obje
 
 def volume_state(root: Path) -> dict:
     """What the stage B root on the volume holds: collect records, partial downloads, finished
-    units, error markers. File names and small JSON records only; no regional file is opened."""
+    units, error markers, and, for the guard of `spawn` (validate.require_validation), the full
+    GWAS Catalog records and the pre-analysis validation report (None when there is none). File
+    names and small JSON records only; no regional file is opened."""
     records = [{k: json.loads(p.read_text())[k] for k in ("source", "key", "status")}
                for p in sorted((root / "collect").glob("*/*.json"))]
     partials = [{"source": p.parent.name, "name": p.name, "bytes": p.stat().st_size}
@@ -65,7 +68,10 @@ def volume_state(root: Path) -> dict:
     started = sorted(d.name for d in (root / "units").glob("*") if d.is_dir())
     errors = {kind: {m["name"]: m for m in (json.loads(p.read_text()) for p in sorted((root / "errors" / kind).glob("*.json")))}
               for kind in ("collect", "units")}
-    return {"records": records, "partials": partials, "units_done": done, "units_started": started, "errors": errors}
+    catalog = [json.loads(p.read_text()) for p in sorted((root / "collect" / "gwas_catalog").glob("*.json"))]
+    report = root / VALIDATION_DIR / REPORT_NAME
+    return {"records": records, "partials": partials, "units_done": done, "units_started": started, "errors": errors,
+            "gwas_catalog_records": catalog, "outcome_validation": json.loads(report.read_text()) if report.is_file() else None}
 
 
 def _state(finished: bool, call: Mapping | None, marker: Mapping | None, deployed: bool) -> dict:

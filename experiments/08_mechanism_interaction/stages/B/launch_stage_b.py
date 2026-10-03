@@ -9,8 +9,15 @@ after it (the image bakes PREREG.md and the sealed stage A files).
     # 2. collect: one call per whole file (deCODE files, UKB-PPP tars and rsID maps, GWAS Catalog
     #    files without an index), each downloaded once to the stage B volume
     $B collect --run-token <token> [--source decode ...]
+    #    re-collect GWAS Catalog accessions recorded absent under an earlier rule: their `absent` record
+    #    is moved to /stage_b/superseded/collect/ and the task runs again (stage_b.collect.supersede_absent)
+    $B collect --run-token <token> --accessions-file <file>   # or --accessions GCST... GCST...
     $B status                            # until every file has a record
-    # 3. analyze: one call per instrument unit; refused while a file has no collect record
+    #    pre-analysis validation of the GWAS Catalog files read without a harmonised copy (stage_b/validate.py):
+    #    aggregate parser diagnostics, and a file failing a fixed rule made `unreadable`
+    $B validate --run-token <token>      # writes inputs/stage_b/validation/outcome_validation_<utc>.json
+    # 3. analyze: one call per instrument unit; refused while a file has no collect record, or while the
+    #    validation report is missing or does not cover the current GWAS Catalog collect records
     $B spawn --run-token <token>
     $B status                            # until every unit is done
     # 4. after `modal volume get pqtl-v8-stage-b /stage_b/units inputs/stage_b/units` and
@@ -70,7 +77,7 @@ from stage_b.assemble import (build_evidence, collect_unit_dir, load_collect_rec
 from stage_b.checkpoint import collect_digest, common_tools, package_sha256, source_pins, unit_fingerprint, unit_tools
 from stage_b.launch import (authorize, check_plan_inputs, planned_tasks, private_copy, sealed_stage_b, spawn_collect,
                             spawn_units)
-from stage_b.schemas import InputContractError, InstrumentUnit
+from stage_b.schemas import CollectRecord, InputContractError, InstrumentUnit
 from stage_b.status import error_of, status_report
 from stage_b.units import load_hypotheses
 
@@ -87,7 +94,8 @@ LOG = HERE / "launch_log.jsonl"
 APP = "pqtl-v8-stage-b"
 VOLUME = "pqtl-v8-stage-b"
 STAGE_ROOT = "stage_b"     # the stage B root on the volume (modal_stage_b.ROOT without the mount point)
-FUNCTIONS = ("plan_remote", "collect_file", "run_unit", "stage_state", "purge_raw_files")
+FUNCTIONS = ("plan_remote", "collect_file", "validate_outcomes", "validate_outcome_file", "run_unit", "stage_state",
+             "purge_raw_files")
 
 
 def utc_now() -> str:
@@ -120,13 +128,40 @@ def cmd_plan(a: argparse.Namespace) -> None:
           f"files to collect: {out['unit_plan']['collect_tasks_by_source']}")
 
 
+def accession_list(a: argparse.Namespace) -> list[str]:
+    """--accessions, and the non-empty lines of --accessions-file (first tab-separated field)."""
+    listed = list(a.accessions or [])
+    if a.accessions_file is not None:
+        listed += [line.split("\t")[0].strip() for line in a.accessions_file.read_text().splitlines() if line.strip()]
+    return sorted(set(listed))
+
+
 def cmd_collect(a: argparse.Namespace) -> None:
     commit = clean_commit(REPO)
     fn = modal.Function.from_name(APP, "collect_file")
-    calls = spawn_collect(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT, lambda task, token: fn.spawn(task, token).object_id,
-                          a.source or ())
-    log_entry({"what": "collect", "repo_commit": commit, "calls": calls, "utc": utc_now()})
-    print(f"{len(calls)} collect calls spawned at {utc_now()}")
+    accessions = accession_list(a)
+    supersede = bool(accessions)          # only an `absent` GWAS Catalog record is ever superseded
+    calls = spawn_collect(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT,
+                          lambda task, token: fn.spawn(task, token, supersede).object_id, a.source or (), accessions)
+    log_entry({"what": "collect", "repo_commit": commit, "calls": calls, "supersede_absent": supersede,
+               "accessions": accessions, "utc": utc_now()})
+    print(f"{len(calls)} collect calls spawned at {utc_now()}" + (f" (supersede absent records of {len(accessions)} "
+                                                                  "accessions)" if supersede else ""))
+
+
+# The pre-analysis validation on Modal. Files already validated are not read again, so an interrupted
+# call is resumed by running the command again. The guard is the first statement (tests/test_launch_guard.py).
+def cmd_validate(a: argparse.Namespace) -> None:
+    commit = clean_commit(REPO)
+    authorize(PREREG, a.run_token, A_OUTPUT)
+    call = modal.Function.from_name(APP, "validate_outcomes").spawn(a.run_token)
+    log_entry({"what": "validate", "repo_commit": commit, "call_id": call.object_id, "utc": utc_now()})
+    report = call.get()
+    out = WORK / "validation" / f"outcome_validation_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=1))
+    print(f"{report['files_validated']} files validated: {report['passed']} passed, failed {report['failed']}, "
+          f"errors {report['errors']}; unreadable at collect {report['unreadable_at_collect']}; full report: {out}")
 
 
 def cmd_spawn(a: argparse.Namespace) -> None:
@@ -134,7 +169,9 @@ def cmd_spawn(a: argparse.Namespace) -> None:
     state = modal.Function.from_name(APP, "stage_state").remote()
     fn = modal.Function.from_name(APP, "run_unit")
     calls = spawn_units(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT, lambda line, token: fn.spawn(line, token).object_id,
-                        recorded={(r["source"], r["key"]) for r in state["records"]})
+                        recorded={(r["source"], r["key"]) for r in state["records"]},
+                        validation=(state["outcome_validation"],
+                                    [CollectRecord.model_validate(r) for r in state["gwas_catalog_records"]]))
     log_entry({"what": "spawn", "repo_commit": commit, "calls": calls, "utc": utc_now()})
     print(f"{len(calls)} units spawned at {utc_now()}")
 
@@ -264,15 +301,19 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     token_help = "token of the PREREG.md entry 'RUN_START stage=B token=<token>'"
-    for name in ("plan", "collect", "spawn", "assemble"):
+    for name in ("plan", "collect", "validate", "spawn", "assemble"):
         sub.add_parser(name).add_argument("--run-token", required=True, help=token_help)
     sub.choices["collect"].add_argument("--source", nargs="*", help="collect only these sources (e.g. decode)")
+    sub.choices["collect"].add_argument("--accessions", nargs="*",
+                                        help="collect only these GWAS Catalog accessions again, superseding an `absent` record")
+    sub.choices["collect"].add_argument("--accessions-file", type=Path,
+                                        help="a file of accessions, one per line (first tab-separated field), as --accessions")
     for name in ("hypotheses", "units-dir", "collect-dir", "st29"):
         sub.choices["assemble"].add_argument(f"--{name}", type=Path, required=True)
     sub.add_parser("status")
     sub.add_parser("purge")
     a = ap.parse_args()
-    {"plan": cmd_plan, "collect": cmd_collect, "spawn": cmd_spawn, "status": cmd_status, "assemble": cmd_assemble,
+    {"plan": cmd_plan, "collect": cmd_collect, "validate": cmd_validate, "spawn": cmd_spawn, "status": cmd_status, "assemble": cmd_assemble,
      "purge": cmd_purge}[a.cmd](a)
 
 

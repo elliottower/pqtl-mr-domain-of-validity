@@ -11,6 +11,7 @@ dependencies = [
     "openpyxl==3.1.5",
     "pytest==9.1.1",
     "v8-run-guard==0.1.0",
+    "pyyaml==6.0.3",
 ]
 
 [project.optional-dependencies]

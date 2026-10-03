@@ -15,7 +15,7 @@ import pandas as pd
 
 from stage_b.schemas import VARIANT_COLUMNS, InputContractError
 
-MISSING = {"", "NA", "nan", "NaN", "None", ".", "-"}
+MISSING = {"", "NA", "#NA", "nan", "NaN", "None", ".", "-"}   # "#NA": the GWAS-SSF missing value
 
 
 def normalize_chrom(value: str | int) -> str:
@@ -59,7 +59,7 @@ def _num(x: str) -> float:
     return float("nan") if x in MISSING else float(x)
 
 
-def _frame(rows: list[dict]) -> pd.DataFrame:
+def canonical_frame(rows: list[dict]) -> pd.DataFrame:
     df = pd.DataFrame(rows, columns=VARIANT_COLUMNS)
     for c in ("pos",):
         df[c] = df[c].astype("int64")
@@ -105,7 +105,7 @@ def filter_ukbppp(rows: Iterable[list[str]], header: list[str], chrom: str, cent
 def ukbppp_to_canonical(window_rows: list[dict], rsid_map: dict[str, str]) -> pd.DataFrame:
     """Attach rsIDs from the UKB-PPP map; a variant absent from the map keeps an empty rsID (it
     counts in the pQTL window and is dropped at harmonization)."""
-    return _frame([{**{k: v for k, v in r.items() if k != "ID"}, "rsid": rsid_map.get(r["ID"], "")}
+    return canonical_frame([{**{k: v for k, v in r.items() if k != "ID"}, "rsid": rsid_map.get(r["ID"], "")}
                    for r in window_rows])
 
 
@@ -163,7 +163,7 @@ def decode_to_canonical(window_rows: list[dict], annotation: dict[str, tuple[str
         for rs in rsids:
             out.append({"rsid": rs, "chrom": r["chrom"], "pos": r["pos"], "ea": ea, "oa": oa, "eaf": eaf,
                         "beta": r["beta"], "se": r["se"], "p": r["p"], "n": r["n"]})
-    return _frame(out), counts
+    return canonical_frame(out), counts
 
 
 # ---- OpenGWAS (INTERVAL prot-a-* and OpenGWAS outcomes; GRCh37) ---------------------------------
@@ -180,47 +180,100 @@ def opengwas_to_canonical(records: list[dict]) -> pd.DataFrame:
                     "ea": str(r["ea"]).upper(), "oa": str(r["nea"]).upper(),
                     "eaf": _num(str(r.get("eaf", ""))), "beta": _num(str(r["beta"])), "se": _num(str(r["se"])),
                     "p": _num(str(r.get("p", ""))), "n": _num(str(r.get("n", "")))})
-    return _frame(out)
+    return canonical_frame(out)
+
+
+# ---- row readers: one data row -> a canonical row, or the reason it is not read ---------------------
+
+class RowReader:
+    """One data row -> a canonical row (schemas.VARIANT_COLUMNS) or the reason it is not read
+    (outcome_files.REJECT_REASONS). `position` reads only the chromosome and position, so the analysis
+    skips a row outside its window before reading its values; the pre-analysis validation
+    (stage_b/validate.py) reads every row with `row` and counts the reasons."""
+
+    width: int
+    i_chrom: int
+    i_pos: int
+    position_offset: int = 0
+
+    def position(self, r: list[str]) -> tuple[str, int] | str:
+        if len(r) != self.width:
+            return "row_width"
+        c, p = r[self.i_chrom].strip(), r[self.i_pos].strip()
+        if c in MISSING or p in MISSING:
+            return "no_position"
+        try:
+            return normalize_chrom(c), int(float(p)) + self.position_offset
+        except (ValueError, OverflowError):
+            return "unparseable_number"
+
+    def values(self, r: list[str], chrom: str, pos: int) -> dict | str:
+        raise NotImplementedError
+
+    def row(self, r: list[str]) -> dict | str:
+        at = self.position(r)
+        return at if isinstance(at, str) else self.values(r, *at)
+
+    def window(self, rows: Iterable[list[str]], chrom: str, center: int, half_width: int) -> pd.DataFrame:
+        out = []
+        for r in rows:
+            at = self.position(r)
+            if isinstance(at, str) or not in_window(at[0], at[1], chrom, center, half_width):
+                continue
+            got = self.values(r, *at)
+            if not isinstance(got, str):
+                out.append(got)
+        return canonical_frame(out)
 
 
 # ---- GWAS Catalog harmonised summary statistics (GRCh38) ----------------------------------------
 
+class HarmonisedReader(RowReader):
+    """Old (hm_*) and GWAS-SSF harmonised layouts. beta is hm_beta/beta, else log of the odds
+    ratio (missing where neither gives one); the rsID is hm_rsid/rsid, else variant_id where it is
+    an rsID. A row is not read only when it has another number of fields than the header, no
+    chromosome or position, or a field that is not a number; no allele, standard-error or p-value
+    rule is applied to a harmonised file."""
+
+    def __init__(self, header: list[str]):
+        idx = {h.lstrip("#"): i for i, h in enumerate(header)}
+        w = "GWAS Catalog harmonised file"
+        self.width = len(header)
+        self.i_chrom = _first(idx, ["hm_chrom", "chromosome"], w)
+        self.i_pos = _first(idx, ["hm_pos", "base_pair_location"], w)
+        self.i_ea = _first(idx, ["hm_effect_allele", "effect_allele"], w)
+        self.i_oa = _first(idx, ["hm_other_allele", "other_allele"], w)
+        self.i_beta = _first(idx, ["hm_beta", "beta"], w, required=False)
+        self.i_or = _first(idx, ["hm_odds_ratio", "odds_ratio"], w, required=False)
+        if self.i_beta is None and self.i_or is None:
+            raise InputContractError(f"{w}: neither beta nor odds ratio in header {header}")
+        self.i_se = _first(idx, ["standard_error"], w)
+        self.i_eaf = _first(idx, ["hm_effect_allele_frequency", "effect_allele_frequency"], w, required=False)
+        self.i_p = _first(idx, ["p_value"], w, required=False)
+        self.i_rs = _first(idx, ["hm_rsid", "rsid", "rs_id", "variant_id"], w)
+        self.i_n = _first(idx, ["n"], w, required=False)
+
+    def values(self, r: list[str], chrom: str, pos: int) -> dict | str:
+        try:
+            beta = _num(r[self.i_beta]) if self.i_beta is not None else float("nan")
+            if not math.isfinite(beta) and self.i_or is not None:
+                orv = _num(r[self.i_or])
+                beta = math.log(orv) if math.isfinite(orv) and orv > 0 else float("nan")
+            eaf = _num(r[self.i_eaf]) if self.i_eaf is not None else float("nan")
+            se = _num(r[self.i_se])
+            p = _num(r[self.i_p]) if self.i_p is not None else float("nan")
+            n = _num(r[self.i_n]) if self.i_n is not None else float("nan")
+        except ValueError:
+            return "unparseable_number"
+        rs = r[self.i_rs]
+        return {"rsid": rs if rs.startswith("rs") else "", "chrom": chrom, "pos": pos, "ea": r[self.i_ea].upper(),
+                "oa": r[self.i_oa].upper(), "eaf": eaf, "beta": beta, "se": se, "p": p, "n": n}
+
+
 def filter_gwas_catalog(rows: Iterable[list[str]], header: list[str], chrom: str, center: int,
                         half_width: int) -> pd.DataFrame:
-    """Old (hm_*) and GWAS-SSF harmonised layouts. beta is hm_beta/beta, else log of the odds
-    ratio; the rsID is hm_rsid/rsid, else variant_id where it is an rsID."""
-    idx = {h.lstrip("#"): i for i, h in enumerate(header)}
-    w = "GWAS Catalog harmonised file"
-    i_chr = _first(idx, ["hm_chrom", "chromosome"], w)
-    i_pos = _first(idx, ["hm_pos", "base_pair_location"], w)
-    i_ea = _first(idx, ["hm_effect_allele", "effect_allele"], w)
-    i_oa = _first(idx, ["hm_other_allele", "other_allele"], w)
-    i_beta = _first(idx, ["hm_beta", "beta"], w, required=False)
-    i_or = _first(idx, ["hm_odds_ratio", "odds_ratio"], w, required=False)
-    if i_beta is None and i_or is None:
-        raise InputContractError(f"{w}: neither beta nor odds ratio in header {header}")
-    i_se = _first(idx, ["standard_error"], w)
-    i_eaf = _first(idx, ["hm_effect_allele_frequency", "effect_allele_frequency"], w, required=False)
-    i_p = _first(idx, ["p_value"], w, required=False)
-    i_rs = _first(idx, ["hm_rsid", "rsid", "rs_id", "variant_id"], w)
-    i_n = _first(idx, ["n"], w, required=False)
-    out = []
-    for r in rows:
-        if r[i_chr] in MISSING or r[i_pos] in MISSING:
-            continue
-        if not in_window(r[i_chr], int(float(r[i_pos])), chrom, center, half_width):
-            continue
-        beta = _num(r[i_beta]) if i_beta is not None else float("nan")
-        if not math.isfinite(beta) and i_or is not None:
-            orv = _num(r[i_or])
-            beta = math.log(orv) if math.isfinite(orv) and orv > 0 else float("nan")
-        rs = r[i_rs]
-        out.append({"rsid": rs if rs.startswith("rs") else "", "chrom": normalize_chrom(r[i_chr]),
-                    "pos": int(float(r[i_pos])), "ea": r[i_ea].upper(), "oa": r[i_oa].upper(),
-                    "eaf": _num(r[i_eaf]) if i_eaf is not None else float("nan"), "beta": beta,
-                    "se": _num(r[i_se]), "p": _num(r[i_p]) if i_p is not None else float("nan"),
-                    "n": _num(r[i_n]) if i_n is not None else float("nan")})
-    return _frame(out)
+    """Window rows of a GWAS Catalog harmonised file as the canonical table (HarmonisedReader)."""
+    return HarmonisedReader(header).window(rows, chrom, center, half_width)
 
 
 # ---- FinnGen R12 (GRCh38) ------------------------------------------------------------------------
@@ -239,7 +292,7 @@ def filter_finngen(rows: Iterable[list[str]], header: list[str], chrom: str, cen
                         "ea": r[idx["alt"]].upper(), "oa": r[idx["ref"]].upper(), "eaf": _num(r[idx["af_alt"]]),
                         "beta": _num(r[idx["beta"]]), "se": _num(r[idx["sebeta"]]), "p": _num(r[idx["pval"]]),
                         "n": float("nan")})
-    return _frame(out)
+    return canonical_frame(out)
 
 
 # ---- eQTL Catalogue tabix files (GTEx v8 ge and leafcutter; GRCh38) ----------------------------

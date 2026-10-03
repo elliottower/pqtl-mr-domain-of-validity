@@ -209,11 +209,12 @@ def test_a_refused_or_failing_source_leaves_no_record(world, tmp_path, fault, ki
     assert collect(world, root, "decode", "0_0").status == "collected"
 
 
-def test_absence_is_recorded_for_a_404_a_file_the_listing_lacks_and_an_accession_without_a_harmonised_file(world, tmp_path):
+def test_absence_is_recorded_for_a_404_a_file_the_listing_lacks_and_a_study_directory_without_summary_statistics(world, tmp_path):
     root = tmp_path / "vol"
     no_dir, no_file = collect(world, root, "gwas_catalog", NO_DIR), collect(world, root, "gwas_catalog", NO_FILE)
     assert (no_dir.status, no_dir.detail) == ("absent", f"GWAS Catalog {NO_DIR} listing: HTTP 404")
-    assert (no_file.status, no_file.detail) == ("absent", f"GWAS Catalog {NO_FILE}: 0 harmonised files")
+    assert (no_file.status, no_file.detail) == (
+        "absent", f"GWAS Catalog {NO_FILE}: no harmonised file and no summary-statistics file in the study directory")
     del world.remote.files[f"/decode/{DECODE_KEY}"]
     gone = collect(world, root, "decode", "0_0")
     assert (gone.status, gone.detail) == ("absent", "decode 0_0: HTTP 404")

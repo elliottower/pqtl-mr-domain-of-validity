@@ -19,8 +19,14 @@ Name, size and ETag do not fix a file's bytes, so the fingerprint also covers wh
 phase recorded. The collect digest (`collect_digest`) is the sha256 of the canonical JSON of one
 entry per whole file the unit reads (`collect.collect_tasks` of the unit), sorted by source and key:
 
-    collected       source, key, status, name, bytes, sha256 of the file on the volume
+    collected       source, key, status, name, bytes, sha256 of the file on the volume; for a GWAS
+                    Catalog file without a harmonised copy (a record with a `layout`), also layout,
+                    build, position_offset, rsid_rule and meta_sha256, which say how it is read
     absent          source, key, status, and the name the pinned listing gives the file (or "")
+    unreadable      source, key, status, name, bytes, sha256 and the reason (`detail`), which a
+                    fixed rule of stage_b/outcome_files.py or stage_b/author_formats.py gave; name
+                    "", bytes null and sha256 "" for a file found unreadable at collect, the file's
+                    for one the pre-analysis validation found unreadable (stage_b/validate.py)
     remote_indexed  source, key, status, the file's name in the source's listing, and the pinned
                     release of the source (REMOTE_RELEASE); the file is queried by region and has
                     no whole-file hash
@@ -65,7 +71,7 @@ FINGERPRINT_NAME = "FINGERPRINT.json"
 # collection: "GWAS Catalog r2026-09-13").
 REMOTE_RELEASE: dict[str, str] = {"gwas_catalog": "r2026-09-13"}
 PINNED_SOURCES = ("inputs/decode/assocvariants.annotated.txt.gz", "inputs/decode/assocvariants.excluded.txt.gz")
-PY_PACKAGES = ("numpy", "pandas", "pydantic", "requests", "openpyxl", "synapseclient", "prereg", "provenance-core")
+PY_PACKAGES = ("numpy", "pandas", "pydantic", "requests", "openpyxl", "synapseclient", "prereg", "provenance-core", "PyYAML")
 R_PACKAGES = ("coloc", "susieR", "jsonlite")
 R_VERSIONS = ("cat(as.character(getRversion()), "
               + ", ".join(f'as.character(packageVersion("{p}"))' for p in R_PACKAGES) + ', sep = "\\n")')
@@ -150,9 +156,14 @@ def collect_entry(task: CollectTask, record: CollectRecord) -> dict:
             raise CollectError(f"{what}: the record of a collected file lacks its name, size or sha256")
         if task.name and record.name != task.name:
             raise CollectError(f"{what}: the record names the file {record.name}, the pinned listing {task.name}")
-        return {**entry, "name": record.name, "bytes": record.bytes, "sha256": record.sha256}
+        entry = {**entry, "name": record.name, "bytes": record.bytes, "sha256": record.sha256}
+        if record.layout:
+            entry.update({k: getattr(record, k) for k in ("layout", "build", "position_offset", "rsid_rule", "meta_sha256")})
+        return entry
     if record.status == "absent":
         return {**entry, "name": task.name, "bytes": None, "sha256": ""}
+    if record.status == "unreadable":
+        return {**entry, "name": record.name, "bytes": record.bytes, "sha256": record.sha256, "reason": record.detail}
     if record.source not in REMOTE_RELEASE or not record.name:
         raise CollectError(f"{what}: a file queried by region needs its name and the pinned release of its source")
     return {**entry, "name": record.name, "bytes": None, "sha256": "", "release": REMOTE_RELEASE[record.source]}

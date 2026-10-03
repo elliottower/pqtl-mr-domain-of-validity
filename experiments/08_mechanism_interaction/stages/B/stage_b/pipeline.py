@@ -42,18 +42,18 @@ from stage_b.evidence import (coverage, genetic_direction, lead_sqtl_event, n_va
 from stage_b.harmonize import harmonize
 from stage_b.ld import aligned_ld, proxies
 from stage_b.parsers import restrict_window
-from stage_b.schemas import (PRIMARY_P1, ColocBackendError, PRIMARY_P2, PRIMARY_P12, S15A_P12, S15B_P12, VARIANT_COLUMNS,
-                             WINDOW_PRIMARY, WINDOW_WIDE, Build, InstrumentUnit, LDReferenceError,
+from stage_b.schemas import (PRIMARY_P1, PRIMARY_P2, PRIMARY_P12, S15A_P12, S15B_P12, VARIANT_COLUMNS,
+                             WINDOW_PRIMARY, WINDOW_WIDE, Build, ColocBackendError, InstrumentUnit, LDReferenceError,
                              OutcomeSpec, Sentinel, SourceAbsent, StaleCheckpointError)
 
 SOURCE_BUILD: dict[str, Build] = {"ukbppp": "GRCh38", "decode": "GRCh38", "interval": "GRCh37"}
-OUTCOME_BUILD: dict[str, Build] = {"gwas_catalog": "GRCh38", "finngen": "GRCh38", "opengwas": "GRCh37"}
 
 
 class Fetcher(Protocol):
     def positions(self, sentinel: Sentinel) -> dict[str, int | None]: ...
     def pqtl_region(self, unit: InstrumentUnit, chrom: str, center: int, half_width: int, smp: bool = False) -> pd.DataFrame: ...
     def outcome_region(self, spec: OutcomeSpec, chrom: str, center: int, half_width: int) -> pd.DataFrame: ...
+    def outcome_build(self, spec: OutcomeSpec) -> Build: ...
     def ld_panel(self, chrom: str, center_grch38: int, half_width: int) -> tuple[pd.DataFrame, np.ndarray]: ...
     def vep(self, rsids: list[str], build: Build) -> list[dict]: ...
     def qtl_regions(self, gene_ensembl: str, chrom: str, center_grch38: int, half_width: int) -> dict[str, dict[str, pd.DataFrame]]: ...
@@ -287,15 +287,16 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
     sent_prox = proxies(ld_meta, dosage, s.rsid)
 
     outcomes = {}
+    builds = {spec.accession: fetcher.outcome_build(spec) for spec in unit.outcomes}
     for spec in unit.outcomes:
         tag = safe(spec.accession)
-        center = pos.get(OUTCOME_BUILD[spec.source])
+        center = pos.get(builds[spec.accession])
         if center is None:
-            ometa = {"status": "unavailable", "detail": f"sentinel not mapped in {OUTCOME_BUILD[spec.source]}"}
+            ometa = {"status": "unavailable", "detail": f"sentinel not mapped in {builds[spec.accession]}"}
         else:
             ometa = _region_step(store, f"outcome__{tag}",
                                  lambda spec=spec, center=center: fetcher.outcome_region(spec, s.chrom, center, WINDOW_WIDE),
-                                 f"{s.chrom}:{center - WINDOW_WIDE}-{center + WINDOW_WIDE} {OUTCOME_BUILD[spec.source]}")
+                                 f"{s.chrom}:{center - WINDOW_WIDE}-{center + WINDOW_WIDE} {builds[spec.accession]}")
         if ometa["status"] != "ok":
             outcomes[spec.accession] = {"accession": spec.accession, "coloc_run": False,
                                         "not_run_reason": "outcome_file_unavailable", "detail": ometa["detail"]}
@@ -341,7 +342,7 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
             if not store.has(name):
                 smp = restrict_window(store.table("pqtl_smp.tsv.gz"), s.chrom, s.pos, WINDOW_PRIMARY)
                 o500 = restrict_window(store.table(f"outcome__{tag}.tsv.gz"), s.chrom,
-                                       pos[OUTCOME_BUILD[spec.source]], WINDOW_PRIMARY)
+                                       pos[builds[spec.accession]], WINDOW_PRIMARY)
                 h, _ = harmonize(smp, o500)
                 if not_run_reason(True, True, len(h)):
                     store.put_json(name, {"coloc_run": False, "n_shared": int(len(h))})

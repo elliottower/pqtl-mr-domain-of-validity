@@ -35,6 +35,9 @@ NotRunReason = Literal["regional_file_unavailable", "outcome_file_unavailable",
                        "fewer_than_50_shared", "direction_ambiguous", ""]
 PlatformConcordance = Literal["concordant", "discordant", "untested"]
 Build = Literal["GRCh37", "GRCh38"]
+# The build of each outcome source's positions. A GWAS Catalog file without a harmonised copy
+# (stage_b/outcome_files.py) is on the build its collect record names (VolumeFetcher.outcome_build).
+OUTCOME_BUILD: dict[str, Build] = {"gwas_catalog": "GRCh38", "finngen": "GRCh38", "opengwas": "GRCh37"}
 # Whole files the collect phase downloads once to the stage B volume (stage_b/collect.py).
 CollectSource = Literal["decode", "decode_smp", "ukbppp", "ukbppp_rsid_map", "gwas_catalog"]
 
@@ -57,9 +60,17 @@ class AmbiguousInstrumentError(StageBError):
 
 class SourceAbsent(StageBError):
     """Definitive absence at the source, the only condition recorded as the plan's 'unavailable':
-    HTTP 404 or 410, a file its source's listing does not name, an accession without a harmonised
-    file, or, for Ensembl only, its HTTP 400 unknown-identifier message naming a requested rsID
-    (an Ensembl 404 is a malformed request, not an absence)."""
+    HTTP 404 or 410, a file its source's listing does not name, a GWAS Catalog study directory
+    that holds no summary-statistics file, or, for Ensembl only, its HTTP 400 unknown-identifier
+    message naming a requested rsID (an Ensembl 404 is a malformed request, not an absence)."""
+
+
+class SourceUnreadable(SourceAbsent):
+    """The source holds the file, but a fixed rule of stage_b/outcome_files.py finds that it cannot
+    be read without a guess: a GWAS Catalog file whose metadata, md5sum.txt or header lacks
+    something the canonical outcome table needs (a build, an effect allele, an rsID obtainable
+    without liftover, ...). Recorded as `unreadable` with the reason; its consequence is that of an
+    unavailable file (colocalization not run, inconclusive state)."""
 
 
 class RetryableSourceError(StageBError):
@@ -210,13 +221,24 @@ class CollectTask(_Row):
     etag: str = ""
 
 
+OutcomeLayout = Literal["", "gwas_ssf", "author"]
+RsidRule = Literal["", "column", "variant_id", "ukbppp_map"]
+
+
 class CollectRecord(_Row):
     """The sidecar of one collect task. `collected`: the file is at `path` (relative to the stage B
     root on the volume) with these bytes and sha256. `absent`: the source does not hold it.
+    `unreadable`: the source holds it, and the reason in `detail` says why no fixed rule reads it.
     `remote_indexed`: a GWAS Catalog file with a tabix index, queried by region and not downloaded.
-    `source_url` carries no query string and no token."""
+    `source_url` carries no query string and no token.
 
-    status: Literal["collected", "absent", "remote_indexed"]
+    A GWAS Catalog file without a harmonised copy (stage_b/outcome_files.py) also records how it is
+    read: `layout` (`gwas_ssf`, or `author` for a reviewed author format of
+    stage_b/author_formats.py; empty for a harmonised file), the genome `build` its positions are
+    on, `position_offset` (1 for a 0-based file, so positions are 1-based), the `rsid_rule` and the
+    sha256 of the `-meta.yaml` it was derived from (`meta_sha256`)."""
+
+    status: Literal["collected", "absent", "unreadable", "remote_indexed"]
     source: CollectSource
     key: str
     name: str = ""
@@ -229,6 +251,11 @@ class CollectRecord(_Row):
     source_url: str = ""
     detail: str = ""
     utc: str = ""
+    layout: OutcomeLayout = ""
+    build: Literal["", "GRCh37", "GRCh38"] = ""
+    position_offset: Literal[0, 1] = 0
+    rsid_rule: RsidRule = ""
+    meta_sha256: str = ""
 
 
 # ---- outputs ----------------------------------------------------------------------------------
@@ -286,4 +313,4 @@ class RegionalManifestRow(_Row):
 
 REGIONAL_MANIFEST_COLUMNS = list(RegionalManifestRow.model_fields)
 COLLECTED_FILES_COLUMNS = ["source", "key", "status", "name", "bytes", "sha256", "md5", "etag", "last_modified",
-                           "source_url", "detail", "utc"]
+                           "source_url", "detail", "utc", "layout", "build", "position_offset", "rsid_rule", "meta_sha256"]

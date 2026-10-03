@@ -133,10 +133,12 @@ def test_plan_gives_an_assay_that_serves_two_genes_one_unit_per_gene_and_an_assa
     assert plan["hypothesis_source_units"] == {"d1": {"decode": "decode__1_1__ENSG_D"}, "e1": {"decode": "decode__1_1__ENSG_E"}}
     assert plan["unit_ids"]["interval__G5.5.5.3__ENSG_C"] == ["interval", "G5.5.5.3", "ENSG_C"]
     assert (plan["units"], plan["units_by_source"]) == (4, {"decode": 2, "interval": 2})
-    # the two deCODE units read one file: one task, and one task per GWAS Catalog accession
-    assert plan["collect_tasks_by_source"] == {"decode": 1, "gwas_catalog": 2}
-    assert [(t.source, t.key) for t in collect_tasks(units.values())] == [("decode", "1_1"), ("gwas_catalog", "GCST1"),
-                                                                           ("gwas_catalog", "GCST2")]
+    # the two deCODE units read one file: one task, and one task per GWAS Catalog accession; a unit with a GWAS
+    # Catalog outcome also reads the UKB-PPP rsID map of its sentinel's chromosome
+    assert plan["collect_tasks_by_source"] == {"decode": 1, "gwas_catalog": 2, "ukbppp_rsid_map": 2}
+    maps = sorted({("ukbppp_rsid_map", u.sentinel.chrom) for u in (c, d, e)})
+    assert len(maps) == 2 and [(t.source, t.key) for t in collect_tasks(units.values())] == [
+        ("decode", "1_1"), ("gwas_catalog", "GCST1"), ("gwas_catalog", "GCST2"), *maps]
     # the EpiGraphDB placeholder names no assay: no sentinel, no unit, whatever the number of genes carrying it
     assert set(plan["unresolved"]) == {"n1", "n2"}
     assert all(r == "regional_file_unavailable: no interval sentinel for assays ['epigraphdb:no_assay']"

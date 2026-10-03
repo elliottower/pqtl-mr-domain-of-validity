@@ -23,7 +23,7 @@ from stage_b.checkpoint import (FINGERPRINT_NAME, PINNED_SOURCES, PY_PACKAGES, R
                                 unit_fingerprint, unit_tools, verified_source_pins)
 from stage_b.coloc_backend import AbfResult, ColocTask, SusieResult
 from stage_b.pipeline import DirStore, process_unit, reset_unavailable
-from stage_b.schemas import (EVIDENCE_COLUMNS, PRIMARY_P1, PRIMARY_P2, PRIMARY_P12, WINDOW_PRIMARY, CollectError,
+from stage_b.schemas import (EVIDENCE_COLUMNS, OUTCOME_BUILD, PRIMARY_P1, PRIMARY_P2, PRIMARY_P12, WINDOW_PRIMARY, CollectError,
                              CollectRecord, CollectTask, HypothesisInput, InputContractError, InstrumentUnit, OutcomeSpec,
                              RetryableSourceError, Sentinel, SourceAbsent, SourceFile, StaleCheckpointError)
 
@@ -100,6 +100,9 @@ class FakeFetcher:
         if spec.accession in self.fail_outcomes:
             raise SourceAbsent(f"{spec.accession} gone")
         return outcome_table({"F_ok": N, "F_small": 30}.get(spec.accession, N))
+
+    def outcome_build(self, spec):
+        return OUTCOME_BUILD[spec.source]
 
     def ld_panel(self, chrom, center, half_width):
         self._count("ld")
@@ -824,14 +827,16 @@ def catalog_unit() -> InstrumentUnit:
 
 
 def unit_records(u: InstrumentUnit, decode_sha: str = "1" * 64) -> dict[tuple[str, str], CollectRecord]:
-    """One record per whole file of `catalog_unit`: two collected, one absent, one queried by region."""
+    """One record per whole file of `catalog_unit` (its GWAS Catalog outcomes add the rsID map of its
+    chromosome): three collected, two absent, one queried by region."""
     return {("decode", "1_1"): collected("decode", "1_1", u.pqtl_listing.name, decode_sha, etag=u.pqtl_listing.etag),
             ("decode_smp", "1_1"): CollectRecord(status="absent", source="decode_smp", key="1_1", detail="decode_smp 1_1: HTTP 404"),
             ("gwas_catalog", "GCST1"): collected("gwas_catalog", "GCST1", "1-GCST1-EFO_1.h.tsv.gz", "2" * 64),
             ("gwas_catalog", "GCST2"): CollectRecord(status="remote_indexed", source="gwas_catalog", key="GCST2",
                                                      name="2-GCST2-EFO_2.h.tsv.gz"),
             ("gwas_catalog", "GCST3"): CollectRecord(status="absent", source="gwas_catalog", key="GCST3",
-                                                     detail="GWAS Catalog GCST3 listing: HTTP 404")}
+                                                     detail="GWAS Catalog GCST3 listing: HTTP 404"),
+            ("ukbppp_rsid_map", "1"): collected("ukbppp_rsid_map", "1", "olink_rsid_map_chr1.tsv.gz", "5" * 64)}
 
 
 def digest(u: InstrumentUnit, records: dict[tuple[str, str], CollectRecord]) -> str:

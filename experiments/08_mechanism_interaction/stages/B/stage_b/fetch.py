@@ -7,7 +7,9 @@ that holds a deCODE folder token or asks Synapse for a download link, and neithe
 
 `VolumeFetcher` is the Fetcher of pipeline.py for the analyze phase. Whole files are read only from
 the stage B volume, through their collect records (`collect.read_record`, `collect.collected_file`);
-a missing record raises CollectError and a record of `absent` raises SourceAbsent. It queries by
+a missing record raises CollectError, a record of `absent` raises SourceAbsent and one of
+`unreadable` SourceUnreadable. A GWAS Catalog file without a harmonised copy is read by the layout
+its record names (stage_b/outcome_files.py), on the build its record names (`outcome_build`). It queries by
 region what is served by region: OpenGWAS associations, tabix on FinnGen, on GWAS Catalog files that
 have an index and on the eQTL Catalogue, bcftools on 1000 Genomes, Ensembl and GTEx. Each of those
 raises SourceAbsent only on a definitive absence and RetryableSourceError on anything else. For
@@ -43,8 +45,9 @@ import tarfile
 import tempfile
 import time
 import urllib.parse
+import zlib
 from collections.abc import Callable, Collection, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -53,15 +56,18 @@ import pandas as pd
 import requests
 from pydantic import BaseModel, ConfigDict
 
+from stage_b.author_formats import AUTHOR_FORMATS, check_header
 from stage_b.collect import collected_file, read_record
 from stage_b.ld import parse_genotypes
+from stage_b.outcome_files import (MD5SUM_NAME, META_SUFFIX, attach_map_rsids, filter_author, filter_gwas_ssf, map_rsids,
+                                   parse_md5sum, resolve_ssf, ssf_data_files)
 from stage_b.parsers import (decode_to_canonical, filter_decode, filter_decode_annotation, filter_decode_excluded,
                              filter_eqtl_catalogue, filter_finngen, filter_gwas_catalog, filter_ukbppp,
                              normalize_chrom, opengwas_to_canonical, parse_ukbppp_rsid_map, split_lines,
                              ukbppp_to_canonical)
 from stage_b.remote import ABSENT_STATUS, CORRUPT, attempt, http, http_json, status_kind
-from stage_b.schemas import (Build, CollectError, CollectTask, InstrumentUnit, LDReferenceError, OutcomeSpec,
-                             RetryableSourceError, Sentinel, SourceAbsent)
+from stage_b.schemas import (OUTCOME_BUILD, Build, CollectError, CollectRecord, CollectTask, InstrumentUnit,
+                             LDReferenceError, OutcomeSpec, RetryableSourceError, Sentinel, SourceAbsent, SourceUnreadable)
 
 EQTL_CATALOGUE_ENABLED = True
 
@@ -158,6 +164,11 @@ class SynapseLike(Protocol):
 
 def _text_lines(raw) -> Iterator[str]:
     return io.TextIOWrapper(gzip.GzipFile(fileobj=raw), encoding="utf-8")
+
+
+def _open_text(path: Path):
+    """A collected whole file as text: gzip-decompressed when its name ends in .gz."""
+    return gzip.open(path, "rt", encoding="utf-8") if path.name.endswith(".gz") else path.open("rt", encoding="utf-8")
 
 
 def _header_and_rows(lines: Iterator[str], sep: str | None, what: str) -> tuple[list[str], Iterator[list[str]]]:
@@ -270,6 +281,7 @@ class RemoteFile:
     indexed: bool = False
     md5: str = ""
     link_reply: bool = False
+    record_fields: dict = field(default_factory=dict)   # how a GWAS Catalog file without a harmonised copy is read
 
     def open_at(self, offset: int) -> requests.Response:
         headers = {"Range": f"bytes={offset}-"} if offset else {}
@@ -283,10 +295,49 @@ class RemoteFile:
         return r
 
 
-def gwas_catalog_dir(base: str, accession: str) -> str:
+def gwas_catalog_study_dir(base: str, accession: str) -> str:
     num = int(re.sub(r"\D", "", accession))
     lo = (num - 1) // 1000 * 1000 + 1
-    return f"{base}/GCST{lo:06d}-GCST{lo + 999:06d}/{accession}/harmonised/"
+    return f"{base}/GCST{lo:06d}-GCST{lo + 999:06d}/{accession}/"
+
+
+def gwas_catalog_dir(base: str, accession: str) -> str:
+    """The harmonised/ directory of an accession."""
+    return gwas_catalog_study_dir(base, accession) + "harmonised/"
+
+
+HEADER_BYTES = 65536
+
+
+def _listing(url: str, what: str) -> set[str]:
+    """The names a directory listing links to; SourceAbsent on 404/410."""
+    with http("GET", url, f"{what} listing", timeout=120) as r:
+        return set(re.findall(r'href="([^"]+)"', r.text))
+
+
+def _small_file(url: str, what: str) -> bytes:
+    with http("GET", url, what, timeout=120) as r:
+        return r.content
+
+
+def remote_header(url: str, gz: bool, what: str) -> list[str]:
+    """The first line of a remote file, split on tabs, from an HTTP Range request of its first
+    HEADER_BYTES (decompressed when `gz`). Nothing past the first line is kept."""
+    with http("GET", url, what, headers={"Range": f"bytes=0-{HEADER_BYTES - 1}"}, stream=True, timeout=120) as r:
+        data = b""
+        for chunk in r.iter_content(8192):
+            data += chunk
+            if len(data) >= HEADER_BYTES:
+                break
+    if gz:
+        try:
+            data = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(data)
+        except zlib.error:
+            raise RetryableSourceError("corrupt", f"{what}: the first bytes are not a gzip stream") from None
+    head, newline, _rest = data.partition(b"\n")
+    if not newline:
+        raise RetryableSourceError("protocol", f"{what}: no complete header line in the first {HEADER_BYTES} bytes")
+    return head.decode("utf-8", "replace").rstrip("\r").split("\t")
 
 
 class RemoteSources:
@@ -347,15 +398,60 @@ class RemoteSources:
                           url=lambda: self.synapse().file(entity)["url"])
 
     def _gwas_catalog(self, accession: str) -> RemoteFile:
+        """The accession's one harmonised file; where it has none, the summary-statistics file of
+        its study directory (`_unharmonised`). More than one harmonised file is an absence, as before.
+        Called inside collect.collect_one's `attempt`, which retries a retryable fault of any request here."""
         base = gwas_catalog_dir(self.endpoints.gwascat_ftp, accession)
         what = f"GWAS Catalog {accession}"
-        with http("GET", base, f"{what} listing", timeout=120) as r:
-            names = set(re.findall(r'href="([^"]+)"', r.text))
+        try:
+            names = _listing(base, what)
+        except SourceAbsent:
+            names = set()
         files = sorted(n for n in names if n.endswith(".h.tsv.gz"))
-        if len(files) != 1:
+        if len(files) > 1:
             raise SourceAbsent(f"{what}: {len(files)} harmonised files")
-        url = base + files[0]
-        return RemoteFile(name=files[0], source_url=url, what=what, url=lambda: url, indexed=f"{files[0]}.tbi" in names)
+        if files:
+            url = base + files[0]
+            return RemoteFile(name=files[0], source_url=url, what=what, url=lambda: url, indexed=f"{files[0]}.tbi" in names)
+        return self._unharmonised(accession)
+
+    def _unharmonised(self, accession: str) -> RemoteFile:
+        """An accession without a harmonised file (stage_b/outcome_files.py): its reviewed author
+        format where stage_b/author_formats.py holds one, else its one GWAS-SSF data file, checked
+        against its -meta.yaml, md5sum.txt and header before a byte of data is downloaded. A study
+        directory that holds neither is an absence; one whose file no fixed rule reads is unreadable."""
+        study = gwas_catalog_study_dir(self.endpoints.gwascat_ftp, accession)
+        what = f"GWAS Catalog {accession}"
+        names = {urllib.parse.unquote(n) for n in _listing(study, what)}
+        fmt = AUTHOR_FORMATS.get(accession)
+        if fmt is not None:
+            if fmt.data_file not in names:
+                raise SourceUnreadable(f"{what}: the study directory does not hold {fmt.data_file}, the file its reviewed "
+                                       "author-format map was written for")
+            if not fmt.readable:
+                raise SourceUnreadable(f"{what}: {fmt.reason}")
+            url = study + urllib.parse.quote(fmt.data_file)
+            check_header(fmt, remote_header(url, fmt.data_file.endswith(".gz"), what))
+            md5s = {}
+            if MD5SUM_NAME in names:
+                md5s = parse_md5sum(_small_file(study + MD5SUM_NAME, what).decode("utf-8", "replace"))
+            return RemoteFile(name=fmt.data_file, source_url=url, what=what, url=lambda: url, md5=md5s.get(fmt.data_file, ""),
+                              record_fields={"layout": "author", "build": fmt.build, "rsid_rule": "column"})
+        data = ssf_data_files(accession, names)
+        if not data:
+            raise SourceAbsent(f"{what}: no harmonised file and no summary-statistics file in the study directory")
+        if len(data) > 1:
+            raise SourceUnreadable(f"{what}: {len(data)} GWAS-SSF data files in the study directory: {data}")
+        name = data[0]
+        for needed in (name + META_SUFFIX, MD5SUM_NAME):
+            if needed not in names:
+                raise SourceUnreadable(f"{what}: the study directory has no {needed} for {name}")
+        url = study + urllib.parse.quote(name)
+        meta = _small_file(study + urllib.parse.quote(name + META_SUFFIX), what)
+        md5sum = _small_file(study + MD5SUM_NAME, what).decode("utf-8", "replace")
+        header = remote_header(url, name.endswith(".gz"), what)
+        ssf = resolve_ssf(accession, name, meta, md5sum, header)
+        return RemoteFile(name=name, source_url=url, what=what, url=lambda: url, md5=ssf.md5, record_fields=ssf.record_fields())
 
 
 # ---- analyze phase ---------------------------------------------------------------------------------
@@ -466,6 +562,8 @@ class VolumeFetcher:
                 return filter_finngen(tabix_rows(url, chrom, lo, hi, Path(tmp), what), header, chrom, center, half_width)
         what = f"GWAS Catalog {spec.accession}"
         record = read_record(self.root, "gwas_catalog", spec.accession)
+        if record.status == "unreadable":
+            raise SourceUnreadable(record.detail or f"{what}: unreadable")
         if record.status == "absent":
             raise SourceAbsent(record.detail or f"{what}: absent at the source")
         if record.status == "remote_indexed":
@@ -476,10 +574,34 @@ class VolumeFetcher:
         path = collected_file(self.root, record)
 
         def read() -> pd.DataFrame:
-            with gzip.open(path, "rt") as fh:
+            with _open_text(path) as fh:
                 header, rows = _header_and_rows(fh, "\t", what)
+                if record.layout == "gwas_ssf":
+                    return filter_gwas_ssf(rows, header, chrom, center, half_width, record.position_offset, what)
+                if record.layout == "author":
+                    return filter_author(AUTHOR_FORMATS[spec.accession], rows, header, chrom, center, half_width, what)
                 return filter_gwas_catalog(rows, header, chrom, center, half_width)
-        return _local(read, what)
+        df = _local(read, what)
+        return self._map_rsids(df, chrom, record) if record.rsid_rule == "ukbppp_map" else df
+
+    def _map_rsids(self, df: pd.DataFrame, chrom: str, record: CollectRecord) -> pd.DataFrame:
+        """rsIDs from the UKB-PPP map of the chromosome, on the record's build (outcome_files.map_rsids)."""
+        what = f"UKB-PPP rsID map chr{chrom}"
+
+        def read() -> dict:
+            with gzip.open(self._collected("ukbppp_rsid_map", chrom), "rt") as fh:
+                header, rows = _header_and_rows(fh, "\t", what)
+                return map_rsids(rows, header, record.build, {int(p) for p in df["pos"]})
+        return attach_map_rsids(df, _local(read, what))
+
+    def outcome_build(self, spec: OutcomeSpec) -> Build:
+        """The build an outcome file's positions are on: OUTCOME_BUILD of its source, except a
+        collected GWAS Catalog file without a harmonised copy, whose record names its build."""
+        if spec.source == "gwas_catalog":
+            record = read_record(self.root, "gwas_catalog", spec.accession)
+            if record.status == "collected" and record.build:
+                return record.build
+        return OUTCOME_BUILD[spec.source]
 
     # ---- 1000 Genomes EUR ------------------------------------------------------------------------
     def _eur_samples(self) -> Path:

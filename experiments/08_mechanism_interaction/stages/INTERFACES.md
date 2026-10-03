@@ -276,7 +276,9 @@ directory>`); the repository files stage A reads are baked into the image. Outpu
 Also `regional_manifest.tsv` (one row per regional extract of a unit: source, protein/study, window,
 variants, sha256; units that extract the same region, such as the units of an assay that serves
 several genes, each give a row), `collected_files.tsv` (one row per collect record: source, key, status, name,
-bytes, sha256, md5, etag, last_modified, source_url, detail, utc; `source_url` holds only the host
+bytes, sha256, md5, etag, last_modified, source_url, detail, utc, layout, build, position_offset,
+rsid_rule, meta_sha256; the last five are filled only for a GWAS Catalog file read without a
+harmonised copy, and `detail` holds the reason of an `unreadable` record; `source_url` holds only the host
 of the record's address, for every source, such as `download.decode.is` or `ftp.ebi.ac.uk`, and
 `synapse` for a Synapse entity, whose address has no host, while the record on the private volume
 keeps the address it was written with: `stage_b.assemble.source_host`), `run_info.json` (stage, run
@@ -318,14 +320,19 @@ Stage B runs on Modal in three phases, each behind the run guard (`launch_stage_
 2. `collect` (`collect_file`, `stage_b/collect.py`), one Modal call per whole file whatever the
    number of units that read it: deCODE per-SeqId files (and the SMP-normalized ones for S16 where
    a listing of that folder is pinned), UKB-PPP per-protein tars, UKB-PPP per-chromosome rsID maps,
-   and GWAS Catalog harmonised files without a tabix index. A file is written to
+   GWAS Catalog harmonised files without a tabix index and, for an accession without a harmonised
+   file, the summary-statistics file of its study directory (below, "GWAS Catalog files without a
+   harmonised copy"). A unit with a GWAS Catalog outcome also reads the rsID map of its sentinel's
+   chromosome. A file is written to
    `/stage_b/raw/<source>/<name>` on the `pqtl-v8-stage-b` volume, resumed by HTTP Range, the
    volume committed every 256 MB, and gets a record `/stage_b/collect/<source>/<key>.json`:
    status, name, bytes, sha256, ETag, Last-Modified, the source address without query string or
    token, UTC time. It is accepted only with the length the source declared, the size and ETag of
    the pinned listing (deCODE), the MD5 the source declares (Synapse), and, for `.gz`, a stream
    that decompresses to its end. The record has status `absent` for a file the source does not
-   hold and `remote_indexed` for a GWAS Catalog file that has a tabix index (queried by region).
+   hold, `unreadable` (with the reason in `detail`) for a GWAS Catalog file the source holds and
+   no fixed rule reads, and `remote_indexed` for a GWAS Catalog file that has a tabix index
+   (queried by region).
    A deCODE file is requested from `https://download.decode.is/s3/download?token=<token>&file=<Key>`
    (the form deCODE's download page builds), whose reply is followed whether it redirects to a
    signed address or carries one in a JSON body; the token and the signed address are never
@@ -336,7 +343,8 @@ Stage B runs on Modal in three phases, each behind the run guard (`launch_stage_
    its record. The records and the regional extracts stay on the volume; the extracts stay private
    and only their hashes are published.
 3. `spawn` (`run_unit`, `stage_b/pipeline.py`), one call per instrument unit, refused while a
-   planned file has no record. Whole files are read only from the volume, after their size and
+   planned file has no record or while the pre-analysis validation report (below) is missing or
+   does not cover the current GWAS Catalog collect records. Whole files are read only from the volume, after their size and
    sha256 match their record; a missing record raises `CollectError`. Queries by region stay
    remote: OpenGWAS associations, tabix on FinnGen, indexed GWAS Catalog files and the eQTL
    Catalogue (its EBI FTP paths read over HTTPS on the same host), bcftools on 1000 Genomes,
@@ -344,13 +352,89 @@ Stage B runs on Modal in three phases, each behind the run guard (`launch_stage_
 
 Unavailable (`stage_b/remote.py`). A regional or outcome file is recorded as unavailable, and its
 hypotheses take the registered consequence, only on a definitive absence (`SourceAbsent`): HTTP 404
-or 410, a file its source's listing does not name, or an accession without exactly one harmonised
-file. A refused credential (401/403), a rate limit (429), a server error (5xx), any
+or 410, a file its source's listing does not name, an accession with more than one harmonised file,
+or a GWAS Catalog study directory with neither a harmonised file nor a summary-statistics file; or
+when the file is `unreadable` (`SourceUnreadable`, a subclass): the source holds it and a fixed rule
+finds it cannot be read without a guess. An accession without a harmonised file is not absent. A refused credential (401/403), a rate limit (429), a server error (5xx), any
 other status, a timeout, a connection error, a failed tabix or bcftools call and a truncated or
 corrupt gzip or tar stream raise `RetryableSourceError` with that class: nothing is written for the
 step, the call fails and leaves a note under `/stage_b/errors/`, and the file or unit stays
 unfinished until a later call finishes it. Messages carry a source label and the exception type,
 never a URL.
+
+GWAS Catalog files without a harmonised copy (`stage_b/outcome_files.py`, `stage_b/author_formats.py`).
+The plan asks the GWAS Catalog for full summary statistics. An accession whose `harmonised/`
+directory holds no `.h.tsv.gz` file (or does not exist) is resolved in its study directory:
+
+- a reviewed author format, where `stage_b/author_formats.py` holds one for the accession: a fixed
+  column map written from the deposited read-me and the data file's header line only, holding the
+  sha256 of each; the header is read (HTTP Range, first 64 KB) and must be the reviewed one, else
+  `unreadable`; an entry whose documents leave the effect allele, the effect scale, the rsID column
+  or the build unstated is `unreadable` with that reason (GCST010514);
+- else the study directory's one GWAS-SSF data file, `<acc>.tsv[.gz]` or
+  `<acc>_build<GRCh37|GRCh38>.tsv[.gz]`, with its `-meta.yaml` and the directory's `md5sum.txt`.
+  `genome_assembly` must be GRCh37 or GRCh38; `coordinate_system` 1-based, 0-based (+1 to each
+  position) or absent (read as 1-based, a convention for legacy files: GWAS-SSF makes the key
+  optional, and the metadata does not state it); `data_file_name` the data file; `data_file_md5sum`, where
+  given, md5sum.txt's MD5. The header must hold `chromosome`, `base_pair_location`,
+  `effect_allele`, `other_allele`, `standard_error` and `beta` or `odds_ratio` (both: column 4,
+  the standard's effect column, decides). Any failure is `unreadable` with the reason, decided
+  before a byte of data is downloaded. A downloaded data file whose MD5 is not md5sum.txt's raises
+  `CollectError`: refused, not recorded. The MD5 md5sum.txt lists for the `-meta.yaml` is not a
+  condition (the Catalog rewrites metadata in place without updating md5sum.txt); a difference is
+  written to the record's `detail`;
+- a study directory with neither is `absent`.
+
+The file is downloaded whole and its record names how it is read: `layout` (`gwas_ssf`,
+`author`), `build`, `position_offset`, `rsid_rule` and `meta_sha256`. The analyze phase reads it into
+the canonical outcome table: beta, or ln(odds_ratio) where only an odds ratio is given; the
+standard error as given; `effect_allele_frequency`, `p_value` (else 10^-`neg_log_10_p_value`) and
+`n` where present; `#NA` missing; every field read with its surrounding whitespace removed. A row
+is not read, for the first reason that applies (`outcome_files.REJECT_REASONS`), when it has
+another number of fields than the header, no chromosome or position, a field that is not a number,
+an effect or other allele that is not `[ACGT]+`, equal alleles, an effect allele outside the pair
+(author formats), an odds ratio or standard error that is missing, infinite, zero or negative, an
+ordinary p-value outside [0, 1], or a negative -log10 p-value; a missing p-value is kept as
+missing. The `-meta.yaml` is read with PyYAML's SafeLoader (UTF-8 only, a byte-order mark allowed,
+a repeated key refused) and its four keys checked as strings. The outcome window
+is centred on the sentinel's position on the record's build (`VolumeFetcher.outcome_build`;
+GRCh38 for every harmonised file, as before), which Ensembl's variation endpoint gives
+(`positions`); no liftover. rsIDs (`rsid_rule`): `column` takes the `rsid` (else `rs_id`) column,
+a value that is not `rs<digits>` giving none; `ukbppp_map`, for a file with neither column, takes
+the rsID of the UKB-PPP rsID map row of the chromosome whose `POS19` (GRCh37) or `POS38` (GRCh38)
+equals the variant's position and whose {REF, ALT} equals its {effect_allele, other_allele}, and
+none where no row or more than one rsID matches. `variant_id` is never read as an rsID. An
+`unreadable` record reads as `SourceUnreadable`, which the unit records as
+`outcome_file_unavailable` with the reason in its detail; the record itself keeps status
+`unreadable` (not `absent`) in the collect digest and in `collected_files.tsv`.
+
+Pre-analysis validation (`stage_b/validate.py`, `modal_stage_b.py::validate_outcomes`,
+`launch_stage_b.py validate`), after collect and before `spawn`: every collected GWAS Catalog
+whole file (harmonised, GWAS-SSF or reviewed author format) is read whole on Modal by the reader
+the analysis uses (`parsers.HarmonisedReader`, `outcome_files.SsfReader`, `outcome_files.AuthorReader`),
+checkpointed every 1M rows. A `remote_indexed` file is queried by region through its tabix index
+and is not validated; the report lists it with that reason. The harmonised reader applies no
+allele, standard-error or p-value rule: a harmonised row is not read only for another number of
+fields than the header, no chromosome or position, or a field that is not a number. `/stage_b/validation/outcome_validation.json` holds aggregate parser diagnostics only: per
+file the header, rows, rows read, rows not read by reason (row-width and parse errors among them),
+the fraction of rows read with an rsID, the number of rsIDs on more than one row read, and for
+GCST008226 the OR/CI/SE integrity counts. Fixed rules: a file fails when its header disagrees with
+the column map of its record, when fewer than 50% of its data rows are read, or (GCST008226) when
+fewer than 99% of the rows with finite OR, confidence limits and SE give limits equal to
+exp(ln(OR) ∓ 1.96·SE) within 1% or the printed rounding, whichever is looser. A failing file's
+`collected` record is moved to `/stage_b/superseded/collect/` and replaced by an `unreadable`
+record (reason in `detail`, name, size and sha256 kept), which takes the unavailable consequence.
+`spawn` refuses unless the report exists, was made under the rules in force
+(`stage_b.validate.RULES`), and covers every GWAS Catalog whole file of the current collect records:
+each with a result for the sha256 its record names, no error, and status `unreadable` exactly where
+the file failed (`stage_b.validate.require_validation`, called by `stage_b.launch.spawn_units` with
+the report and records `stage_state` reads from the volume).
+
+Re-collection. `collect --run-token <token> --accessions <acc> ...` (or `--accessions-file`) spawns
+`collect_file` for those planned GWAS Catalog tasks only, with `supersede_absent_record`: an
+`absent` record is first moved to `/stage_b/superseded/collect/gwas_catalog/<acc>__<utc>.json`
+(`stage_b.collect.supersede_absent`), and the task runs again; a record of any other status, or of
+another source, is left in place and returned as it is.
 
 Ensembl (`stage_b.fetch.ensembl_json`, `ensembl_unknown_id`). Ensembl's one definitive absence is
 an HTTP 400 for which all of these hold: the body parses as its error JSON, an object whose only
@@ -399,8 +483,9 @@ file the unit reads (`collect.collect_tasks` of the unit), ordered by source and
 
 | record `status` | entry |
 |---|---|
-| `collected` | `source`, `key`, `status`, `name`, `bytes`, `sha256` of the record |
+| `collected` | `source`, `key`, `status`, `name`, `bytes`, `sha256` of the record; for a GWAS Catalog file read without a harmonised copy also `layout`, `build`, `position_offset`, `rsid_rule`, `meta_sha256` |
 | `absent` | `source`, `key`, `status`, `name` as the pinned listing gives it (else empty), `bytes` null, `sha256` empty |
+| `unreadable` | `source`, `key`, `status`, `name` empty, `bytes` null, `sha256` empty, `reason` (the record's `detail`) |
 | `remote_indexed` | `source`, `key`, `status`, `name` as the source's listing gives it, `bytes` null, `sha256` empty, `release` (the pinned release of the source: GWAS Catalog `r2026-09-13`) |
 
 No address, token, ETag, time or detail is in an entry. `run_unit` computes the digest from the

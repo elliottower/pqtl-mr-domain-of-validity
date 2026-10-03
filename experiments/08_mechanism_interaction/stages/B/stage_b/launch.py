@@ -24,14 +24,15 @@ source files and are never committed, so the copy lies outside the repository or
 gitignored inputs directory.
 """
 import json
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 
 from v8_manifest import MANIFEST_NAME, sha256_file, verify_listed
 from v8_run_guard import RunNotAuthorized, check_plan, logged_seals, parse_log, require_run
 
 from stage_b.collect import collect_tasks
-from stage_b.schemas import CollectTask, InputContractError, InstrumentUnit
+from stage_b.schemas import CollectRecord, CollectTask, InputContractError, InstrumentUnit
+from stage_b.validate import require_validation
 
 A_FILES = ("hypotheses.csv", "outcome_trait_coding.tsv")
 
@@ -91,25 +92,40 @@ def planned_tasks(lines: list[str]) -> list[CollectTask]:
 
 
 def spawn_collect(prereg: Path, run_token: str, units: Path, unit_plan: Path, a_output: Path,
-                  spawn: Callable[[str, str], str], sources: Collection[str] = ()) -> list[dict]:
+                  spawn: Callable[[str, str], str], sources: Collection[str] = (),
+                  accessions: Collection[str] = ()) -> list[dict]:
     """`spawn(task_json, run_token)` starts one collect call and returns its call id. `sources`
-    restricts the calls to those sources (all when empty)."""
+    restricts the calls to those sources (all when empty). `accessions` restricts them to those
+    GWAS Catalog tasks, each of which must be planned (the re-collection of accessions recorded
+    absent for want of a harmonised file; the caller's `spawn` asks the call to supersede an
+    `absent` record, stage_b.collect.supersede_absent)."""
     tasks = planned_tasks(planned_units(prereg, run_token, units, unit_plan, a_output))
+    if accessions:
+        planned = {t.key for t in tasks if t.source == "gwas_catalog"}
+        unknown = sorted(set(accessions) - planned)
+        if unknown:
+            raise InputContractError(f"{len(unknown)} accessions are not planned GWAS Catalog files (first: {unknown[0]})")
+        tasks = [t for t in tasks if t.source == "gwas_catalog" and t.key in set(accessions)]
     return [{"source": t.source, "key": t.key, "call_id": spawn(t.model_dump_json(), run_token)}
             for t in tasks if not sources or t.source in sources]
 
 
 def spawn_units(prereg: Path, run_token: str, units: Path, unit_plan: Path, a_output: Path,
-                spawn: Callable[[str, str], str], recorded: Collection[tuple[str, str]] | None = None) -> list[dict]:
+                spawn: Callable[[str, str], str], recorded: Collection[tuple[str, str]] | None = None,
+                validation: tuple[dict | None, Sequence[CollectRecord]] | None = None) -> list[dict]:
     """`spawn(unit_json, run_token)` starts one call and returns its call id. `recorded` is the set
     of (source, key) that have a collect record on the volume; when given, nothing is spawned
-    unless it covers every file the units read."""
+    unless it covers every file the units read. `validation` is the pre-analysis validation report
+    on the volume (None when there is none) and the current GWAS Catalog collect records; when
+    given, nothing is spawned unless the report covers them (validate.require_validation)."""
     lines = planned_units(prereg, run_token, units, unit_plan, a_output)
     if recorded is not None:
         missing = [(t.source, t.key) for t in planned_tasks(lines) if (t.source, t.key) not in recorded]
         if missing:
             raise InputContractError(f"{len(missing)} files have no collect record (first: {missing[0]}); "
                                      "the collect phase is not finished")
+    if validation is not None:
+        require_validation(*validation)
     calls = []
     for line in lines:
         u = InstrumentUnit.model_validate_json(line)

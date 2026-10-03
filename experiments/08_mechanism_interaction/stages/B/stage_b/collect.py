@@ -1,8 +1,11 @@
 """The collect phase: every whole file stage B needs, downloaded once to the stage B volume.
 
 Whole files are the deCODE per-SeqId files (and their SMP-normalized release for S16), the UKB-PPP
-per-protein tars, the UKB-PPP per-chromosome rsID maps and the GWAS Catalog harmonised files that
-have no tabix index. `collect_tasks` lists them from the units, one task per file whatever the
+per-protein tars, the UKB-PPP per-chromosome rsID maps, the GWAS Catalog harmonised files that have
+no tabix index and, for an accession without a harmonised file, the summary-statistics file of its
+study directory (a GWAS-SSF file or a reviewed author format, stage_b/outcome_files.py). A unit
+with a GWAS Catalog outcome also reads the UKB-PPP rsID map of its sentinel's chromosome: a GWAS-SSF
+file without an rsid column takes its rsIDs from it. `collect_tasks` lists them from the units, one task per file whatever the
 number of units that read it. `collect_one` runs one task (one Modal call per file) and leaves:
 
     <root>/raw/<source>/<name>             the file
@@ -11,7 +14,8 @@ number of units that read it. `collect_one` runs one task (one Modal call per fi
                                            UTC time
 
 A record is also written, without a file, when the source definitively does not hold the file
-(`absent`) and for a GWAS Catalog file that has a tabix index (`remote_indexed`: queried by region
+(`absent`), when it holds a GWAS Catalog file that no fixed rule reads (`unreadable`, with the
+reason), and for a GWAS Catalog file that has a tabix index (`remote_indexed`: queried by region
 in the analyze phase, not downloaded). Any other fault raises (stage_b/remote.py) and writes no
 record, so the task stays pending and a later call resumes it.
 
@@ -27,7 +31,8 @@ record raises CollectError (it is not 'unavailable'), and a file is opened only 
 sha256 match its record.
 
 The files under raw/ are working copies, held on the private stage B volume between collection
-and the stage B seal. `purge_raw` deletes them once every unit has its result (the wrapper also
+and the stage B seal. `purge_raw` deletes them (with the file of a record the pre-analysis validation
+made `unreadable`, which keeps its path, size and sha256) once every unit has its result (the wrapper also
 requires stage B's SEAL in the PREREG.md log). The records stay, with each file's size, sha256,
 ETag and time, and so do the regional extracts of the unit directories; PURGED.json lists what was
 deleted. The extracts hold rows of the downloaded files: they stay on the volume, as checkpoint
@@ -52,7 +57,7 @@ from v8_manifest import sha256_file
 
 from stage_b.remote import CORRUPT, attempt
 from stage_b.schemas import (CollectError, CollectRecord, CollectSource, CollectTask, InputContractError, InstrumentUnit,
-                             RetryableSourceError, SourceAbsent)
+                             RetryableSourceError, SourceAbsent, SourceUnreadable)
 
 CHECKPOINT_BYTES = 256 * 1024 * 1024
 CHUNK_BYTES = 1024 * 1024
@@ -97,9 +102,11 @@ def collect_tasks(units: Iterable[InstrumentUnit]) -> list[CollectTask]:
         elif u.source == "ukbppp":
             add(CollectTask(source="ukbppp", key=u.assay_id))
             add(CollectTask(source="ukbppp_rsid_map", key=u.sentinel.chrom))
-        for o in u.outcomes:
-            if o.source == "gwas_catalog":
-                add(CollectTask(source="gwas_catalog", key=o.accession))
+        catalog = [o.accession for o in u.outcomes if o.source == "gwas_catalog"]
+        for accession in catalog:
+            add(CollectTask(source="gwas_catalog", key=accession))
+        if catalog:
+            add(CollectTask(source="ukbppp_rsid_map", key=u.sentinel.chrom))
     return [tasks[k] for k in sorted(tasks)]
 
 
@@ -246,8 +253,9 @@ def collect_one(task: CollectTask, sources: Sources, root: Path, commit: Callabl
     base = {"source": task.source, "key": task.key, "utc": now}
     try:
         resolved = attempt(lambda: sources.resolve(task), what)
-    except SourceAbsent as err:
-        return _put_record(root, CollectRecord(status="absent", detail=str(err), **base), commit)
+    except SourceAbsent as err:            # SourceUnreadable included: the source holds a file no fixed rule reads
+        status = "unreadable" if isinstance(err, SourceUnreadable) else "absent"
+        return _put_record(root, CollectRecord(status=status, detail=str(err), **base), commit)
     name = _safe(resolved.name, "source file name")
     if task.name and name != task.name:
         raise CollectError(f"{what}: the source names the file {name}, the pinned listing {task.name}")
@@ -281,12 +289,47 @@ def collect_one(task: CollectTask, sources: Sources, root: Path, commit: Callabl
     found = json.loads(state_path.read_text()) if state_path.is_file() else {"etag": "", "last_modified": ""}
     record = CollectRecord(status="collected", name=name, path=final.relative_to(root).as_posix(),
                            bytes=final.stat().st_size, sha256=sha256_file(final), md5=resolved.md5, etag=found["etag"],
-                           last_modified=found["last_modified"], source_url=resolved.source_url, **base)
+                           last_modified=found["last_modified"], source_url=resolved.source_url, **base,
+                           **getattr(resolved, "record_fields", {}))
     _put_record(root, record, commit)
     if state_path.is_file():
         state_path.unlink()
         commit()
     return record
+
+
+SUPERSEDED_DIR = "superseded"
+
+
+def supersede_absent(root: Path, task: CollectTask, commit: Callable[[], None] = lambda: None) -> Path | None:
+    """Move the `absent` record of a GWAS Catalog task to <root>/superseded/collect/gwas_catalog/
+    <key>__<utc>.json, so `collect_one` runs the task again under the current rules. Used once,
+    for the accessions recorded absent only because they had no harmonised file. A record of any
+    other status, or of another source, is left in place and nothing is moved (None returned);
+    the moved record is never deleted."""
+    path = record_path(root, task.source, task.key)
+    if task.source != "gwas_catalog" or not path.is_file() or read_record(root, task.source, task.key).status != "absent":
+        return None
+    return supersede_record(root, task.source, task.key, commit)
+
+
+def supersede_record(root: Path, source: CollectSource, key: str, commit: Callable[[], None] = lambda: None) -> Path:
+    """Move the record of `source` `key` to <root>/superseded/collect/<source>/<key>__<utc>.json and
+    return where it went; the record is never deleted. Its file under raw/ is not touched."""
+    path = record_path(root, source, key)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    dest = root / SUPERSEDED_DIR / "collect" / source / f"{_safe(key, 'collect key')}__{stamp}.json"
+    if dest.exists():
+        raise CollectError(f"{dest} already exists; a superseded record is never overwritten")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(path, dest)
+    commit()
+    return dest
+
+
+def put_record(root: Path, record: CollectRecord, commit: Callable[[], None] = lambda: None) -> CollectRecord:
+    """Write `record` where read_record finds it (a new record; supersede_record the old one first)."""
+    return _put_record(root, record, commit)
 
 
 PURGED_NAME = "PURGED.json"
@@ -303,7 +346,7 @@ def purge_raw(root: Path, units: Iterable[InstrumentUnit], commit: Callable[[], 
     if unfinished:
         raise CollectError(f"{len(unfinished)} units have no result.json (first: {unfinished[0]}); raw files are kept")
     records = [read_record(root, t.source, t.key) for t in collect_tasks(units)]
-    recorded = {r.path: r for r in records if r.status == "collected"}
+    recorded = {r.path: r for r in records if r.path}     # collected, or unreadable after the pre-analysis validation
     raw = root / "raw"
     found = sorted(p for p in raw.rglob("*") if p.is_file()) if raw.is_dir() else []
     doomed = []

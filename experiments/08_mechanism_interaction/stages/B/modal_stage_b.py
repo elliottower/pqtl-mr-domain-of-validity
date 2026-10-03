@@ -19,7 +19,8 @@ Three phases (launch_stage_b.py):
   (stage_b/plan.py) and returns units.jsonl and unit_plan.json. A unit names its files by
   identity (file name, size, ETag); no link or token is in a unit or a fingerprint.
 - `collect_file`, one call per whole file (stage_b/collect.py): deCODE per-SeqId files, UKB-PPP
-  tars and rsID maps, GWAS Catalog files without a tabix index. Each is downloaded once to
+  tars and rsID maps, GWAS Catalog files without a tabix index (for an accession without a
+  harmonised file, its GWAS-SSF file or reviewed author format, stage_b/outcome_files.py). Each is downloaded once to
   /vol/stage_b/raw/<source>/, resumed by HTTP Range, the volume committed every 256 MB, and gets a
   record under /vol/stage_b/collect/<source>/ (size, sha256, ETag, Last-Modified, the address
   without query or token, UTC). A file the source does not hold gets a record of `absent`.
@@ -31,7 +32,10 @@ Three phases (launch_stage_b.py):
   and the volume committed before the next step; a restarted call resumes at the first missing step.
 
 Errors (stage_b/remote.py): only a definitive absence (HTTP 404/410, a file the source's listing
-does not name, an accession without a harmonised file) is recorded as unavailable. A refused
+does not name, a GWAS Catalog study directory with no summary-statistics file) is recorded as
+unavailable, and a GWAS Catalog file the source holds but no fixed rule of
+stage_b/outcome_files.py reads is recorded `unreadable` with its reason; both take the registered
+consequence of an unavailable file. A refused
 credential (401/403), a rate limit, a server error, a timeout, a dropped connection and a truncated
 or corrupt stream raise: the call fails, leaves a note under /vol/stage_b/errors/, and the file or
 unit stays unfinished until a later call finishes it. `launch_stage_b.py status` lists them. A source
@@ -60,6 +64,14 @@ of the call, and the collect digest: the sha256 over the collect records of the 
 each with the size and sha256 of the bytes on the volume); any other directory raises. Pinned: R 4.4.3 (rocker/r-ver, dated CRAN snapshot for
 transitive packages), coloc 5.2.3, susieR 0.12.35, jsonlite 2.0.0, htslib/bcftools 1.21, and the
 Python wheels below.
+
+Pre-analysis validation (stage_b/validate.py), after collect and before spawn: `validate_outcomes`
+reads every collected GWAS Catalog whole file (remote-indexed files are queried by region and not
+validated) through the analysis reader, one
+`validate_outcome_file` call per file, and writes /vol/stage_b/validation/outcome_validation.json
+(aggregate parser diagnostics only; the previous report moved to validation/superseded/ first). A
+file that fails a rule fixed in stage_b/validate.py is made `unreadable`:
+    ... launch_stage_b.py validate --run-token <token>
 
 Wiring probe and dry run (no study data; allowed before the run is logged). Both run in the run
 image with the volumes and the secret of the real-run functions, so a start of either is a
@@ -114,19 +126,20 @@ R_VERSION = "4.4.3"
 HTSLIB_VERSION = "1.21"
 R_PACKAGES = {"jsonlite": "2.0.0", "susieR": "0.12.35", "coloc": "5.2.3"}
 PY_PACKAGES = ["numpy==2.1.3", "pandas==2.2.3", "pydantic==2.13.5", "requests==2.32.3", "openpyxl==3.1.5",
-               "synapseclient==4.12.0", "prereg==0.4.2", "provenance-core==0.4.2"]
+               "synapseclient==4.12.0", "prereg==0.4.2", "provenance-core==0.4.2", "PyYAML==6.0.3"]
 HERE = Path(__file__).resolve().parent
 PREREG_IMAGE = Path("/root/exp/PREREG.md")
 INPUTS_MANIFEST_IMAGE = Path("/root/exp/modal_inputs_manifest.json")
 A_IMAGE = Path("/root/stages/A/output")
 PACKAGE_IMAGE = Path("/root/stageb/stage_b")
 A_BAKED = ("MANIFEST.tsv", "hypotheses.csv", "outcome_trait_coding.tsv")
-RUN_MODULES = ("numpy", "pandas", "pydantic", "requests", "openpyxl", "synapseclient", "prereg.log", "prereg.plan",
+RUN_MODULES = ("numpy", "pandas", "pydantic", "requests", "openpyxl", "synapseclient", "yaml", "prereg.log", "prereg.plan",
                "v8_run_guard", "v8_manifest", "v8_test_report", "synthetic_unit", "fake_remote", "stage_b.assemble",
                "stage_b.checkpoint", "stage_b.collect", "stage_b.coloc_backend", "stage_b.evidence", "stage_b.fetch",
                "stage_b.harmonize", "stage_b.launch", "stage_b.ld", "stage_b.parsers", "stage_b.pipeline", "stage_b.plan",
+               "stage_b.outcome_files", "stage_b.author_formats",
                "stage_b.remote", "stage_b.schemas", "stage_b.sentinels", "stage_b.status", "stage_b.synapse_source",
-               "stage_b.units")
+               "stage_b.units", "stage_b.validate")
 SECRET_NAMES = ("SYNAPSE_PAT", "OPENGWAS")
 COLLECT_SECRET_NAMES = ("DECODE_FOLDER_TOKEN",)     # set just before collect; its absence blocks `collect --source decode` only
 OPTIONAL_SECRET_NAMES = ("DECODE_SMP_FOLDER_TOKEN", "DECODE_FILE_URL_TEMPLATE", "DECODE_SMP_FILE_URL_TEMPLATE")
@@ -200,7 +213,7 @@ with image.imports():
     from fake_remote import FakeRemote
     from stage_b.checkpoint import (package_sha256, source_pins, tool_versions, unit_fingerprint, unit_tools,
                                     verified_source_pins, volume_collect_digest)
-    from stage_b.collect import collect_one, purge_raw
+    from stage_b.collect import collect_one, purge_raw, read_record, supersede_absent
     from stage_b.coloc_backend import ColocDataset, ColocTask, RscriptColoc
     from stage_b.fetch import (DECODE_FILE_URL, ENSEMBL_REST, EQTLCAT_PATHS, GWASCAT_FTP, KG_PANEL, KG_VCF, OPENGWAS_API,
                                SYNAPSE_RSID_MAPS, SYNAPSE_UKBPPP_EUR, Endpoints, RemoteSources, VolumeFetcher, https_path)
@@ -211,6 +224,8 @@ with image.imports():
     from stage_b.sentinels import DECODE_ST02, INTERVAL_ST4, UKBPPP_ST9, sheet_header
     from stage_b.status import marked, volume_state
     from stage_b.synapse_source import SynapseSource
+    from stage_b.validate import (REPORT_NAME, VALIDATION_DIR, apply_validation, gwas_catalog_records, in_scope,
+                                  validate_file, validation_report)
     from synthetic_unit import build_world, scenario
 
 
@@ -249,18 +264,55 @@ def plan_remote(run_token: str) -> dict:
     return {"unit_plan": plan, "units_jsonl": units_text}
 
 
+# One collect task. With `supersede_absent_record`, an `absent` GWAS Catalog record is first moved to
+# /stage_b/superseded/collect/ (stage_b.collect.supersede_absent; any other record is kept), so the task
+# runs again under the current rules. The guard stays the first statement (tests/test_launch_guard.py).
 @app.function(**RUN_CONTAINER, timeout=24 * 3600, retries=3, max_containers=COLLECT_CONTAINERS)
-def collect_file(task_json: str, run_token: str) -> dict:
+def collect_file(task_json: str, run_token: str, supersede_absent_record: bool = False) -> dict:
     authorize(PREREG_IMAGE, run_token, A_IMAGE)
     run_commit(None)
     vol.reload()
     task = CollectTask.model_validate_json(task_json)
+    superseded = supersede_absent(ROOT, task, vol.commit) if supersede_absent_record else None
     sources = RemoteSources(ROOT / "cache", os.environ.get("DECODE_FOLDER_TOKEN", ""),
                             lambda: SynapseSource(os.environ["SYNAPSE_PAT"]), endpoints(),
                             decode_smp_token=os.environ.get("DECODE_SMP_FOLDER_TOKEN", ""))
     record = marked(ROOT, "collect", f"{task.source}__{task.key}", f"{task.source}/{task.key}",
                     lambda: collect_one(task, sources, ROOT, vol.commit), vol.commit)
-    return {"source": task.source, "key": task.key, "status": record.status, "bytes": record.bytes}
+    return {"source": task.source, "key": task.key, "status": record.status, "bytes": record.bytes,
+            "superseded": None if superseded is None else str(superseded.relative_to(ROOT))}
+
+
+# Pre-analysis validation (stage_b/validate.py): every collected GWAS Catalog whole file (harmonised,
+# GWAS-SSF or reviewed author format) is read whole by the analysis reader, one call per file, checkpointed every 1M rows; a file that fails
+# a fixed rule is made `unreadable`. Aggregate parser diagnostics only. Run after collect, before spawn.
+@app.function(**{**RUN_CONTAINER, "memory": 16384}, timeout=24 * 3600, retries=3, max_containers=COLLECT_CONTAINERS)
+def validate_outcome_file(key: str, run_token: str) -> dict:
+    authorize(PREREG_IMAGE, run_token, A_IMAGE)
+    run_commit(None)
+    vol.reload()
+    record = read_record(ROOT, "gwas_catalog", key)
+    result = validate_file(ROOT, record, vol.commit)
+    apply_validation(ROOT, record, result, vol.commit)
+    return result
+
+
+@app.function(**RUN_CONTAINER, timeout=24 * 3600)
+def validate_outcomes(run_token: str) -> dict:
+    authorize(PREREG_IMAGE, run_token, A_IMAGE)
+    run_commit(None)
+    vol.reload()
+    keys = [r.key for r in gwas_catalog_records(ROOT) if in_scope(r)]
+    results = {}
+    for key, got in zip(keys, validate_outcome_file.map(keys, kwargs={"run_token": run_token}, return_exceptions=True),
+                        strict=True):
+        results[key] = got if isinstance(got, dict) else f"{type(got).__name__}: {got}"[:500]
+    vol.reload()
+    report = {**validation_report(gwas_catalog_records(ROOT), results),
+              "modal_image_id": os.environ.get("MODAL_IMAGE_ID", ""), COMMIT_ENV: os.environ.get(COMMIT_ENV)}
+    write_report(ROOT / VALIDATION_DIR / REPORT_NAME, report)
+    vol.commit()
+    return report
 
 
 @app.function(**RUN_CONTAINER, timeout=24 * 3600, retries=3, max_containers=ANALYZE_CONTAINERS)
