@@ -15,3 +15,8 @@ venv/
 paper/cover_letter.aux
 paper/cover_letter.log
 paper/cover_letter.out
+
+# Submission correspondence: never tracked
+SUBMISSION_STATUS.md
+*cover_letter*
+*cover-letter*
