@@ -4,7 +4,7 @@ import pytest
 
 from stage_d.evidence import evidence_score, evidence_state
 from stage_d.join import JoinError, derive, join_stages, load_stage_tables
-from stage_d.sets import SetError, form_sets, s12_select
+from stage_d.sets import DEVIATION_SETS, SET_ORDER, SetError, form_sets, s12_select
 
 
 def test_evidence_state_truth_table():
@@ -241,3 +241,52 @@ def test_s12_disagreement_with_stage_a_raises(joined):
     df.loc[i, "in_s12"] = False
     with pytest.raises(SetError, match="S12"):
         form_sets(df)
+
+
+FROZEN = "outcome_file_frozen_ci_p_pass"
+
+
+def test_the_frozen_rule_sensitivity_set_makes_failing_outcome_files_inconclusive_and_nothing_else(analysis_sets):
+    s1, sens = analysis_sets["S1"].frame, analysis_sets["S_frozen_ci_rule"]
+    assert sens.info.formed and sens.info.models == ("h1", "h4") and "S_frozen_ci_rule" not in SET_ORDER
+    f = sens.frame
+    assert f.index.equals(s1.index)
+    fails = (s1[FROZEN] == False).fillna(False).to_numpy(dtype=bool)  # noqa: E712
+    assert fails.any() and (~fails).any()
+    assert (f.loc[fails, "state"] == "inconclusive").all() and (f.loc[fails, "S"] == 0).all() and (f.loc[fails, "E"] == 0).all()
+    for col in ("state", "S", "E", "cls", "y"):
+        assert f.loc[~fails, col].equals(s1.loc[~fails, col]), col
+    assert f["y"].equals(s1["y"])
+    changed = fails & (s1["state"] != "inconclusive").to_numpy()
+    assert changed.any()
+    assert sens.info.notes == {
+        "outcome_file_fails_frozen_rule": int(fails.sum()),
+        "outcome_file_passes_frozen_rule": int((s1[FROZEN] == True).fillna(False).sum()),  # noqa: E712
+        "no_ci_p_check": int(s1[FROZEN].isna().sum()), "made_inconclusive": int(changed.sum()),
+        "made_inconclusive_from_supportive": int((fails & (s1["state"] == "supportive").to_numpy()).sum()),
+        "made_inconclusive_from_contradictory": int((fails & (s1["state"] == "contradictory").to_numpy()).sum())}
+    assert sum(v for k, v in sens.info.notes.items() if k.startswith("outcome_file") or k == "no_ci_p_check") == len(s1)
+
+
+def test_the_frozen_rule_sensitivity_set_changes_no_registered_set(joined):
+    df, _ = joined
+    with_flag = form_sets(df)
+    without = df.drop(columns=[FROZEN]).copy()
+    without.attrs["present_columns"] = {k: [c for c in v if c != FROZEN] for k, v in df.attrs["present_columns"].items()}
+    plain = form_sets(without)
+    assert set(with_flag) == set(plain) == set(SET_ORDER) | set(DEVIATION_SETS)
+    for sid in SET_ORDER:
+        assert with_flag[sid].info == plain[sid].info, sid
+        if with_flag[sid].info.formed:
+            assert with_flag[sid].frame.drop(columns=[FROZEN]).equals(plain[sid].frame), sid
+    assert not plain["S_frozen_ci_rule"].info.formed and "no column" in plain["S_frozen_ci_rule"].info.reason
+
+
+def test_the_frozen_rule_sensitivity_set_is_not_formed_when_no_s1_outcome_file_fails(joined):
+    df, _ = joined
+    df = df.copy()
+    df.loc[(df[FROZEN] == False).fillna(False).to_numpy(dtype=bool), FROZEN] = True  # noqa: E712
+    got = form_sets(df)["S_frozen_ci_rule"]
+    assert not got.info.formed and got.info.reason.endswith("the set equals S1")
+    with pytest.raises(SetError):
+        got.analysed()

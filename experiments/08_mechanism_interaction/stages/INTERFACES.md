@@ -272,6 +272,7 @@ directory>`); the repository files stage A reads are baked into the image. Outpu
 | s16_evidence_state | evidence state from the deCODE instrument's SMP-normalized statistics (S16); empty where no such colocalization exists: every instrument of another source, a deCODE instrument whose SMP-normalized file is not retrievable, and every row when no SMP-normalized listing is pinned (stage D then reports S16 as not run) |
 | s17_sentinel_p | outcome-association p-value at the instrument's sentinel variant (rsID match in the outcome region, direction ignored), S17; empty where the outcome file is unavailable, lacks the sentinel, or lists it with two p-values |
 | evidence_state_ukbppp, evidence_state_decode | the primary evidence rule applied with that source's instrument against the row's selected outcome GWAS (descriptive table 12, agreement where a gene has cis-pQTLs in both); equals `evidence_state` for the selected source; inconclusive where the source's regional file does not resolve; empty where the row names no assay in that source |
+| outcome_file_frozen_ci_p_pass | true / false: whether the row's GWAS Catalog outcome file passed the frozen CI-versus-p rule (`stage_b.validate.frozen_ci_p_verdicts` of the validation report `assemble` is given: the rule's own verdict when the frozen rule is in force, else the frozen counts reported beside the rounding-aware rule), whether or not the file passed the rule in force; empty where the check did not run on the outcome file (not an `or_ci_derived_se` GWAS Catalog whole file). Read by stage D only for the deviation sensitivity set `S_frozen_ci_rule` |
 
 Also `regional_manifest.tsv` (one row per regional extract of a unit: source, protein/study, window,
 variants, sha256; units that extract the same region, such as the units of an assay that serves
@@ -447,10 +448,20 @@ the interval by more than half a unit in the last printed decimal of the OR and 
 and author readers a beta that is missing or infinite, and a frequency outside [0, 1], is not read.
 An `or_ci_derived_se` file also fails unless at least 95% of its rows read with 0 < p < 1 give a
 two-sided Wald p from ln(OR) / SE within 0.1 on the log10 scale of the published p, or within the
-published p's printed rounding where that is looser (`outcome_files.CiPCheck`). A file that passes
+published p's printed rounding where that is looser (`outcome_files.CiPCheck`). That is the frozen
+rule; `outcome_files.CI_P_RULE` selects it or the rounding-aware rule version, which reads each
+printed OR, limit and p as the interval of half a unit in its last printed digit, takes the exact
+extremes of the Wald statistic over the latent rows inside those intervals whose OR lies within its
+interval (`outcome_files.wald_ratio_extremes`), counts a row whose implied p can be any value in
+(0, 1] as `rounding_uninformative` (not checkable, outside the denominator), keeps the 0.1 log10
+tolerance and the 95% threshold, fails a file with no informative row, and reports the frozen counts
+and a per-row cross-tabulation of the two verdicts beside its own. A file that passes
 has its `collected` record superseded by one naming `uncertainty_mode`, `header_sha256` and
 `validation_sha256` (the sha256 of its result), which enter the collect digest; `spawn` also refuses
 unless every `collected` record names the mode, header hash and result hash of its result.
+`assemble --validation-report <report>` reads the validation report `validate` wrote, refuses it
+unless it covers the collect records (`require_validation`), lists it in INPUTS.tsv as
+`outcome_validation_report`, and takes `outcome_file_frozen_ci_p_pass` from it.
 `check-validation --expected <json>` compares the classification of a report (files by mode, failed,
 error) with an expected one and writes the comparison to `inputs/stage_b/validation/`.
 `restore-validated` moves the `collected` record of a file back only where its validation failed for
@@ -607,7 +618,14 @@ rows with an `s16_evidence_state`: a row with one takes it as its state and ever
 its primary `evidence_state` (`stage_d/sets.py`, `s16_evidence_state` filled from `evidence_state`
 over the S1 mask; the set's `replaced` note counts the rows that took the SMP-normalized state). S5 keeps only `protein_altering` false, S11 only
 `splicing_candidate` false and S15f only `low_coverage` false; a hypothesis whose flag is missing
-is excluded from that set and counted in the set's `flag_missing_excluded` note. Work files live
+is excluded from that set and counted in the set's `flag_missing_excluded` note. One set is not
+registered: `S_frozen_ci_rule` (`stage_d.sets.DEVIATION_SETS`), the sensitivity analysis of the
+post-freeze amendment of stage B's CI-versus-p rule, holds every held-out S1 row with the state of
+each row whose `outcome_file_frozen_ci_p_pass` is false set to inconclusive (S = 0, E = 0); it is
+fitted with H1 and H4 at the primary prior, reported in `results.json` `descriptive`
+`deviation_frozen_ci_rule` (its set rows, S1 by outcome-file verdict and class, the states made
+inconclusive, its per-stratum 2x2) and never in table 10, and is not formed when the column is
+absent or no S1 row has a failing outcome file. Work files live
 in one directory per run (`--work`, default `D/work/run`; `/vol/work` on Modal) bound to the run
 fingerprint: `prepare` refuses a non-empty directory under another fingerprint or under none and
 does not rewrite a plan it already wrote under this one; the other phases refuse unless the

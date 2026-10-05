@@ -97,6 +97,32 @@ unit in its last printed digit, on the log10 scale) where that is looser. The fi
 least CI_P_MIN_AGREEMENT_PERCENT (95%) of the checkable rows agree; no checkable row fails it. The
 check returns counts and pass/fail only.
 
+Rounding-aware CI-versus-p check (CI_P_RULE_ROUNDING_AWARE), a second rule version beside the frozen
+one (CI_P_RULE_FROZEN), defined before it is run; CI_P_RULE selects the rule the validation applies,
+and the frozen rule stays in code and is reported beside it. Every printed value is read from its
+text as D x 10^e (D the integer of its printed digits; `1.002`, `0.9981`, `1e-05`, `1.2E-300`) and
+stands for the interval [(D - 1/2) 10^e, (D + 1/2) 10^e], half a unit in its last printed digit (for
+scientific notation, the last printed mantissa digit). A row read is considered when OR, L and U are
+finite and positive, L < U, the printed p lies in (0, 1) (for -log10 p, the printed value is above
+0), and the rounding interval of L does not reach 0; rows where it does are counted apart. The
+latent row is any point (o, l, u) = (ln OR, ln L, ln U) of the box of the three rounding intervals
+with l <= o <= u (the latent OR inside its latent interval); the Wald statistic is
+|o| / SE = |o| 2 z / (u - l). `wald_ratio_extremes` gives its exact infimum and supremum over that
+feasible box (closed form, below), so no combination of corners that no single latent row can take
+widens the range. A row whose box has no feasible point (OR outside its interval beyond rounding)
+disagrees. A row is `rounding_uninformative` when its implied p can be any value in (0, 1]: a zero
+interval width is reachable at a feasible OR other than 1 (z unbounded above) and the feasible OR
+range contains 1 (z reaches 0), both decided by comparisons of interval bounds. Such a row is not
+checkable, is counted apart, and enters neither the agreements nor the denominator. Every other
+considered row is informative: the implied two-sided p ranges over [p(z_max), p(z_min)], the
+published p over its own rounding interval (for -log10 p, the interval of -log10 p), and the row
+agrees when the two intervals intersect once each is widened by CI_P_LOG10_TOLERANCE (0.1) on the
+log10 scale. Everything is computed in log10: the published p from its digits and exponent, the
+implied p by `log10_two_sided_p`, so no p underflows. The file passes when at least
+CI_P_MIN_AGREEMENT_PERCENT (95%) of the informative rows agree, as before; a file with no
+informative row fails. The per-file result also cross-tabulates every row read by its frozen and
+rounding-aware verdicts (`ci_p_rule_diagnostic`, counts only).
+
 rsID (`rsid_rule`). `column`: the `rsid` column, else `rs_id`; a value that is not rs<digits> gives
 no rsID (the variant is dropped at harmonization, as on every other path). `ukbppp_map`: a file
 with neither column takes rsIDs from the UKB-PPP rsID map of the variant's chromosome (Synapse
@@ -122,9 +148,9 @@ import hashlib
 import math
 import re
 from collections.abc import Hashable, Iterable, Mapping
-from decimal import Decimal
+from decimal import Context, Decimal, InvalidOperation
 from statistics import NormalDist
-from typing import ClassVar
+from typing import ClassVar, NamedTuple
 
 import pandas as pd
 import yaml
@@ -167,6 +193,11 @@ CI_LEVEL = 0.95                   # the level ci_lower / ci_upper are read at; t
 CI_P_LOG10_TOLERANCE = 0.1        # CiPCheck: a row agrees when |log10 p_implied - log10 p_published| <= 0.1, or within
                                   # the published p's printed rounding (half a unit in its last digit) where looser
 CI_P_MIN_AGREEMENT_PERCENT = 95   # CiPCheck: the file passes when at least 95% of the checkable rows (0 < p < 1) agree
+# CiPCheck rule versions (module docstring). The frozen rule is kept in code and reported beside the rounding-aware one.
+CI_P_RULE_FROZEN = "frozen"
+CI_P_RULE_ROUNDING_AWARE = "rounding_aware"
+CI_P_RULES = (CI_P_RULE_FROZEN, CI_P_RULE_ROUNDING_AWARE)
+CI_P_RULE = CI_P_RULE_ROUNDING_AWARE      # the rule the pre-analysis validation applies (stage_b/validate.py)
 
 
 class SsfColumns(BaseModel):
@@ -604,6 +635,7 @@ class OrCiCheck:
         self.width = len(header)
         self.cols = [idx[c] for c in (fmt.odds_ratio, fmt.ci_lower, fmt.ci_upper, fmt.se)]
         self.checked = self.agree = self.not_checkable = 0
+        self.count_names = ("checked", "agree", "not_checkable")
 
     @staticmethod
     def _within(printed: float, printed_text: str, expected: float, rounding_of_expected: float) -> bool:
@@ -662,33 +694,206 @@ def p_rounding_log10(text: str, p: float, neg_log10: bool) -> float:
     return max(math.log10(p + h) - math.log10(p), math.log10(p) - math.log10(p - h)) if p > h else math.inf
 
 
-class CiPCheck:
-    """The frozen file-level CI-versus-p check of an or_ci_derived_se file (module docstring). `add`
-    takes each row the reader read (with the derived SE) and the row as printed; `result` gives
-    counts and pass/fail only."""
+AGREE, DISAGREE, NOT_CHECKABLE = "agree", "disagree", "not_checkable"
+LOWER_LIMIT_AT_ZERO = "lower_limit_rounding_reaches_zero"     # not checkable, counted apart (rounding-aware rule)
+ROUNDING_UNINFORMATIVE = "rounding_uninformative"             # not checkable, counted apart: the implied p spans (0, 1]
+FROZEN_VERDICTS = (AGREE, DISAGREE, NOT_CHECKABLE)
+ROUNDING_AWARE_VERDICTS = (AGREE, DISAGREE, NOT_CHECKABLE, LOWER_LIMIT_AT_ZERO, ROUNDING_UNINFORMATIVE)
+EXACT_FLOAT_DIGITS = 2 ** 52      # below this, D - 1/2 and D + 1/2 are exact doubles
 
-    def __init__(self, reader: SsfReader):
+
+def ci_p_frozen_verdict(got: Mapping, p_text: str, neg_log10: bool) -> str:
+    """The frozen CI-versus-p rule on one row read (module docstring): AGREE, DISAGREE or NOT_CHECKABLE."""
+    p = got["p"]
+    if not 0.0 < p < 1.0:                           # p missing (NaN), 0 or 1: nothing to compare
+        return NOT_CHECKABLE
+    gap = abs(log10_two_sided_p(got["beta"] / got["se"]) - math.log10(p))
+    return AGREE if gap <= CI_P_LOG10_TOLERANCE or gap <= p_rounding_log10(p_text, p, neg_log10) else DISAGREE
+
+
+def printed_digits(text: str) -> tuple[Decimal, int, int] | None:
+    """A finite non-negative number as printed: (value, D, e) with value = D x 10^e, D the integer of
+    its printed digits (`1.002` -> 1002, -3; `1.2E-300` -> 12, -301); None for anything else."""
+    try:
+        number = Decimal(text.strip())
+    except InvalidOperation:
+        return None
+    if not number.is_finite() or number.is_signed():
+        return None
+    _, digits, exponent = number.as_tuple()
+    return number, int(Decimal((0, digits, 0))), int(exponent)       # exact, and free of the int-from-str digit limit
+
+
+def _ln_rounding_interval(digits: int, exponent: int) -> tuple[float, float]:
+    """ln of the rounding interval [(D - 1/2) 10^e, (D + 1/2) 10^e]; -inf at the low end where it
+    reaches 0. Past EXACT_FLOAT_DIGITS the interval is narrower than a double resolves around ln D,
+    and both ends are ln D (math.log takes an int of any size)."""
+    shift = exponent * LN10
+    if digits >= EXACT_FLOAT_DIGITS:
+        return math.log(digits) + shift, math.log(digits) + shift
+    low = math.log(digits - 0.5) + shift if digits > 0 else -math.inf
+    return low, math.log(digits + 0.5) + shift
+
+
+def _rounding_bounds(digits: int, exponent: int) -> tuple[Decimal, Decimal]:
+    """The rounding interval [(D - 1/2) 10^e, (D + 1/2) 10^e] exactly, as Decimals."""
+    return Decimal(10 * digits - 5).scaleb(exponent - 1), Decimal(10 * digits + 5).scaleb(exponent - 1)
+
+
+class WaldRatioExtremes(NamedTuple):
+    """The infimum and supremum of |o| / (u - l) over a feasible box (`wald_ratio_extremes`), with the
+    two interval-bound facts the rounding-uninformative verdict reads: the feasible o range holds 0,
+    and a zero width u - l is reachable at a feasible o other than 0 (then `high` is inf)."""
+    low: float
+    high: float
+    contains_zero_effect: bool
+    zero_width_reachable: bool
+
+
+def wald_ratio_extremes(o: tuple[float, float], lo: tuple[float, float], up: tuple[float, float]) -> WaldRatioExtremes | None:
+    """The exact infimum and supremum of |o| / (u - l) over o in [o0, o1], l in `lo` = [l0, l1], u in
+    `up` = [u0, u1] subject to l <= o <= u (ln OR inside its interval); None when no point satisfies it.
+
+    The feasible o are [a, b] = [max(o0, l0), min(o1, u1)]. Infimum: for every feasible o the widest
+    interval (l0, u1) is feasible, so it is min |o| over [a, b] divided by u1 - l0. Supremum: for a
+    fixed o the narrowest feasible interval is [min(l1, o), max(u0, o)], of width w(o); w is
+    piecewise linear with breakpoints l1 and u0, and |o| with breakpoint 0, so on each piece
+    |o| / w(o) is a ratio of two affine functions, monotone, and the supremum is at a, b or a
+    breakpoint inside [a, b]. A zero width at a nonzero o makes it infinite. Interval endpoints are
+    compared, never tested for float equality, except o = 0 itself."""
+    a, b = max(o[0], lo[0]), min(o[1], up[1])
+    if a > b:
+        return None
+    contains_zero = a <= 0.0 <= b
+    low = (0.0 if contains_zero else min(abs(a), abs(b))) / (up[1] - lo[0])
+    high, zero_width = 0.0, False
+    for c in {a, b, *(x for x in (0.0, lo[1], up[0]) if a <= x <= b)}:
+        width = max(up[0], c) - min(lo[1], c)
+        if width <= 0.0:
+            zero_width = zero_width or c != 0.0
+            continue
+        high = max(high, abs(c) / width)
+    return WaldRatioExtremes(low, math.inf if zero_width else high, contains_zero, zero_width)
+
+
+def _published_log10_interval(p: Decimal, digits: int, exponent: int, neg_log10: bool) -> tuple[float, float]:
+    """log10 of the published p's rounding interval: from the printed digits of p, or, for -log10 p,
+    minus the rounding interval of the printed -log10 p (a value beyond the doubles gives -inf)."""
+    if neg_log10:                                   # exact decimal sum and difference, then to doubles
+        half, exact = Decimal(5).scaleb(exponent - 1), Context(prec=int(digits.bit_length() * 0.30103) + 3)
+        return -float(exact.add(p, half)), -float(exact.subtract(p, half))
+    if digits >= EXACT_FLOAT_DIGITS:
+        return math.log10(digits) + exponent, math.log10(digits) + exponent
+    return math.log10(digits - 0.5) + exponent, math.log10(digits + 0.5) + exponent
+
+
+def latent_wald_extremes(texts: tuple[str, str, str]) -> WaldRatioExtremes | None:
+    """For OR, L and U as printed (each a finite positive number, L's rounding interval clear of 0):
+    the extremes of |ln OR| / (ln U - ln L) over the latent rows their rounding allows
+    (`wald_ratio_extremes`); None when no latent row has its OR inside its interval. Feasibility
+    (L_lo <= OR_hi and OR_lo <= U_hi) is decided on the exact decimal bounds; the doubles then only
+    place the ends of the feasible OR range, which a touching end can leave empty by an ulp, so the
+    OR range is clamped into [ln L_lo, ln U_hi] first."""
+    (_, d_or, e_or), (_, d_l, e_l), (_, d_u, e_u) = (printed_digits(t) for t in texts)
+    (or_lo, or_hi), (l_lo, _), (_, u_hi) = (_rounding_bounds(d, e) for d, e in ((d_or, e_or), (d_l, e_l), (d_u, e_u)))
+    if not (l_lo <= or_hi and or_lo <= u_hi):
+        return None
+    ln_or, ln_l, ln_u = _ln_rounding_interval(d_or, e_or), _ln_rounding_interval(d_l, e_l), _ln_rounding_interval(d_u, e_u)
+    return wald_ratio_extremes((min(ln_or[0], ln_u[1]), max(ln_or[1], ln_l[0])), ln_l, ln_u)
+
+
+def ci_p_rounding_aware_verdict(texts: tuple[str, str, str], p_text: str, neg_log10: bool, z: float) -> str:
+    """The rounding-aware CI-versus-p rule on one row, from OR, L, U and p as printed (module
+    docstring): AGREE, DISAGREE, NOT_CHECKABLE, LOWER_LIMIT_AT_ZERO or ROUNDING_UNINFORMATIVE."""
+    parsed = [printed_digits(t) for t in (*texts, p_text)]
+    if any(x is None for x in parsed):
+        return NOT_CHECKABLE
+    (odds, _, _), (lower, d_l, _), (upper, _, _), (p, d_p, e_p) = parsed
+    if d_l == 0:                                    # L's rounding interval reaches 0
+        return LOWER_LIMIT_AT_ZERO
+    if not (odds > 0 and upper > 0 and lower < upper and p > 0 and (neg_log10 or p < 1)):
+        return NOT_CHECKABLE
+    ext = latent_wald_extremes(texts)
+    if ext is None:
+        return DISAGREE                             # no latent row has its OR inside its interval
+    if ext.zero_width_reachable and ext.contains_zero_effect:
+        return ROUNDING_UNINFORMATIVE
+    implied = (log10_two_sided_p(ext.high * 2 * z), log10_two_sided_p(ext.low * 2 * z))
+    published = _published_log10_interval(p, d_p, e_p, neg_log10)
+    meet = published[0] <= implied[1] + CI_P_LOG10_TOLERANCE and implied[0] - CI_P_LOG10_TOLERANCE <= published[1]
+    return AGREE if meet else DISAGREE
+
+
+def ci_p_rule_diagnostic(crosstab: Mapping[str, int]) -> dict:
+    """The four counts the amended validation reports per file, from its row cross-tabulation
+    (`CiPCheck`: "<frozen verdict>__<rounding-aware verdict>" -> rows): frozen disagreements the
+    rounding-aware rule accepts, rows that disagree under both, rows made rounding-uninformative
+    (whatever their frozen verdict), and frozen agreements the rounding-aware rule rejects. Counts only."""
+    return {"frozen_disagree_rounding_aware_agree": crosstab.get(f"{DISAGREE}__{AGREE}", 0),
+            "disagree_under_both": crosstab.get(f"{DISAGREE}__{DISAGREE}", 0),
+            "rounding_uninformative": sum(crosstab.get(f"{f}__{ROUNDING_UNINFORMATIVE}", 0) for f in FROZEN_VERDICTS),
+            "frozen_agree_rounding_aware_disagree": crosstab.get(f"{AGREE}__{DISAGREE}", 0)}
+
+
+class CiPCheck:
+    """The file-level CI-versus-p check of an or_ci_derived_se file under rule `rule` (CI_P_RULES;
+    module docstring). `add` takes each row the reader read (with the derived SE) and the row as
+    printed; `result` gives counts and pass/fail only. The frozen rule's counts are always kept; under
+    the rounding-aware rule they are reported beside its own, with the cross-tabulation of every row
+    read by its two verdicts. `count_names` are the attributes a checkpoint saves and restores."""
+
+    def __init__(self, reader: SsfReader, rule: str = CI_P_RULE_FROZEN):
         if reader.mode != "or_ci_derived_se":
             raise ValueError(f"the CI-versus-p check applies to or_ci_derived_se, not {reader.mode}")
-        self.i_p, self.neg_log10, self.z = reader.i_p, reader.cols.p_is_neg_log10, reader.ci_z
+        if rule not in CI_P_RULES:
+            raise ValueError(f"the CI-versus-p rule is one of {CI_P_RULES}, not {rule!r}")
+        self.rule, self.i_p, self.neg_log10, self.z = rule, reader.i_p, reader.cols.p_is_neg_log10, reader.ci_z
+        self.i_texts = (reader.i_effect, reader.i_lower, reader.i_upper)
         self.checked = self.agree = self.not_checkable = 0
+        self.ra_crosstab: dict[str, int] = {}
+        self.count_names = ("checked", "agree", "not_checkable") + (
+            ("ra_crosstab",) if rule == CI_P_RULE_ROUNDING_AWARE else ())
+
+    def verdicts(self, got: Mapping, r: list[str]) -> tuple[str, str | None]:
+        """(frozen verdict, rounding-aware verdict) of one row read; the second None under the frozen rule."""
+        p_text = r[self.i_p] if self.i_p is not None else ""
+        frozen = ci_p_frozen_verdict(got, p_text, self.neg_log10)
+        if self.rule != CI_P_RULE_ROUNDING_AWARE:
+            return frozen, None
+        texts = (r[self.i_texts[0]], r[self.i_texts[1]], r[self.i_texts[2]])
+        return frozen, ci_p_rounding_aware_verdict(texts, p_text, self.neg_log10, self.z)
 
     def add(self, got: Mapping, r: list[str]) -> None:
-        p = got["p"]
-        if not 0.0 < p < 1.0:                       # p missing (NaN), 0 or 1: nothing to compare
-            self.not_checkable += 1
-            return
-        self.checked += 1
-        gap = abs(log10_two_sided_p(got["beta"] / got["se"]) - math.log10(p))
-        if gap <= CI_P_LOG10_TOLERANCE or gap <= p_rounding_log10(r[self.i_p], p, self.neg_log10):
-            self.agree += 1
+        frozen, aware = self.verdicts(got, r)
+        self.not_checkable += frozen == NOT_CHECKABLE
+        self.checked += frozen != NOT_CHECKABLE
+        self.agree += frozen == AGREE
+        if aware is not None:
+            key = f"{frozen}__{aware}"
+            self.ra_crosstab[key] = self.ra_crosstab.get(key, 0) + 1
+
+    @staticmethod
+    def _passed(agree: int, checked: int) -> bool:
+        return checked > 0 and 100 * agree >= CI_P_MIN_AGREEMENT_PERCENT * checked
 
     def result(self) -> dict:
-        passed = self.checked > 0 and 100 * self.agree >= CI_P_MIN_AGREEMENT_PERCENT * self.checked
-        return {"rule": "or_ci_vs_p", "ci_level": CI_LEVEL, "z": self.z, "log10_tolerance": CI_P_LOG10_TOLERANCE,
-                "min_agreement_percent": CI_P_MIN_AGREEMENT_PERCENT, "rows_checked": self.checked,
-                "rows_agree": self.agree, "rows_disagree": self.checked - self.agree,
-                "rows_not_checkable": self.not_checkable, "passed": passed}
+        frozen = {"rule": "or_ci_vs_p", "ci_level": CI_LEVEL, "z": self.z, "log10_tolerance": CI_P_LOG10_TOLERANCE,
+                  "min_agreement_percent": CI_P_MIN_AGREEMENT_PERCENT, "rows_checked": self.checked,
+                  "rows_agree": self.agree, "rows_disagree": self.checked - self.agree,
+                  "rows_not_checkable": self.not_checkable, "passed": self._passed(self.agree, self.checked)}
+        if self.rule == CI_P_RULE_FROZEN:
+            return frozen
+        by_aware = {v: sum(n for k, n in self.ra_crosstab.items() if k.endswith(f"__{v}")) for v in ROUNDING_AWARE_VERDICTS}
+        checked = by_aware[AGREE] + by_aware[DISAGREE]
+        crosstab = {f"{f}__{a}": self.ra_crosstab.get(f"{f}__{a}", 0) for f in FROZEN_VERDICTS for a in ROUNDING_AWARE_VERDICTS}
+        return {"rule": "or_ci_vs_p_rounding_aware", "rule_version": CI_P_RULE_ROUNDING_AWARE, "ci_level": CI_LEVEL,
+                "z": self.z, "log10_tolerance": CI_P_LOG10_TOLERANCE, "min_agreement_percent": CI_P_MIN_AGREEMENT_PERCENT,
+                "rows_checked": checked, "rows_agree": by_aware[AGREE], "rows_disagree": by_aware[DISAGREE],
+                "rows_not_checkable": by_aware[NOT_CHECKABLE] + by_aware[LOWER_LIMIT_AT_ZERO] + by_aware[ROUNDING_UNINFORMATIVE],
+                "rows_lower_limit_rounding_reaches_zero": by_aware[LOWER_LIMIT_AT_ZERO],
+                "rows_rounding_uninformative": by_aware[ROUNDING_UNINFORMATIVE],
+                "passed": self._passed(by_aware[AGREE], checked), "frozen_rule": frozen,
+                "row_crosstab": crosstab, "diagnostic": ci_p_rule_diagnostic(crosstab)}
 
 
 def map_rsids(rows: Iterable[list[str]], header: list[str], build: str, positions: set[int]) -> dict[tuple[int, frozenset], set[str]]:

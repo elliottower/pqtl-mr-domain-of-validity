@@ -231,3 +231,23 @@ def table15_karim(df: pd.DataFrame) -> list[dict]:
     primary = df["variant"].fillna("primary") == "primary"   # S8/S9-only rows are not universe hypotheses
     return _records(df.loc[primary & df["gene_symbol"].isin(KARIM_LAUNCHED_TARGETS), cols]
                     .sort_values(["gene_symbol", "indication_id"]))
+
+
+def deviation_frozen_ci_rule(s1_pre: pd.DataFrame, sensitivity: pd.DataFrame | None, n_boot: int = N_BOOTSTRAP) -> dict:
+    """The S1 hypotheses by the frozen CI-versus-p verdict of their outcome file (stage B
+    `outcome_file_frozen_ci_p_pass`: pass, fail, or no check), the evidence states of the failing ones
+    by class, and, where the sensitivity set S_frozen_ci_rule was formed, its per-stratum 2x2 table
+    (as table 8)."""
+    col = "outcome_file_frozen_ci_p_pass"
+    if col not in s1_pre or s1_pre[col].isna().all():
+        return {"not_available": "stage B wrote no frozen CI-versus-p verdict for any S1 hypothesis's outcome file"}
+    verdict = s1_pre[col].astype(object).map({True: "pass", False: "fail"}).fillna("no_ci_p_check")
+    by_verdict = pd.crosstab(s1_pre["cls"], verdict).rename_axis(index="class").reset_index()
+    by_verdict.columns = [str(c) for c in by_verdict.columns]
+    failing = s1_pre.loc[verdict == "fail"]
+    states = pd.crosstab(failing["cls"], failing["state"]).rename_axis(index="class").reset_index()
+    states.columns = [str(c) for c in states.columns]
+    return {"outcome_file_verdict_by_class": _records(by_verdict),
+            "failing_outcome_file_state_by_class": _records(states),
+            "stratum_2x2": [] if sensitivity is None else stratum_2x2_table(sensitivity, n_boot=n_boot, seed_tag=16)}
+

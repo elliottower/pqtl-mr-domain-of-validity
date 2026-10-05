@@ -16,7 +16,7 @@ from stage_d.guard import StageInputError, logged_seals, sha256_file, verify_inp
 from stage_d.join import derive, join_stages, load_stage_tables
 from stage_d.pipeline import prepare
 from stage_d.schemas import OutcomeRow
-from stage_d.sets import SET_ORDER, SetError, form_sets
+from stage_d.sets import DEVIATION_SETS, SET_ORDER, SetError, form_sets
 from stage_d.synthetic import SYNTHETIC_SCRIPT_SHA256, synthetic_fingerprint, write_stage_outputs
 from tests.hand_fixture import (EXPECTED, FLAG_MISSING_ANYWHERE, FLAG_MISSING_EXCLUDED, S1_EXCLUDED, S14A_EXCLUDED, S19_OUTCOMES, STATES,
                                  hand_tables)
@@ -112,7 +112,8 @@ def test_hand_worked_membership(hand_sets, set_id):
 
 def test_every_registered_set_is_present_and_hand_checked_sets_have_their_members(hand_sets):
     _, sets = hand_sets
-    assert set(sets) == set(SET_ORDER) and len(SET_ORDER) == 30
+    assert set(sets) == set(SET_ORDER) | set(DEVIATION_SETS) and len(SET_ORDER) == 30
+    assert not sets["S_frozen_ci_rule"].info.formed                 # the hand fixture has no verdict column
     assert {"S1", "S12", "S19"} <= set(EXPECTED)
     for set_id, members in EXPECTED.items():
         assert ids(sets[set_id]) == members, set_id

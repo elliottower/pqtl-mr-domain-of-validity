@@ -45,7 +45,7 @@ class DerivedInfo(BaseModel):
 
 OPTIONAL_COLUMNS = {
     "A": ("variant", "in_s8", "in_s9", "in_s21"),
-    "B": ("s17_sentinel_p", "evidence_state_ukbppp", "evidence_state_decode"),
+    "B": ("s17_sentinel_p", "evidence_state_ukbppp", "evidence_state_decode", "outcome_file_frozen_ci_p_pass"),
     "C": ("last_phase2_end_date",),
 }
 TABLE12_SOURCES = ("ukbppp", "decode")

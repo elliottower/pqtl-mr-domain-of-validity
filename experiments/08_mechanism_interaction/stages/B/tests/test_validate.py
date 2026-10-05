@@ -8,20 +8,22 @@ import os
 import shutil
 
 import pytest
+from test_ci_p_rounding import Z99, printed_row, small_effect_rows, uninformative_row
 from test_outcome_files import (MAP_HEADER, SSF_BETA_HEADER, SSF_OR_CI_HEADER, ci, exact_or_ci_row, laskar_row,
-                                ssf_row, tsv)
+                                or_ci_row, ssf_row, tsv)
 
 from stage_b.author_formats import AUTHOR_FORMATS, LASKAR_HEADER, header_sha256
 from stage_b.checkpoint import collect_entry
 from stage_b.collect import read_record, record_path
 from stage_b.fetch import VolumeFetcher
-from stage_b.outcome_files import REJECT_REASONS
+from stage_b import validate as validate_module
+from stage_b.outcome_files import CI_P_RULE, CI_P_RULE_FROZEN, CI_P_RULE_ROUNDING_AWARE, REJECT_REASONS
 from stage_b.schemas import CollectError, CollectRecord, CollectTask, InputContractError, OutcomeSpec, SourceUnreadable
 from stage_b.status import volume_state
-from stage_b.validate import (REPORT_NAME, RULES, VALIDATION_DETAIL, VALIDATION_DIR, apply_validation, check_classification,
-                              classification, failed_only_for_standard_error, gwas_catalog_records, in_scope,
-                              require_validation, restorable, restore_validated, result_path, result_sha256, validate_file,
-                              validation_report)
+from stage_b.validate import (REPORT_NAME, RULES, RULES_SHA256, VALIDATION_DETAIL, VALIDATION_DIR, apply_validation,
+                              check_classification, ci_p_rules, classification,
+                              failed_only_for_standard_error, frozen_ci_p_verdicts, gwas_catalog_records, in_scope, require_validation, restorable,
+                              restore_validated, result_path, result_sha256, validate_file, validation_report)
 
 
 def put(root, key: str, data: bytes, name: str | None = None, layout: str = "gwas_ssf", rsid_rule: str = "column",
@@ -431,8 +433,11 @@ def test_an_or_ci_file_whose_p_values_disagree_with_its_intervals_fails_the_ci_v
     record = put(tmp_path, "GCST1", or_ci_file(p_scale=3.0))           # every p 0.48 log10 above its interval's
     got = validate_file(tmp_path, record)
     assert (got["uncertainty_mode"], got["rows_kept"], got["passed"]) == ("or_ci_derived_se", 60, False)
-    assert got["ci_p_check"]["rows_agree"] < 0.95 * got["ci_p_check"]["rows_checked"]
-    assert got["reasons"] == [f"CI-versus-p check: {got['ci_p_check']['rows_agree']} of {got['ci_p_check']['rows_checked']} "
+    check = got["ci_p_check"]
+    assert check["rule_version"] == CI_P_RULE_ROUNDING_AWARE and check["rows_checked"] > 0
+    assert check["rows_agree"] < 0.95 * check["rows_checked"]
+    assert check["frozen_rule"]["rows_agree"] < 0.95 * check["frozen_rule"]["rows_checked"]   # fails the frozen rule too
+    assert got["reasons"] == [f"rounding-aware CI-versus-p check: {check['rows_agree']} of {check['rows_checked']} "
                               "checkable rows agree, fewer than 95%"]
     assert apply_validation(tmp_path, record, got).status == "unreadable"
 
@@ -476,3 +481,144 @@ def test_the_classification_check_compares_the_files_by_mode_failed_and_error(tm
         "native_se": {"expected_not_found": ["GCST9"], "found_not_expected": []}}
     with pytest.raises(InputContractError, match="names classes"):
         check_classification(report, {"unreadable": ["GCST4"]})
+
+
+# ---- the CI-versus-p rule version: frozen in force, rounding-aware selectable ----------------------------------
+
+# The rules hash the frozen CI-versus-p rule was validated under (a historical constant), and the hash of the
+# amended rules now in force.
+FROZEN_RULES_SHA256 = "7025ad583009ee4bb4dd827771a897a5416d397b30bd2cd3d67409080fd19846"
+AMENDED_RULES_SHA256 = "3a1bcdc26baba5c30d350f7b14ad2fac8a07bb40343c001845efc3aecda4fda7"
+
+
+def rules_sha256(rules: dict) -> str:
+    return hashlib.sha256(json.dumps(rules, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def test_the_rounding_aware_ci_versus_p_rule_is_in_force_and_its_rules_entry_and_hash_are_the_ones_validated_under():
+    assert CI_P_RULE == CI_P_RULE_ROUNDING_AWARE
+    aware = ci_p_rules(CI_P_RULE_ROUNDING_AWARE)
+    assert RULES["ci_p_check"] == aware
+    assert (aware["rule_version"], aware["log10_tolerance"], aware["min_agreement_percent"]) == (CI_P_RULE_ROUNDING_AWARE, 0.1, 95)
+    assert "rounding_uninformative" in aware and aware["no_informative_row"] == "the file fails"
+    assert RULES_SHA256 == rules_sha256(RULES) == AMENDED_RULES_SHA256
+    frozen = ci_p_rules(CI_P_RULE_FROZEN)
+    assert frozen == aware["frozen_rule_reported_beside"] == {
+        "rows": "read, with 0 < p < 1", "log10_tolerance": 0.1, "or_within_the_printed_rounding_of_p": True,
+        "min_agreement_percent": 95}
+    assert rules_sha256({**RULES, "ci_p_check": frozen}) == FROZEN_RULES_SHA256 != AMENDED_RULES_SHA256
+
+
+def select_rule(monkeypatch, rule: str) -> dict:
+    """The validation with CI_P_RULE set to `rule`, as the constant selects it."""
+    rules = {**RULES, "ci_p_check": ci_p_rules(rule)}
+    monkeypatch.setattr(validate_module, "CI_P_RULE", rule)
+    monkeypatch.setattr(validate_module, "RULES", rules)
+    monkeypatch.setattr(validate_module, "RULES_SHA256", rules_sha256(rules))
+    return rules
+
+
+def select_rounding_aware(monkeypatch) -> dict:
+    """The validation under the rounding-aware rule (the rule in force; selected explicitly all the same)."""
+    return select_rule(monkeypatch, CI_P_RULE_ROUNDING_AWARE)
+
+
+@pytest.fixture
+def rounding_aware(monkeypatch):
+    return select_rounding_aware(monkeypatch)
+
+
+def or_ci_rows_file(rows: list[list[str]]) -> bytes:
+    for i, row in enumerate(rows):
+        row[1], row[8] = str(1000 + i), f"rs{i}"
+    return tsv(SSF_OR_CI_HEADER, rows)
+
+
+def test_under_the_rounding_aware_rule_a_small_effect_file_passes_and_the_frozen_counts_are_reported_beside(
+        tmp_path, rounding_aware):
+    record = put(tmp_path, "GCST1", or_ci_rows_file(small_effect_rows(300)))
+    got = validate_file(tmp_path, record)
+    check = got["ci_p_check"]
+    assert (got["passed"], got["reasons"], got["rules"]) == (True, [], rounding_aware)
+    assert (check["rule"], check["rule_version"], check["passed"]) == ("or_ci_vs_p_rounding_aware", CI_P_RULE_ROUNDING_AWARE, True)
+    assert check["rows_agree"] == check["rows_checked"] and check["rows_checked"] + check["rows_rounding_uninformative"] == 300
+    assert check["frozen_rule"]["rows_checked"] == 300 and check["frozen_rule"]["passed"] is False
+    assert check["diagnostic"]["frozen_disagree_rounding_aware_agree"] > 0 and check["diagnostic"]["disagree_under_both"] == 0
+    assert apply_validation(tmp_path, record, got).uncertainty_mode == "or_ci_derived_se"
+
+
+def test_under_the_rounding_aware_rule_a_99_percent_interval_read_as_95_fails_and_the_file_is_unreadable(
+        tmp_path, rounding_aware):
+    rows = [printed_row(0.03 * (5 + i % 4), 0.03, decimals=4, z=Z99) for i in range(40)]
+    record = put(tmp_path, "GCST1", or_ci_rows_file(rows))
+    got = validate_file(tmp_path, record)
+    assert got["passed"] is False and got["ci_p_check"]["rows_agree"] == 0 and got["ci_p_check"]["frozen_rule"]["rows_agree"] == 0
+    assert got["reasons"] == ["rounding-aware CI-versus-p check: 0 of 40 checkable rows agree, fewer than 95%"]
+    assert got["ci_p_check"]["diagnostic"]["disagree_under_both"] == 40
+    assert apply_validation(tmp_path, record, got).status == "unreadable"
+
+
+def test_under_the_rounding_aware_rule_uninformative_rows_do_not_rescue_a_file_and_none_informative_fails_closed(
+        tmp_path, rounding_aware):
+    mismatches = [printed_row(0.03 * (5 + i % 4), 0.03, decimals=4, z=Z99) for i in range(3)]
+    got = validate_file(tmp_path, put(tmp_path, "GCST1", or_ci_rows_file([uninformative_row() for _ in range(200)] + mismatches)))
+    assert (got["passed"], got["ci_p_check"]["rows_checked"], got["ci_p_check"]["rows_rounding_uninformative"]) == (False, 3, 200)
+    assert got["reasons"] == ["rounding-aware CI-versus-p check: 0 of 3 checkable rows agree, fewer than 95%"]
+    got = validate_file(tmp_path, put(tmp_path, "GCST2", or_ci_rows_file([uninformative_row() for _ in range(20)])))
+    assert got["passed"] is False and got["ci_p_check"]["rows_checked"] == 0
+    assert got["reasons"] == ["rounding-aware CI-versus-p check: no informative row (20 rounding-uninformative, "
+                              "20 not checkable in all)"]
+
+
+def rounding_aware_data() -> bytes:
+    rows = small_effect_rows(24) + [uninformative_row() for _ in range(6)] + [
+        printed_row(0.15, 0.03, decimals=4, z=Z99) for _ in range(3)] + [or_ci_row(p="#NA")]
+    return or_ci_rows_file(rows)
+
+
+def test_an_interrupted_rounding_aware_validation_resumes_with_every_counter_and_the_rule_version(tmp_path, rounding_aware):
+    pairs = interrupted_then_resumed(tmp_path, rounding_aware_data())
+    assert len(pairs) >= 10
+    for resumed, whole in pairs:
+        assert resumed == whole
+    check = pairs[0][1]["ci_p_check"]
+    assert (check["rule_version"], check["rows_rounding_uninformative"]) == (CI_P_RULE_ROUNDING_AWARE, 6)
+    assert check["diagnostic"]["disagree_under_both"] == 3 and sum(check["row_crosstab"].values()) == 34
+
+
+def test_work_begun_under_the_frozen_rule_is_never_resumed_under_the_rounding_aware_rule(tmp_path, monkeypatch):
+    data = rounding_aware_data()
+    record, count = put(tmp_path, "GCST1", data), []
+    assert rules_sha256(select_rule(monkeypatch, CI_P_RULE_FROZEN)) == FROZEN_RULES_SHA256
+
+    def dies_at_the_third_commit():
+        count.append(1)
+        if len(count) == 3:
+            raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        validate_file(tmp_path, record, dies_at_the_third_commit, checkpoint_rows=4)
+    frozen_work = list((tmp_path / "validation" / "work").iterdir())
+    assert len(frozen_work) == 1 and frozen_work[0].name.endswith(FROZEN_RULES_SHA256[:12])
+    frozen_state = {p.name: p.read_bytes() for p in frozen_work[0].iterdir()}
+    monkeypatch.undo()                                                   # back to the rules in force
+    assert (validate_module.CI_P_RULE, validate_module.RULES_SHA256) == (CI_P_RULE_ROUNDING_AWARE, AMENDED_RULES_SHA256)
+    resumed = validate_file(tmp_path, record, checkpoint_rows=4)
+    fresh = validate_file(tmp_path / "fresh", put(tmp_path / "fresh", "GCST1", data), checkpoint_rows=4)
+    assert {k: v for k, v in resumed.items() if k != "utc"} == {k: v for k, v in fresh.items() if k != "utc"}
+    assert resumed["ci_p_check"]["rule_version"] == CI_P_RULE_ROUNDING_AWARE
+    assert resumed["rules"] == RULES and resumed["ci_p_check"]["frozen_rule"]["rows_checked"] > 0
+    assert {p.name: p.read_bytes() for p in frozen_work[0].iterdir()} == frozen_state   # left as it was, under its own hash
+
+
+def test_the_frozen_rule_verdict_of_each_checked_file_is_read_from_a_report_under_either_rule(tmp_path, monkeypatch):
+    frozen_fail = put(tmp_path, "GCST1", or_ci_rows_file(small_effect_rows(300)))
+    native = put(tmp_path, "GCST2", tsv(SSF_BETA_HEADER, mixed_rows()))
+    frozen_pass = put(tmp_path, "GCST3", or_ci_rows_file([exact_or_ci_row(0.1 + 0.001 * i, 0.05) for i in range(30)]))
+    select_rule(monkeypatch, CI_P_RULE_FROZEN)
+    under_frozen = {r.key: validate_file(tmp_path, r) for r in (frozen_fail, native, frozen_pass)}
+    assert frozen_ci_p_verdicts(validation_report([], under_frozen)) == {"GCST1": False, "GCST3": True}
+    select_rounding_aware(monkeypatch)
+    under_aware = {r.key: validate_file(tmp_path, r) for r in (frozen_fail, native, frozen_pass)}
+    assert under_aware["GCST1"]["passed"] is True and under_aware["GCST1"]["ci_p_check"]["frozen_rule"]["passed"] is False
+    assert frozen_ci_p_verdicts({"files": {**under_aware, "GCST4": "RuntimeError: x"}}) == {"GCST1": False, "GCST3": True}

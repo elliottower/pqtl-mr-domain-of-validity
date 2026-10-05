@@ -138,6 +138,11 @@ def make_tables(seed: int = 1, n_genes: int = 90, n_indications: int = 40, hyps_
     for s in ("ukbppp", "decode"):
         ev[f"evidence_state_{s}"] = np.where(src == s, state, np.where((src != "interval") & has_other, other, None))
     ev["n_shared"] = ev["n_shared"].astype(object).where(coloc, None)
+    # The frozen CI-versus-p verdict of the outcome file (the deviation sensitivity set S_frozen_ci_rule),
+    # from its own generator, so every other draw is that of the generator without it.
+    flag_rng = np.random.default_rng([seed, 16])
+    checked = flag_rng.random(n) < 0.3
+    ev["outcome_file_frozen_ci_p_pass"] = np.where(checked, flag_rng.random(n) < 0.6, None)
 
     S = ev["S"].to_numpy()
     aligned = (h["mechanism_class"] == "aligned").to_numpy()

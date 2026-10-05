@@ -28,7 +28,7 @@ from stage_d.constants import (FOREST_MAIN_SETS, FREEZE_COMMIT, N_BOOTSTRAP, N_N
                                PLAN_SHA256, PROB_THRESHOLD, SEED, SamplerSettings)
 from stage_d.cox import CoxFailure, cox_two_way
 from stage_d.decisions import ModelEvidence, against_h1, decide_h1, decide_h4, h1_wording
-from stage_d.descriptive import (stratum_2x2_table, table1_funnel, table3_by_class, table4_other_reasons,
+from stage_d.descriptive import (deviation_frozen_ci_rule, stratum_2x2_table, table1_funnel, table3_by_class, table4_other_reasons,
                                  table5_evidence, table6_missingness, table7_outcomes, table11_per_indication,
                                  table12_platform, table13_neuro, table15_karim)
 from stage_d.designs import (COVARIATES, Design, DesignError, build_design, component_labels, load_design, save_design,
@@ -41,7 +41,7 @@ from stage_d.gates import StratumGate, h1_gate, h3_gate, h4_gate
 from stage_d.guard import verify_inputs
 from stage_d.join import derive, join_stages, load_stage_tables
 from stage_d.posterior import PRIMARY_PRIOR, PRIORS
-from stage_d.sets import SET_ORDER, form_sets
+from stage_d.sets import DEVIATION_SETS, FROZEN_CI_RULE_SET, SET_ORDER, form_sets
 
 ALL_PRIORS = tuple(PRIORS)
 NAMED_MODELS = (  # design id prefix, kind, y column, role
@@ -157,7 +157,7 @@ def prepare(stages_root: Path, expected: dict[str, str], work_dir: Path, fp: Run
             add(design_id, kind, s1, y_col, "S1", role, ALL_PRIORS)
 
     set_gates = {}
-    for set_id in SET_ORDER[1:]:
+    for set_id in SET_ORDER[1:] + DEVIATION_SETS:
         aset = sets[set_id]
         if not aset.info.formed:
             continue
@@ -171,7 +171,7 @@ def prepare(stages_root: Path, expected: dict[str, str], work_dir: Path, fp: Run
 
     plan = Plan(created_utc=datetime.now(timezone.utc).isoformat(), fingerprint=fp.digest,
                 seals={k: v.model_dump() for k, v in seals.items()},
-                derived=info.model_dump(), sets=[sets[s].info.model_dump() for s in SET_ORDER],
+                derived=info.model_dump(), sets=[sets[s].info.model_dump() for s in SET_ORDER + DEVIATION_SETS],
                 gates={**{k: v.model_dump() for k, v in gates.items()}, "within": {"estimable": within_ok, **within_counts}},
                 set_gates=set_gates, designs=designs, skipped=skipped, fits=fits)
     (work_dir / "plan.json").write_text(plan.model_dump_json(indent=2))
@@ -267,9 +267,10 @@ def _focal_row(final: dict | None) -> dict:
             "focal": s["focal"], "stratum_odds_ratios": s["stratum_odds_ratios"]}
 
 
-def set_table(plan: Plan, finals: dict, freq: dict) -> list[dict]:
+def set_table(plan: Plan, finals: dict, freq: dict, set_ids: tuple[str, ...] = SET_ORDER) -> list[dict]:
+    """One row per model of each set of `set_ids` in the plan: the registered sets (table 10) by default."""
     rows = []
-    for info in plan.sets:
+    for info in (i for i in plan.sets if i["set_id"] in set_ids):
         for model in info["models"]:
             design_id = f"{model}__{info['set_id']}"
             fit_id = f"{design_id}__{PRIMARY_PRIOR}"
@@ -426,6 +427,10 @@ def assemble(stages_root: Path, expected: dict[str, str], work_dir: Path, out_di
                                                                    keep_default_na=False), s1)
     set_rows = set_table(plan, finals, freq)
     tables["table10_analysis_sets"] = set_rows
+    sensitivity = sets[FROZEN_CI_RULE_SET]
+    tables["deviation_frozen_ci_rule"] = {
+        "set": set_table(plan, finals, freq, DEVIATION_SETS),
+        **deviation_frozen_ci_rule(s1, sensitivity.frame if sensitivity.info.formed else None, n_boot=n_boot)}
     tables.update(table9(finals, freq))
 
     results = {

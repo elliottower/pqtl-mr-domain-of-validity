@@ -30,6 +30,7 @@ after it (the image bakes PREREG.md and the sealed stage A files).
     #    `modal volume get pqtl-v8-stage-b /stage_b/collect inputs/stage_b/collect` (the gitignored
     #    inputs directory: the unit directories hold regional extracts, which are never committed)
     $B assemble --run-token <token> --units-dir inputs/stage_b/units --collect-dir inputs/stage_b/collect \
+        --validation-report inputs/stage_b/validation/outcome_validation_<utc>.json \
         --hypotheses stages/A/output/hypotheses.csv --st29 <Eldjarn 2023 MOESM3.xlsx>
     # 5. after `prereg log "SEAL stage=B manifest_sha256=<sha256>"`, a commit and a new deploy (the
     #    image bakes the log): delete the collected whole files; the records and extracts stay
@@ -56,7 +57,10 @@ the sealed ones. `assemble` accepts a unit directory only under the fingerprint 
 (stage_b/checkpoint.py), recomputed from the unit record, the pins, the code and the plan held here,
 the tool versions the unit recorded and the collect digest recomputed from the collect records
 given (so a unit computed from other bytes than the recorded ones is refused), only when every unit
-ran under the same tool versions, and only when every planned file has a collect record; it writes
+ran under the same tool versions, and only when every planned file has a collect record; the
+validation report given must be the one `spawn` required (stage_b.validate.require_validation against
+the collect records), and from it each hypothesis gets `outcome_file_frozen_ci_p_pass`
+(stage_b.validate.frozen_ci_p_verdicts); the report is listed in INPUTS.tsv. It writes
 the commit to run_info.json and INPUTS.tsv and the collect records to collected_files.tsv. It
 writes B/output/ only: evidence.csv, regional_manifest.tsv, collected_files.tsv, run_info.json,
 INPUTS.tsv and MANIFEST.tsv, beside the unit_plan.json `plan` left there. No regional extract and
@@ -86,7 +90,7 @@ from stage_b.launch import (authorize, check_plan_inputs, planned_tasks, private
 from stage_b.schemas import CollectRecord, InputContractError, InstrumentUnit
 from stage_b.status import error_of, status_report
 from stage_b.units import load_hypotheses
-from stage_b.validate import check_classification
+from stage_b.validate import check_classification, frozen_ci_p_verdicts, require_validation
 
 HERE = Path(__file__).resolve().parent
 EXP = HERE.parents[1]
@@ -316,10 +320,14 @@ def cmd_assemble(a: argparse.Namespace) -> None:
         results[u.unit_key], metas[u.unit_key] = collect_unit_dir(
             u, units_dir / u.unit_key, unit_fingerprint(u, pins, code, PLAN_SHA256, tools[u.unit_key], digest), digest)
     unit_ids = {k: tuple(v) for k, v in plan["unit_ids"].items()}
+    report_path = private_copy(a.validation_report, REPO, EXP / "inputs")
+    report = json.loads(report_path.read_text())
+    require_validation(report, [r for r in collected if r.source == "gwas_catalog"])
     rows = build_evidence(hyps, plan["hypothesis_unit"], unit_ids, results, load_st29(a.st29),
-                          plan["hypothesis_source_units"])
+                          plan["hypothesis_source_units"], frozen_ci_p_verdicts(report))
     scripts = sorted((HERE / "stage_b").glob("*.py")) + [HERE / "stage_b" / "coloc_run.R", Path(__file__).resolve()]
-    inputs = {"hypotheses": a.hypotheses, "st29_workbook": a.st29, "unit_plan": PLAN_JSON, "units": UNITS}
+    inputs = {"hypotheses": a.hypotheses, "st29_workbook": a.st29, "unit_plan": PLAN_JSON, "units": UNITS,
+              "outcome_validation_report": report_path}
     manifest = write_outputs(HERE / "output", rows, regional_rows(metas), scripts, inputs, [("", REPO)],
                              script_root=HERE, run_token=a.run_token, repo_commit=commit, tools=common_tools(tools),
                              collected=collected)
@@ -350,7 +358,7 @@ def main() -> None:
     for name in ("collect", "restore-validated"):
         sub.choices[name].add_argument("--accessions-file", type=Path,
                                        help="a file of accessions, one per line (first tab-separated field), as --accessions")
-    for name in ("hypotheses", "units-dir", "collect-dir", "st29"):
+    for name in ("hypotheses", "units-dir", "collect-dir", "validation-report", "st29"):
         sub.choices["assemble"].add_argument(f"--{name}", type=Path, required=True)
     check = sub.add_parser("check-validation")
     check.add_argument("--expected", type=Path, required=True, help="JSON: class -> accessions (stage_b.validate.CLASSES)")

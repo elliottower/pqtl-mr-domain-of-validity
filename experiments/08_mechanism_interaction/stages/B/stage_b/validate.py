@@ -28,7 +28,9 @@ Pass/fail rules, fixed before any file is read:
   on others fails closed, as does one with no route;
 - at least MIN_KEPT_FRACTION (50%) of the data rows must be read;
 - an author format with an integrity rule must pass it (for GCST008226: outcome_files.OrCiCheck);
-- an `or_ci_derived_se` file must pass the CI-versus-p check (outcome_files.CiPCheck).
+- an `or_ci_derived_se` file must pass the CI-versus-p check (outcome_files.CiPCheck) under the rule
+  version outcome_files.CI_P_RULE selects (frozen or rounding-aware; under the rounding-aware rule
+  the frozen rule's counts are reported beside its own).
 A file that fails is made `unreadable` (`apply_validation`): its `collected` record is moved, not
 deleted, to <root>/superseded/collect/gwas_catalog/, and a record with status `unreadable` takes its
 place, with the reasons in `detail` after VALIDATION_DETAIL and the file's name, path, size and
@@ -77,8 +79,8 @@ import pandas as pd
 
 from stage_b.author_formats import AUTHOR_FORMATS, header_sha256
 from stage_b.collect import SUPERSEDED_DIR, collected_file, put_record, read_record, record_path, supersede_record
-from stage_b.outcome_files import (CI_LEVEL, CI_P_LOG10_TOLERANCE, CI_P_MIN_AGREEMENT_PERCENT, CI_Z, REJECT_REASONS,
-                                   AuthorReader, CiPCheck, OrCiCheck, SsfReader, attach_map_rsids,
+from stage_b.outcome_files import (CI_LEVEL, CI_P_LOG10_TOLERANCE, CI_P_MIN_AGREEMENT_PERCENT, CI_P_RULE, CI_P_RULE_FROZEN,
+                                   CI_Z, REJECT_REASONS, AuthorReader, CiPCheck, OrCiCheck, SsfReader, attach_map_rsids,
                                    choose_uncertainty_mode, map_rsids, ssf_columns)
 from stage_b.parsers import HarmonisedReader, RowReader, split_lines
 from stage_b.schemas import (UNCERTAINTY_MODES, CollectError, CollectRecord, InputContractError, SourceUnreadable,
@@ -99,8 +101,32 @@ RULES = {"min_kept_fraction_percent": MIN_KEPT_FRACTION_PERCENT,
                               "standard_error present on some rows and missing on others fails"),
          "or_ci_derived_se": {"ci_level": CI_LEVEL, "z": CI_Z, "se": "(ln U - ln L) / (2 z)",
                               "or_inside_ci": "within half a unit in the last printed decimal of OR plus of the limit"},
-         "ci_p_check": {"rows": "read, with 0 < p < 1", "log10_tolerance": CI_P_LOG10_TOLERANCE,
-                        "or_within_the_printed_rounding_of_p": True, "min_agreement_percent": CI_P_MIN_AGREEMENT_PERCENT}}
+         "ci_p_check": None}
+
+
+def ci_p_rules(rule: str) -> dict:
+    """The RULES entry of the CI-versus-p check under rule version `rule` (outcome_files.CI_P_RULES);
+    the frozen entry is the one the frozen rule was validated under, unchanged."""
+    if rule == CI_P_RULE_FROZEN:
+        return {"rows": "read, with 0 < p < 1", "log10_tolerance": CI_P_LOG10_TOLERANCE,
+                "or_within_the_printed_rounding_of_p": True, "min_agreement_percent": CI_P_MIN_AGREEMENT_PERCENT}
+    return {"rule_version": rule,
+            "rows": ("read, with OR, L and U finite and positive, L < U and 0 < p < 1 as printed; not checkable where the "
+                     "rounding interval of L reaches 0, counted apart"),
+            "intervals": ("each printed value +/- half a unit in its last printed digit (mantissa digit in scientific "
+                          "notation); the implied two-sided p over the exact extremes of |ln OR| 2 z / (ln U - ln L) on "
+                          "the box of the three intervals with ln L <= ln OR <= ln U (outcome_files.wald_ratio_extremes); "
+                          "no feasible point disagrees; published p over its own interval"),
+            "rounding_uninformative": ("a zero interval width reachable at a feasible OR other than 1, and a feasible OR "
+                                       "range holding 1: not checkable, counted apart, outside the agreement denominator"),
+            "agrees": "the published-p interval meets the implied-p interval, each widened by log10_tolerance in log10",
+            "log10_tolerance": CI_P_LOG10_TOLERANCE, "min_agreement_percent": CI_P_MIN_AGREEMENT_PERCENT,
+            "no_informative_row": "the file fails",
+            "row_crosstab": "every row read by its frozen and rounding-aware verdicts, counts only",
+            "frozen_rule_reported_beside": ci_p_rules(CI_P_RULE_FROZEN)}
+
+
+RULES["ci_p_check"] = ci_p_rules(CI_P_RULE)
 RULES_SHA256 = hashlib.sha256(json.dumps(RULES, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -164,9 +190,8 @@ CHECKS: dict[str, Callable[[CollectRecord, list[str], RowReader], OrCiCheck | Ci
         OrCiCheck(AUTHOR_FORMATS[record.key], header)
         if record.layout == "author" and AUTHOR_FORMATS[record.key].integrity == "or_ci_se" else None),
     "ci_p_check": lambda record, header, reader: (
-        CiPCheck(reader) if isinstance(reader, SsfReader) and reader.mode == "or_ci_derived_se" else None),
+        CiPCheck(reader, CI_P_RULE) if isinstance(reader, SsfReader) and reader.mode == "or_ci_derived_se" else None),
 }
-CHECK_COUNTS = ("checked", "agree", "not_checkable")
 
 
 @contextmanager
@@ -220,7 +245,7 @@ def _read_pass(reader: RowReader, checks: dict, rows: Iterator[list[str]], work:
         def checkpoint(n: int) -> None:
             out.flush()
             _write_json(state_path, {"rows": n, "kept": kept, "rejected": dict(rejected), "shard_bytes": out.tell(),
-                                     "checks": {name: {k: getattr(c, k) for k in CHECK_COUNTS} for name, c in checks.items()}})
+                                     "checks": {name: {k: getattr(c, k) for k in c.count_names} for name, c in checks.items()}})
             commit()
 
         integrity, ci_p = checks.get("integrity"), checks.get("ci_p_check")
@@ -348,8 +373,13 @@ def validate_file(root: Path, record: CollectRecord, commit: Callable[[], None] 
             reasons.append(f"OR/CI/SE integrity: {integrity['rows_agree']} of {integrity['rows_checked']} checked rows "
                            f"agree, fewer than {integrity['min_agreement_percent']}%")
         if ci_p is not None and not ci_p["passed"]:
-            reasons.append(f"CI-versus-p check: {ci_p['rows_agree']} of {ci_p['rows_checked']} checkable rows agree, "
-                           f"fewer than {ci_p['min_agreement_percent']}%")
+            label = "CI-versus-p check" if ci_p["rule"] == "or_ci_vs_p" else "rounding-aware CI-versus-p check"
+            if ci_p["rows_checked"] == 0 and ci_p["rule"] != "or_ci_vs_p":
+                reasons.append(f"{label}: no informative row ({ci_p['rows_rounding_uninformative']} rounding-uninformative, "
+                               f"{ci_p['rows_not_checkable']} not checkable in all)")
+            else:
+                reasons.append(f"{label}: {ci_p['rows_agree']} of {ci_p['rows_checked']} checkable rows agree, "
+                               f"fewer than {ci_p['min_agreement_percent']}%")
     result.update({"passed": not reasons, "reasons": reasons})
     _write_json(out, result)
     commit()
@@ -477,6 +507,20 @@ def validation_report(records: Iterable[CollectRecord], results: dict[str, dict 
             "not_validated_remote_indexed": sorted(r.key for r in records if r.status == "remote_indexed"),
             "not_validated_remote_indexed_reason": "queried by region through its tabix index, never held whole",
             "files": files}
+
+
+def frozen_ci_p_verdicts(report: dict) -> dict[str, bool]:
+    """GWAS Catalog accession -> whether its file passed the frozen CI-versus-p rule, for every file of
+    `report` the check ran on (an or_ci_derived_se file): under the frozen rule its own verdict, under
+    the rounding-aware rule the frozen verdict reported beside it, whether the file passed or failed
+    the rule in force. Stage B writes it per hypothesis (evidence.csv `outcome_file_frozen_ci_p_pass`)
+    so that stage D can form the frozen-rule sensitivity set without the validation report."""
+    out = {}
+    for key, got in report["files"].items():
+        check = got.get("ci_p_check") if isinstance(got, dict) else None
+        if check is not None:
+            out[key] = bool((check["frozen_rule"] if check["rule"] == "or_ci_vs_p_rounding_aware" else check)["passed"])
+    return out
 
 
 CLASSES = (*UNCERTAINTY_MODES, "failed", "error")

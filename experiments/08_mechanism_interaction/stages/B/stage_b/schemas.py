@@ -308,6 +308,9 @@ class EvidenceRow(_Row):
     s17_sentinel_p: float | str
     evidence_state_ukbppp: EvidenceState | Literal[""]
     evidence_state_decode: EvidenceState | Literal[""]
+    # Whether the hypothesis's outcome file passed the frozen CI-versus-p rule (validate.frozen_ci_p_verdicts),
+    # for the frozen-rule sensitivity set of stage D; "" where that check did not run on the outcome file.
+    outcome_file_frozen_ci_p_pass: bool | Literal[""] = ""
 
 
 EVIDENCE_COLUMNS = list(EvidenceRow.model_fields)

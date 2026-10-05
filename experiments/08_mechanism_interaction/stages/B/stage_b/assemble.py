@@ -149,12 +149,16 @@ def source_state(h: HypothesisInput, k: str, results: Mapping[str, dict]) -> Evi
 
 def build_evidence(hyps: list[HypothesisInput], hyp_unit: Mapping[str, str], unit_ids: Mapping[str, tuple[str, str, str]],
                    results: Mapping[str, dict], st29: Mapping[tuple[str, str], dict],
-                   source_units: Mapping[str, Mapping[str, str]] | None = None) -> list[EvidenceRow]:
+                   source_units: Mapping[str, Mapping[str, str]] | None = None,
+                   frozen_ci_p: Mapping[str, bool] | None = None) -> list[EvidenceRow]:
     """One row per hypothesis in hypotheses.csv, in its order. A hypothesis without a unit (no
     sentinel or no resolvable regional file) is regional_file_unavailable. `unit_ids` gives each
     unit key's source, assay and gene (unit_plan.json); `source_units` is the fourth value of
     units.build_units (hypothesis -> {ukbppp|decode: unit_key}). A hypothesis mapped to a unit of
-    another gene raises: the unit's VEP and splicing steps were run for that other gene."""
+    another gene raises: the unit's VEP and splicing steps were run for that other gene.
+    `frozen_ci_p` (validate.frozen_ci_p_verdicts of the validation report in force) gives
+    `outcome_file_frozen_ci_p_pass` of a hypothesis whose GWAS Catalog outcome file the CI-versus-p
+    check ran on; every other row has it empty."""
     rows = []
     for h in hyps:
         k = hyp_unit.get(h.hypothesis_id)
@@ -172,6 +176,8 @@ def build_evidence(hyps: list[HypothesisInput], hyp_unit: Mapping[str, str], uni
             row = evidence_row(h, source, assay, results[k], st29)
         row = row.model_copy(update={f"evidence_state_{src}": source_state(h, per[src], results)
                                      for src in TABLE12_SOURCES if src in per})
+        if h.outcome_source == "gwas_catalog" and h.outcome_accession in (frozen_ci_p or {}):
+            row = row.model_copy(update={"outcome_file_frozen_ci_p_pass": frozen_ci_p[h.outcome_accession]})
         rows.append(EvidenceRow.model_validate(row.model_dump()))
     return rows
 

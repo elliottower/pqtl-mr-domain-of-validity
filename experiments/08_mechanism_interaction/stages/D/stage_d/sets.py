@@ -15,6 +15,16 @@ missing is excluded from that set and counted in its `flag_missing_excluded` not
 S16 replaces the evidence state by `s16_evidence_state` where stage B wrote one (a deCODE instrument
 colocalized with its SMP-normalized statistics). When no S1 hypothesis has one, because no
 SMP-normalized file was retrieved, S16 is not formed and is reported as not run.
+
+DEVIATION_SETS are not registered sets. S_frozen_ci_rule is the sensitivity analysis of the
+post-freeze amendment of stage B's CI-versus-p validation rule (PRESTAGE_NOTES_DRAFT.md, stage B):
+the held-out S1 rows, with every hypothesis whose outcome file fails the frozen rule
+(`outcome_file_frozen_ci_p_pass` false) made inconclusive (S = 0, E = 0), as it would have been had
+the frozen rule excluded the file. Every other row keeps its state. It is fitted with H1 and H4 at
+the primary prior and reported apart from table 10. A file that fails the amended rule and passes
+the frozen one is unavailable in both, because stage B ran no colocalization on it. Not formed when
+stage B wrote no such column, or when no S1 hypothesis has a failing outcome file (the set would
+equal S1).
 """
 import numpy as np
 import pandas as pd
@@ -205,9 +215,43 @@ def form_sets(df: pd.DataFrame) -> dict[str, AnalysisSet]:
                         "S1 with source-native inclusive instrument lists")
     sets["S22"] = _make(df, base & ~df["psych_only"].to_numpy(), "S22",
                         "H4 with psychiatric-only indications removed", models=("h4",))
+    sets[FROZEN_CI_RULE_SET] = frozen_ci_rule_set(df, base, present)
     return sets
+
+
+FROZEN_CI_RULE_SET = "S_frozen_ci_rule"
+FROZEN_CI_RULE_COLUMN = "outcome_file_frozen_ci_p_pass"
+FROZEN_CI_RULE_DEFINITION = ("deviation sensitivity: S1 with every hypothesis whose outcome file fails the frozen "
+                             "CI-versus-p rule made inconclusive")
+
+
+def frozen_ci_rule_set(df: pd.DataFrame, base: np.ndarray, present: set[str]) -> AnalysisSet:
+    """S_frozen_ci_rule (module docstring): the S1 rows, the state of each row whose outcome file fails
+    the frozen CI-versus-p rule set to inconclusive and its E to 0."""
+    models = ("h1", "h4")
+    if FROZEN_CI_RULE_COLUMN not in present:
+        return _not_formed(FROZEN_CI_RULE_SET, FROZEN_CI_RULE_DEFINITION, models,
+                           f"stage B output has no column {FROZEN_CI_RULE_COLUMN}")
+    flag = df[FROZEN_CI_RULE_COLUMN]
+    fails = base & (flag == False).fillna(False).to_numpy(dtype=bool)  # noqa: E712
+    if not fails.any():
+        return _not_formed(FROZEN_CI_RULE_SET, FROZEN_CI_RULE_DEFINITION, models,
+                           "no held-out S1 hypothesis has an outcome file that fails the frozen CI-versus-p rule; "
+                           "the set equals S1")
+    state = df["evidence_state"].astype(object).where(~fails, "inconclusive")
+    changed = fails & (df["evidence_state"] != "inconclusive").to_numpy(dtype=bool)
+    notes = {"outcome_file_fails_frozen_rule": int(fails.sum()),
+             "outcome_file_passes_frozen_rule": int((base & (flag == True).fillna(False).to_numpy(dtype=bool)).sum()),  # noqa: E712
+             "no_ci_p_check": int((base & flag.isna().to_numpy()).sum()),
+             "made_inconclusive": int(changed.sum()),
+             **{f"made_inconclusive_from_{s}": int((fails & (df["evidence_state"] == s).to_numpy(dtype=bool)).sum())
+                for s in ("supportive", "contradictory")}}
+    return _make(df.assign(E=df["E"].where(~fails, 0.0)), base, FROZEN_CI_RULE_SET, FROZEN_CI_RULE_DEFINITION, models,
+                 state=state, notes=notes)
 
 
 SET_ORDER = ("S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S13",
              "S14a", "S14b", "S14c", "S15a", "S15b", "S15c", "S15d", "S15e", "S15f", "S15g",
              "S16", "S17", "S18", "S19", "S20", "S21", "S22")
+# Sets that are not registered: the sensitivity analysis of a logged deviation (module docstring).
+DEVIATION_SETS = (FROZEN_CI_RULE_SET,)

@@ -77,6 +77,8 @@ def test_prepare_registers_every_model_and_set(sealed_stages, tmp_path):
     formed = {s["set_id"] for s in plan.sets if s["formed"]} - {"S1"}
     assert set_rows | {k.split("__")[1] for k in plan.skipped if "__S" in k} >= formed
     assert plan.designs["h4__S22"]["kind"] == "h4"
+    assert {"h1__S_frozen_ci_rule", "h4__S_frozen_ci_rule"} <= set(plan.designs)
+    assert [s["set_id"] for s in plan.sets][-1] == "S_frozen_ci_rule"
     assert "A" not in plan.designs["h2__S1"]["columns"]
     assert plan.designs["h1__S1"]["columns"][:3] == ["S", "A", "SxA"]
     assert plan.designs["h4__S1"]["columns"][:3] == ["S", "C", "SxC"]
@@ -134,6 +136,12 @@ def test_end_to_end_on_synthetic_data(tmp_path):
     assert meta["run_fingerprint"]["environment"] == {"synthetic": "test"}
     assert meta["run_fingerprint"]["components"]["environment_sha256"] == fp.environment_sha256
     assert len(res["descriptive"]["table10_analysis_sets"]) == 30
+    deviation = res["descriptive"]["deviation_frozen_ci_rule"]
+    assert [(r["set_id"], r["model"], r["status"]) for r in deviation["set"]] == [
+        ("S_frozen_ci_rule", "h1", "fitted"), ("S_frozen_ci_rule", "h4", "fitted")]
+    assert deviation["stratum_2x2"] and deviation["outcome_file_verdict_by_class"]
+    assert not any(r["set_id"] == "S_frozen_ci_rule" for r in res["descriptive"]["table10_analysis_sets"])
+    assert (out / "tables" / "deviation_frozen_ci_rule__set.csv").is_file()
     assert (meta["repo_commit"], meta["run_token"]) == (COMMIT, fp.run_token)
     assert meta["script_sha256"] == script_sha256(RUNNER.parent / "stage_d", RUNNER) == entries[0].script_sha256
     code = read_inputs(out / "INPUTS.tsv")[-1]

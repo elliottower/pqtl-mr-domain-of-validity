@@ -139,6 +139,9 @@ class EvidenceRow(_Row):
     # empty where the hypothesis names no assay in that source. Absent -> agreement not reported.
     evidence_state_ukbppp: EvidenceState | None = None
     evidence_state_decode: EvidenceState | None = None
+    # Frozen-rule sensitivity set (INTERFACES.md stage B): whether the outcome file passed the frozen
+    # CI-versus-p rule; empty where that check did not run on it. Absent -> set not formed.
+    outcome_file_frozen_ci_p_pass: bool | None = None
 
     @model_validator(mode="after")
     def _check(self):

@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 from helpers import small_frame
 
-from stage_d.descriptive import (cells_2x2, metrics_2x2, outcome_category, stratum_2x2_table, table11_per_indication,
+from stage_d.descriptive import (cells_2x2, deviation_frozen_ci_rule, metrics_2x2, outcome_category, stratum_2x2_table, table11_per_indication,
                                  table12_platform)
 
 
@@ -82,3 +82,19 @@ def test_cross_source_agreement_not_available_without_both_states():
     out = table12_platform(f)
     assert "not_available" in out["cross_source_state_agreement"]
     assert out["cross_source_state_crosstab"] == [] and out["cross_source_state_by_class"] == []
+
+
+def test_the_frozen_rule_deviation_table_counts_s1_by_outcome_file_verdict_and_the_failing_states():
+    s1 = pd.DataFrame({"cls": ["aligned", "aligned", "blocking", "blocking", "other"],
+                       "state": ["supportive", "inconclusive", "contradictory", "supportive", "supportive"],
+                       "outcome_file_frozen_ci_p_pass": pd.array([False, True, False, None, False], dtype="boolean")})
+    got = deviation_frozen_ci_rule(s1, None)
+    assert got["outcome_file_verdict_by_class"] == [{"class": "aligned", "fail": 1, "no_ci_p_check": 0, "pass": 1},
+                                                    {"class": "blocking", "fail": 1, "no_ci_p_check": 1, "pass": 0},
+                                                    {"class": "other", "fail": 1, "no_ci_p_check": 0, "pass": 0}]
+    assert got["failing_outcome_file_state_by_class"] == [{"class": "aligned", "contradictory": 0, "supportive": 1},
+                                                          {"class": "blocking", "contradictory": 1, "supportive": 0},
+                                                          {"class": "other", "contradictory": 0, "supportive": 1}]
+    assert got["stratum_2x2"] == []
+    none = s1.assign(outcome_file_frozen_ci_p_pass=pd.array([None] * 5, dtype="boolean"))
+    assert set(deviation_frozen_ci_rule(none, None)) == {"not_available"}
