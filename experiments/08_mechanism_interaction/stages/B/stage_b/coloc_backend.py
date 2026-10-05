@@ -8,6 +8,12 @@ non-zero exit or a per-task `ok: false` with R's message, never as a crashed int
 Rscript call per instrument batches every task of that unit, so start-up cost is paid once.
 
 Tests substitute any object with the same `run` method (the ColocBackend protocol).
+
+A dataset takes one of coloc's two input forms (coloc's "Coloc: data structures" vignette; coloc.abf
+5.2.3 reads beta and varbeta where both are given, else pvalues with MAF): `beta` and `varbeta`, or
+`pvalues` with `MAF` and, for a case-control trait, `s`. A dataset holds the fields of exactly one
+form, so the p-value form of an outcome file without a standard error (`outcome_dataset` in mode
+pvalue_coloc) sends no beta and no variance, and neither is formed from anything.
 """
 import json
 import os
@@ -18,9 +24,9 @@ from typing import Literal, Protocol
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
-from stage_b.schemas import ColocBackendError
+from stage_b.schemas import ColocBackendError, UncertaintyMode
 
 R_SCRIPT = Path(__file__).resolve().parent / "coloc_run.R"
 
@@ -29,13 +35,23 @@ class ColocDataset(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     snp: list[str]
-    beta: list[float]
-    varbeta: list[float]
     N: float
     type: Literal["quant", "cc"]
+    beta: list[float] | None = None
+    varbeta: list[float] | None = None
+    pvalues: list[float] | None = None
     MAF: list[float] | None = None
     sdY: float | None = None
     s: float | None = None
+
+    @model_validator(mode="after")
+    def one_input_form(self) -> "ColocDataset":
+        regression = self.beta is not None and self.varbeta is not None
+        if regression == (self.pvalues is not None) or (self.beta is None) != (self.varbeta is None):
+            raise ValueError("a coloc dataset holds beta and varbeta, or pvalues, and not both")
+        if self.pvalues is not None and (self.MAF is None or (self.type == "cc" and self.s is None)):
+            raise ValueError("the p-value form needs MAF, and s for a case-control trait")
+        return self
 
 
 class ColocTask(BaseModel):
@@ -93,14 +109,34 @@ def pqtl_dataset(h: pd.DataFrame) -> ColocDataset:
                         MAF=_maf(h["eaf_p"]), sdY=1.0)
 
 
-def outcome_dataset(h: pd.DataFrame, n_case: int, n_control: int) -> ColocDataset:
-    """Case-control outcome: s is the case fraction of the source record's counts."""
+def outcome_dataset(h: pd.DataFrame, n_case: int, n_control: int, mode: UncertaintyMode) -> ColocDataset:
+    """Case-control outcome: s is the case fraction of the source record's counts. In native_se and
+    or_ci_derived_se, beta and varbeta = se^2 (se read, or derived from the confidence limits), with
+    the outcome's MAF, else the pQTL's where the outcome lacks a valid frequency on any variant. In
+    pvalue_coloc (`pvalue_dataset`), the p-values and the outcome's own MAF only."""
+    if mode == "pvalue_coloc":
+        return pvalue_dataset(h, n_case, n_control)
     n = n_case + n_control
     if n_case <= 0 or n_control <= 0:
         raise ColocBackendError(f"outcome case/control counts invalid: {n_case}/{n_control}")
     return ColocDataset(snp=list(h["rsid"]), beta=list(h["beta_o"].astype(float)),
                         varbeta=list((h["se_o"].astype(float)) ** 2), N=float(n), type="cc",
                         MAF=_maf(h["eaf_o"]) or _maf(h["eaf_p"]), s=n_case / n)
+
+
+def pvalue_dataset(h: pd.DataFrame, n_case: int, n_control: int) -> ColocDataset:
+    """coloc.abf's p-value form for an outcome file without a standard error: p-values, MAF = min(EAF,
+    1 - EAF) of the outcome file itself, N = n_case + n_control, type "cc", s = n_case / N. No beta
+    and no varbeta is sent. There is no fallback to the pQTL's frequency: a p-value outside (0, 1] or
+    an outcome frequency outside (0, 1) on any variant raises (the reader rejects such rows first)."""
+    n = n_case + n_control
+    if n_case <= 0 or n_control <= 0:
+        raise ColocBackendError(f"outcome case/control counts invalid: {n_case}/{n_control}")
+    p, eaf = h["p_o"].to_numpy(float), h["eaf_o"].to_numpy(float)
+    if not (np.all((p > 0) & (p <= 1)) and np.all((eaf > 0) & (eaf < 1))):
+        raise ColocBackendError("the p-value form needs p in (0, 1] and the outcome's own frequency in (0, 1) on every variant")
+    return ColocDataset(snp=list(h["rsid"]), pvalues=[float(x) for x in p], MAF=[float(x) for x in np.minimum(eaf, 1 - eaf)],
+                        N=float(n), type="cc", s=n_case / n)
 
 
 def qtl_dataset(h: pd.DataFrame) -> ColocDataset:

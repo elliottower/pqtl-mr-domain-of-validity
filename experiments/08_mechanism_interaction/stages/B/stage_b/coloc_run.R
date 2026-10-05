@@ -12,8 +12,16 @@
 # `$`, of an argument name or of an attribute name as a warning, and the handler below turns that
 # warning into an error. A global calling handler runs below every tryCatch of this file, so the
 # per-task handler does not catch the error: Rscript exits non-zero and writes no response.
+#
+# Three partial matches are coloc's own and are let through, each by its exact message: coloc 5.2.3
+# reads the p-value form in process.dataset (R/claudia.R, lines 215-224) by renaming the columns of a
+# data frame to pvalues.df<i>, MAF.df<i> and N.df<i> and then reading df$pvalues, df$MAF and df$N, each
+# the one column whose name it begins. Every other partial match stays an error.
 options(warnPartialMatchDollar = TRUE, warnPartialMatchArgs = TRUE, warnPartialMatchAttr = TRUE)
+COLOC_PVALUE_FORM_MATCHES <- as.vector(outer(c("pvalues", "MAF", "N"), c("df1", "df2"),
+                                             function(f, i) sprintf("partial match of '%s' to '%s.%s'", f, f, i)))
 globalCallingHandlers(warning = function(w) {
+  if (conditionMessage(w) %in% COLOC_PVALUE_FORM_MATCHES) invokeRestart("muffleWarning")
   if (grepl("partial (argument )?match of", conditionMessage(w))) {
     stop(sprintf("partial matching is an error in coloc_run.R: %s", conditionMessage(w)), call. = FALSE)
   }
@@ -24,8 +32,12 @@ suppressPackageStartupMessages({
   library(coloc)
 })
 
+# A dataset is in one of coloc's two input forms: beta and varbeta, or pvalues with MAF (and s for a
+# case-control trait). A dataset holding pvalues is checked as the p-value form and must not also hold
+# beta or varbeta; coloc.susie takes the beta form only.
 TASK_FIELDS <- c("id", "method", "p1", "p2", "p12", "d1", "d2")
 DATASET_FIELDS <- c("snp", "beta", "varbeta", "N", "type")
+PVALUE_DATASET_FIELDS <- c("snp", "pvalues", "MAF", "N", "type")
 METHODS <- c("abf", "susie")
 
 require_fields <- function(x, fields, what) {
@@ -34,6 +46,18 @@ require_fields <- function(x, fields, what) {
   if (length(missing) > 0) {
     stop(sprintf("%s lacks the required field(s): %s", what, paste(missing, collapse = ", ")), call. = FALSE)
   }
+}
+
+validate_dataset <- function(d, what, method) {
+  if (!("pvalues" %in% names(d))) {
+    require_fields(d, DATASET_FIELDS, what)
+    return(invisible(NULL))
+  }
+  if (method == "susie") stop(sprintf("%s is in the p-value form, which coloc.susie does not take", what), call. = FALSE)
+  if (any(c("beta", "varbeta") %in% names(d))) {
+    stop(sprintf("%s holds pvalues and also beta or varbeta; a dataset is in one form", what), call. = FALSE)
+  }
+  require_fields(d, c(PVALUE_DATASET_FIELDS, if (identical(d[["type"]], "cc")) "s"), what)
 }
 
 validate_request <- function(req) {
@@ -48,7 +72,7 @@ validate_request <- function(req) {
       stop(sprintf("%s has a method other than abf or susie", what), call. = FALSE)
     }
     if (method == "susie") require_fields(tasks[[i]], "LD", what)
-    for (side in c("d1", "d2")) require_fields(tasks[[i]][[side]], DATASET_FIELDS, sprintf("%s, dataset %s", what, side))
+    for (side in c("d1", "d2")) validate_dataset(tasks[[i]][[side]], sprintf("%s, dataset %s", what, side), method)
   }
 }
 
@@ -58,8 +82,10 @@ req <- fromJSON(args[1], simplifyVector = TRUE, simplifyDataFrame = FALSE, simpl
 validate_request(req)
 
 as_dataset <- function(d) {
-  out <- list(snp = as.character(d[["snp"]]), beta = as.numeric(d[["beta"]]), varbeta = as.numeric(d[["varbeta"]]),
-              N = as.numeric(d[["N"]]), type = as.character(d[["type"]]))
+  out <- list(snp = as.character(d[["snp"]]), N = as.numeric(d[["N"]]), type = as.character(d[["type"]]))
+  if (!is.null(d[["beta"]])) out[["beta"]] <- as.numeric(d[["beta"]])
+  if (!is.null(d[["varbeta"]])) out[["varbeta"]] <- as.numeric(d[["varbeta"]])
+  if (!is.null(d[["pvalues"]])) out[["pvalues"]] <- as.numeric(d[["pvalues"]])
   if (!is.null(d[["MAF"]])) out[["MAF"]] <- as.numeric(d[["MAF"]])
   if (!is.null(d[["sdY"]])) out[["sdY"]] <- as.numeric(d[["sdY"]])
   if (!is.null(d[["s"]])) out[["s"]] <- as.numeric(d[["s"]])

@@ -45,6 +45,21 @@ standard_error (read as the standard error of that beta), effect_allele_frequenc
 absent), p_value, else 10^-neg_log_10_p_value (missing if neither), n (missing if absent). Values
 `#NA`, `NA` and empty are missing; every field is read with its surrounding whitespace removed.
 
+Uncertainty mode. A file gives the uncertainty of its effect in one of three ways
+(schemas.UncertaintyMode), chosen once for the whole file by the pre-analysis validation
+(`choose_uncertainty_mode`, stage_b/validate.py), never row by row, from the header and a census of
+the `standard_error` field over the rows with a position and a valid pair of alleles
+(`RowReader.se_state`): `native_se` where it is present on every such row; where it is missing on
+every such row, `or_ci_derived_se` for an odds-ratio file with `ci_lower` and `ci_upper`, and
+`pvalue_coloc` for a beta file with a p-value and an effect-allele frequency and no confidence
+limits; no mode, and the file unreadable, where it is present on some rows and missing on others
+(the file fails closed) or where no route fits. An author format is read in `native_se` only.
+`or_ci_derived_se`: SE of ln(OR) = (ln U - ln L) / (2 z), z the normal quantile of the interval's
+level (`ci_z_for_level`; 1.96 at 95%, the level read for these files: the GWAS-SSF metadata schema
+has no key stating another). `pvalue_coloc`: no standard error is read or formed; coloc.abf takes the
+p-value, the MAF of the file's own effect-allele frequency, N and the case fraction
+(coloc_backend.outcome_dataset), and beta gives the effect direction only.
+
 Rows (`SsfReader`, `AuthorReader`). A data row is read, or not read for the first of these reasons
 (REJECT_REASONS, in this order), and the pre-analysis validation counts each reason over the whole
 file (stage_b/validate.py):
@@ -55,12 +70,32 @@ file (stage_b/validate.py):
                                  not [ACGT]+, the standard's accepted values
     equal_alleles                effect allele equal to other allele (author formats: the pair equal)
     effect_allele_not_in_pair    author formats: the effect allele is neither allele of the pair
+    beta_nonfinite               a beta that is missing or infinite
     or_nonpositive_or_nonfinite  an odds ratio that is missing, infinite, zero or negative
-    se_nonpositive_or_nonfinite  a standard error that is missing, infinite, zero or negative
+    se_nonpositive_or_nonfinite  native_se: a standard error that is missing, infinite, zero or negative
+    ci_nonpositive_or_nonfinite  or_ci_derived_se: a confidence limit missing, infinite, zero or negative
+    ci_not_increasing            or_ci_derived_se: the lower limit not below the upper limit
+    or_outside_ci                or_ci_derived_se: the odds ratio outside [lower, upper] by more than
+                                 half a unit in the last printed decimal of the odds ratio plus half a
+                                 unit in the last printed decimal of the limit it crosses
     p_outside_0_1                an ordinary p-value outside [0, 1]
     neg_log10_p_negative         a negative -log10 p-value
-A missing p-value is kept as missing. -log10 p is read as p = 10^-x; a value too large for a double
-gives p = 0. In the analysis, rows outside the window are skipped before their values are read.
+    eaf_outside_0_1              an effect-allele frequency outside [0, 1]
+    p_missing_pvalue_coloc       pvalue_coloc: no p-value
+    p_zero_pvalue_coloc          pvalue_coloc: p = 0 (coloc's p-value form cannot take it without a floor)
+    eaf_not_inside_0_1_pvalue_coloc  pvalue_coloc: an effect-allele frequency missing, 0 or 1
+A missing p-value is kept as missing outside `pvalue_coloc`, and p = 0 is read in `native_se` and
+`or_ci_derived_se`. -log10 p is read as p = 10^-x; a value too large for a double gives p = 0. A
+missing effect-allele frequency is kept as missing outside `pvalue_coloc`. In the analysis, rows
+outside the window are skipped before their values are read.
+
+CI-versus-p check of an `or_ci_derived_se` file (`CiPCheck`), fixed before it is run: on every row
+read with 0 < p < 1, the two-sided p of the Wald statistic ln(OR) / SE, SE from the confidence
+limits, is compared with the published p; the row agrees when |log10 p_implied - log10 p_published|
+<= CI_P_LOG10_TOLERANCE (0.1), or when the gap is within the published p's printed rounding (half a
+unit in its last printed digit, on the log10 scale) where that is looser. The file passes when at
+least CI_P_MIN_AGREEMENT_PERCENT (95%) of the checkable rows agree; no checkable row fails it. The
+check returns counts and pass/fail only.
 
 rsID (`rsid_rule`). `column`: the `rsid` column, else `rs_id`; a value that is not rs<digits> gives
 no rsID (the variant is dropped at harmonization, as on every other path). `ukbppp_map`: a file
@@ -88,6 +123,7 @@ import math
 import re
 from collections.abc import Hashable, Iterable, Mapping
 from decimal import Decimal
+from statistics import NormalDist
 from typing import ClassVar
 
 import pandas as pd
@@ -96,7 +132,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from stage_b.author_formats import AuthorFormat, check_header
 from stage_b.parsers import MISSING, RowReader
-from stage_b.schemas import InputContractError, SourceUnreadable
+from stage_b.schemas import InputContractError, SourceUnreadable, UncertaintyMode
 
 SSF_DATA = re.compile(r"(?P<acc>GCST\d+)(?:_build(?:GRCh37|GRCh38))?\.tsv(?:\.gz)?")
 MD5SUM_NAME = "md5sum.txt"
@@ -110,11 +146,27 @@ MAP_POSITION = {"GRCh37": "POS19", "GRCh38": "POS38"}
 MD5_LINE = re.compile(r"(?P<md5>[0-9a-fA-F]{32})[ \t]+\*?(?P<name>.+?)[ \t]*")
 # Why a data row is not read, in the order the rules apply (module docstring); a row counts under the first.
 REJECT_REASONS = ("row_width", "no_position", "unparseable_number", "invalid_allele", "equal_alleles",
-                  "effect_allele_not_in_pair", "or_nonpositive_or_nonfinite", "se_nonpositive_or_nonfinite",
-                  "p_outside_0_1", "neg_log10_p_negative")
-CI_Z = 1.96                       # OrCiCheck: the normal quantile of a 95% confidence interval
+                  "effect_allele_not_in_pair", "beta_nonfinite", "or_nonpositive_or_nonfinite", "se_nonpositive_or_nonfinite",
+                  "ci_nonpositive_or_nonfinite", "ci_not_increasing", "or_outside_ci", "p_outside_0_1",
+                  "neg_log10_p_negative", "eaf_outside_0_1", "p_missing_pvalue_coloc", "p_zero_pvalue_coloc",
+                  "eaf_not_inside_0_1_pvalue_coloc")
+# The reasons that apply in one uncertainty mode only; every other reason applies in all three.
+MODE_REJECT_REASONS: dict[str, tuple[str, ...]] = {
+    "native_se": ("se_nonpositive_or_nonfinite",),
+    "or_ci_derived_se": ("ci_nonpositive_or_nonfinite", "ci_not_increasing", "or_outside_ci"),
+    "pvalue_coloc": ("p_missing_pvalue_coloc", "p_zero_pvalue_coloc", "eaf_not_inside_0_1_pvalue_coloc")}
+CI_Z = 1.96                       # the normal quantile of a 95% confidence interval (OrCiCheck, or_ci_derived_se)
 CI_RELATIVE_TOLERANCE = 0.01      # OrCiCheck: agreement within 1% of the expected limit
 CI_MIN_AGREEMENT_PERCENT = 99     # OrCiCheck: the file passes when at least 99% of the checked rows agree
+# or_ci_derived_se, fixed before the route is run on any file:
+CI_LEVEL = 0.95                   # the level ci_lower / ci_upper are read at; the GWAS-SSF metadata schema has no key
+                                  # that states another, and the 95% reading stands only if CiPCheck passes
+# OR inside its interval (`or_ci_standard_error`): OR may lie outside [L, U] only by the rounding the printed
+# decimals imply, half a unit in the last printed decimal of OR plus half a unit in the last printed decimal of the
+# limit it crosses.
+CI_P_LOG10_TOLERANCE = 0.1        # CiPCheck: a row agrees when |log10 p_implied - log10 p_published| <= 0.1, or within
+                                  # the published p's printed rounding (half a unit in its last digit) where looser
+CI_P_MIN_AGREEMENT_PERCENT = 95   # CiPCheck: the file passes when at least 95% of the checkable rows (0 < p < 1) agree
 
 
 class SsfColumns(BaseModel):
@@ -127,6 +179,8 @@ class SsfColumns(BaseModel):
     eaf: str | None
     n: str | None
     rsid: str | None       # "rsid" or "rs_id"; None: rsIDs come from the UKB-PPP map
+    ci_lower: str | None = None    # the confidence limits, read in or_ci_derived_se only
+    ci_upper: str | None = None
 
 
 class SsfFile(BaseModel):
@@ -236,7 +290,29 @@ def ssf_columns(header: list[str], what: str) -> SsfColumns:
     rsid = "rsid" if "rsid" in header else "rs_id" if "rs_id" in header else None
     return SsfColumns(effect=effect, p=p, p_is_neg_log10=p == "neg_log_10_p_value",
                       eaf="effect_allele_frequency" if "effect_allele_frequency" in header else None,
-                      n="n" if "n" in header else None, rsid=rsid)
+                      n="n" if "n" in header else None, rsid=rsid,
+                      ci_lower="ci_lower" if "ci_lower" in header else None,
+                      ci_upper="ci_upper" if "ci_upper" in header else None)
+
+
+def choose_uncertainty_mode(cols: SsfColumns | None, missing: int, present: int) -> tuple[UncertaintyMode | None, str]:
+    """The uncertainty mode of a whole file (module docstring), or None and the reason none fits.
+    `cols` is the GWAS-SSF column map, None for an author format (read in native_se only);
+    `missing` and `present` count the rows whose standard_error is missing or present
+    (RowReader.se_state)."""
+    if missing + present == 0:
+        return None, "no data row with a position and a valid pair of alleles to choose the uncertainty mode from"
+    if missing == 0:
+        return "native_se", ""
+    if present > 0:
+        return None, (f"standard_error is missing in {missing} and present in {present} rows; the uncertainty mode is "
+                      "chosen for the whole file, never row by row")
+    if cols is not None and cols.effect == "odds_ratio" and cols.ci_lower and cols.ci_upper:
+        return "or_ci_derived_se", ""
+    if cols is not None and cols.effect == "beta" and cols.p and cols.eaf and not (cols.ci_lower or cols.ci_upper):
+        return "pvalue_coloc", ""
+    return None, ("standard_error is missing in every row and the header gives no other route (an odds ratio with "
+                  "ci_lower and ci_upper, or a beta with a p-value and an effect-allele frequency and no confidence limits)")
 
 
 def resolve_ssf(accession: str, name: str, meta_bytes: bytes, md5sum_text: str, header: list[str]) -> SsfFile:
@@ -298,12 +374,55 @@ def p_value(value: float, neg_log10: bool) -> float | str:
 
 
 def effect_beta(value: float, is_odds_ratio: bool) -> float | str:
-    """beta as given, or ln(OR); an odds ratio that is missing, infinite, zero or negative is a reason."""
+    """beta as given, or ln(OR); a beta that is missing or infinite, or an odds ratio that is missing,
+    infinite, zero or negative, is a reason."""
     if not is_odds_ratio:
-        return value
+        return value if math.isfinite(value) else "beta_nonfinite"
     if not (math.isfinite(value) and value > 0):
         return "or_nonpositive_or_nonfinite"
     return math.log(value)
+
+
+def ci_z_for_level(level: float) -> float:
+    """The normal quantile of a two-sided interval of `level`: CI_Z (1.96) at 95%, as the registered
+    formula writes it; the exact quantile at any other level."""
+    if not 0.0 < level < 1.0:
+        raise ValueError(f"a confidence level must lie in (0, 1), not {level}")
+    return CI_Z if level == 0.95 else NormalDist().inv_cdf(0.5 + level / 2)
+
+
+def or_ci_standard_error(odds: float, lower: float, upper: float, texts: tuple[str, str, str], z: float) -> float | str:
+    """SE of ln(OR) = (ln U - ln L) / (2 z) from a finite positive odds ratio and its limits, or the
+    reason the row is not read (module docstring). `texts` are OR, L and U as printed, for the
+    rounding tolerance of OR inside [L, U]."""
+    if not (math.isfinite(lower) and math.isfinite(upper) and lower > 0 and upper > 0):
+        return "ci_nonpositive_or_nonfinite"
+    if not lower < upper:
+        return "ci_not_increasing"
+    if odds < lower and lower - odds > half_unit(texts[0]) + half_unit(texts[1]):
+        return "or_outside_ci"
+    if odds > upper and odds - upper > half_unit(texts[0]) + half_unit(texts[2]):
+        return "or_outside_ci"
+    return (math.log(upper) - math.log(lower)) / (2 * z)
+
+
+def frequency_problem(eaf: float, pvalue_coloc: bool) -> str:
+    """"" for an effect-allele frequency the mode reads; else the reason. Missing is read outside
+    pvalue_coloc, where the frequency must lie strictly inside (0, 1)."""
+    if math.isnan(eaf):
+        return "eaf_not_inside_0_1_pvalue_coloc" if pvalue_coloc else ""
+    if not 0.0 <= eaf <= 1.0:
+        return "eaf_outside_0_1"
+    if pvalue_coloc and not 0.0 < eaf < 1.0:
+        return "eaf_not_inside_0_1_pvalue_coloc"
+    return ""
+
+
+def pvalue_coloc_problem(p: float) -> str:
+    """"" for a p-value coloc's p-value form reads, p in (0, 1]; else the reason."""
+    if math.isnan(p):
+        return "p_missing_pvalue_coloc"
+    return "p_zero_pvalue_coloc" if p == 0.0 else ""
 
 
 def allele_problem(effect_allele: str, other_allele: str) -> str:
@@ -321,59 +440,92 @@ def _canonical(rsid: str, chrom: str, pos: int, ea: str, oa: str, eaf: float, be
 
 
 class SsfReader(RowReader):
-    """Rows of a GWAS-SSF file under its column map (`ssf_columns`); SourceUnreadable where the
-    header has none. Without an rsid column every row has an empty rsID here; `attach_map_rsids`
-    fills it from the UKB-PPP map."""
+    """Rows of a GWAS-SSF file under its column map (`ssf_columns`) and its uncertainty `mode`
+    (module docstring); SourceUnreadable where the header has no column map, or none for the mode.
+    Without an rsid column every row has an empty rsID here; `attach_map_rsids` fills it from the
+    UKB-PPP map. In pvalue_coloc a row read has se NaN."""
 
-    def __init__(self, header: list[str], position_offset: int, what: str):
+    def __init__(self, header: list[str], position_offset: int, what: str, mode: UncertaintyMode = "native_se",
+                 ci_level: float = CI_LEVEL):
         self.cols = cols = ssf_columns(header, what)
+        if mode == "or_ci_derived_se" and not (cols.effect == "odds_ratio" and cols.ci_lower and cols.ci_upper):
+            raise SourceUnreadable(f"{what}: or_ci_derived_se needs an odds_ratio effect with ci_lower and ci_upper")
+        if mode == "pvalue_coloc" and not (cols.effect == "beta" and cols.p):
+            raise SourceUnreadable(f"{what}: pvalue_coloc needs a beta effect and a p-value column")
         idx = {h: i for i, h in enumerate(header)}
+        self.mode, self.ci_z = mode, ci_z_for_level(ci_level)
         self.width, self.position_offset = len(header), position_offset
         self.i_chrom, self.i_pos = idx["chromosome"], idx["base_pair_location"]
         self.i_ea, self.i_oa, self.i_se = idx["effect_allele"], idx["other_allele"], idx["standard_error"]
         self.i_effect = idx[cols.effect]
-        self.i_p, self.i_eaf, self.i_n, self.i_rsid = (idx[c] if c else None for c in (cols.p, cols.eaf, cols.n, cols.rsid))
+        self.i_p, self.i_eaf, self.i_n, self.i_rsid, self.i_lower, self.i_upper = (
+            idx[c] if c else None for c in (cols.p, cols.eaf, cols.n, cols.rsid, cols.ci_lower, cols.ci_upper))
+
+    def _alleles(self, r: list[str]) -> tuple[str, str] | str:
+        ea, oa = r[self.i_ea].strip().upper(), r[self.i_oa].strip().upper()
+        return allele_problem(ea, oa) or (ea, oa)
+
+    def se_state(self, r: list[str]) -> str:
+        """"missing" or "present": the standard_error field of a row with a position and a valid pair
+        of alleles (the census the uncertainty mode is chosen from); "" for any other row."""
+        if isinstance(self.position(r), str) or isinstance(self._alleles(r), str):
+            return ""
+        return "missing" if r[self.i_se].strip() in MISSING else "present"
 
     def values(self, r: list[str], chrom: str, pos: int) -> dict | str:
-        ea, oa = r[self.i_ea].strip().upper(), r[self.i_oa].strip().upper()
-        bad = allele_problem(ea, oa)
-        if bad:
-            return bad
+        alleles = self._alleles(r)
+        if isinstance(alleles, str):
+            return alleles
+        ea, oa = alleles
+        mode, nan = self.mode, float("nan")
         try:
-            effect, se = _num(r[self.i_effect]), _num(r[self.i_se])
-            pv = _num(r[self.i_p]) if self.i_p is not None else float("nan")
-            eaf = _num(r[self.i_eaf]) if self.i_eaf is not None else float("nan")
-            n = _num(r[self.i_n]) if self.i_n is not None else float("nan")
+            effect = _num(r[self.i_effect])
+            se = _num(r[self.i_se]) if mode == "native_se" else nan
+            lower, upper = (_num(r[self.i_lower]), _num(r[self.i_upper])) if mode == "or_ci_derived_se" else (nan, nan)
+            pv = _num(r[self.i_p]) if self.i_p is not None else nan
+            eaf = _num(r[self.i_eaf]) if self.i_eaf is not None else nan
+            n = _num(r[self.i_n]) if self.i_n is not None else nan
         except ValueError:
             return "unparseable_number"
         beta = effect_beta(effect, self.cols.effect == "odds_ratio")
         if isinstance(beta, str):
             return beta
-        if not (math.isfinite(se) and se > 0):
+        if mode == "native_se" and not (math.isfinite(se) and se > 0):
             return "se_nonpositive_or_nonfinite"
+        if mode == "or_ci_derived_se":
+            se = or_ci_standard_error(effect, lower, upper, (r[self.i_effect], r[self.i_lower], r[self.i_upper]), self.ci_z)
+            if isinstance(se, str):
+                return se
         p = p_value(pv, self.cols.p_is_neg_log10)
         if isinstance(p, str):
             return p
+        bad = frequency_problem(eaf, False)
+        if not bad and mode == "pvalue_coloc":
+            bad = pvalue_coloc_problem(p) or frequency_problem(eaf, True)
+        if bad:
+            return bad
         rsid = _rsid(r[self.i_rsid]) if self.i_rsid is not None else ""
         return _canonical(rsid, chrom, pos, ea, oa, eaf, beta, se, p, n)
 
 
 class AuthorReader(RowReader):
     """Rows of a file in a reviewed author format (stage_b/author_formats.py); SourceUnreadable for
-    an entry without a map or a header other than the reviewed one. The other allele is the allele
-    of the pair that is not the effect allele; p is an ordinary p-value."""
+    an entry without a map, a header other than the reviewed one, or a mode other than native_se.
+    The other allele is the allele of the pair that is not the effect allele; p is an ordinary p-value."""
 
-    def __init__(self, fmt: AuthorFormat, header: list[str]):
+    def __init__(self, fmt: AuthorFormat, header: list[str], mode: UncertaintyMode = "native_se"):
         if not fmt.readable:
             raise SourceUnreadable(f"GWAS Catalog {fmt.accession}: {fmt.reason}")
         check_header(fmt, header)
+        if mode != "native_se":
+            raise SourceUnreadable(f"GWAS Catalog {fmt.accession}: an author format is read in native_se only, not {mode}")
         self.fmt = fmt
         idx = {h: i for i, h in enumerate(header)}
         self.idx = idx
         self.width = len(header)
         self.i_chrom, self.i_pos = idx[fmt.chrom], idx[fmt.pos]
 
-    def values(self, r: list[str], chrom: str, pos: int) -> dict | str:
+    def _alleles(self, r: list[str]) -> tuple[str, str] | str:
         fmt, idx = self.fmt, self.idx
         a1, a2 = fmt.allele_pair
         ea, x1, x2 = (r[idx[c]].strip().upper() for c in (fmt.effect_allele, a1, a2))
@@ -383,7 +535,20 @@ class AuthorReader(RowReader):
             return "equal_alleles"
         if ea not in (x1, x2):
             return "effect_allele_not_in_pair"
-        oa = x2 if ea == x1 else x1
+        return ea, (x2 if ea == x1 else x1)
+
+    def se_state(self, r: list[str]) -> str:
+        """As SsfReader.se_state, on the map's standard-error column."""
+        if isinstance(self.position(r), str) or isinstance(self._alleles(r), str):
+            return ""
+        return "missing" if r[self.idx[self.fmt.se]].strip() in MISSING else "present"
+
+    def values(self, r: list[str], chrom: str, pos: int) -> dict | str:
+        fmt, idx = self.fmt, self.idx
+        alleles = self._alleles(r)
+        if isinstance(alleles, str):
+            return alleles
+        ea, oa = alleles
         try:
             effect, se = _num(r[idx[fmt.beta or fmt.odds_ratio]]), _num(r[idx[fmt.se]])
             pv = _num(r[idx[fmt.p]]) if fmt.p else float("nan")
@@ -399,19 +564,22 @@ class AuthorReader(RowReader):
         p = p_value(pv, False)
         if isinstance(p, str):
             return p
+        bad = frequency_problem(eaf, False)
+        if bad:
+            return bad
         return _canonical(_rsid(r[idx[fmt.rsid]]), chrom, pos, ea, oa, eaf, beta, se, p, n)
 
 
 def filter_gwas_ssf(rows: Iterable[list[str]], header: list[str], chrom: str, center: int, half_width: int,
-                    position_offset: int, what: str) -> pd.DataFrame:
-    """Window rows of a GWAS-SSF file as the canonical table (SsfReader)."""
-    return SsfReader(header, position_offset, what).window(rows, chrom, center, half_width)
+                    position_offset: int, what: str, mode: UncertaintyMode) -> pd.DataFrame:
+    """Window rows of a GWAS-SSF file as the canonical table (SsfReader in the file's mode)."""
+    return SsfReader(header, position_offset, what, mode).window(rows, chrom, center, half_width)
 
 
 def filter_author(fmt: AuthorFormat, rows: Iterable[list[str]], header: list[str], chrom: str, center: int,
-                  half_width: int, what: str) -> pd.DataFrame:
+                  half_width: int, what: str, mode: UncertaintyMode) -> pd.DataFrame:
     """Window rows of a file in a reviewed author format (AuthorReader)."""
-    return AuthorReader(fmt, header).window(rows, chrom, center, half_width)
+    return AuthorReader(fmt, header, mode).window(rows, chrom, center, half_width)
 
 
 def half_unit(text: str) -> float:
@@ -465,6 +633,60 @@ class OrCiCheck:
         passed = self.checked > 0 and 100 * self.agree >= CI_MIN_AGREEMENT_PERCENT * self.checked
         return {"rule": "or_ci_se", "z": CI_Z, "relative_tolerance": CI_RELATIVE_TOLERANCE,
                 "min_agreement_percent": CI_MIN_AGREEMENT_PERCENT, "rows_checked": self.checked,
+                "rows_agree": self.agree, "rows_disagree": self.checked - self.agree,
+                "rows_not_checkable": self.not_checkable, "passed": passed}
+
+
+SQRT2, LN10 = math.sqrt(2.0), math.log(10.0)
+
+
+def log10_two_sided_p(z: float) -> float:
+    """log10 of the two-sided normal p-value of `z`, erfc(|z|/sqrt 2); past the point where erfc
+    leaves the doubles (|z| > 37), its asymptotic series ln erfc(x) = -x^2 - ln(x sqrt(pi))
+    + ln(1 - 1/(2x^2) + 3/(4x^4) - 15/(8x^6)), whose error there is below 1e-9."""
+    x = abs(z) / SQRT2
+    tail = math.erfc(x)
+    if tail > 1e-300:
+        return math.log10(tail)
+    x2 = x * x
+    series = 1 - 1 / (2 * x2) + 3 / (4 * x2 ** 2) - 15 / (8 * x2 ** 3)
+    return (-x2 - math.log(x * math.sqrt(math.pi)) + math.log(series)) / LN10
+
+
+def p_rounding_log10(text: str, p: float, neg_log10: bool) -> float:
+    """How far, on the log10 scale, a published p can lie from the value its printed digits give:
+    half a unit in the last printed digit of -log10 p, or of p mapped to log10 (the larger side)."""
+    h = half_unit(text)
+    if neg_log10:
+        return h
+    return max(math.log10(p + h) - math.log10(p), math.log10(p) - math.log10(p - h)) if p > h else math.inf
+
+
+class CiPCheck:
+    """The frozen file-level CI-versus-p check of an or_ci_derived_se file (module docstring). `add`
+    takes each row the reader read (with the derived SE) and the row as printed; `result` gives
+    counts and pass/fail only."""
+
+    def __init__(self, reader: SsfReader):
+        if reader.mode != "or_ci_derived_se":
+            raise ValueError(f"the CI-versus-p check applies to or_ci_derived_se, not {reader.mode}")
+        self.i_p, self.neg_log10, self.z = reader.i_p, reader.cols.p_is_neg_log10, reader.ci_z
+        self.checked = self.agree = self.not_checkable = 0
+
+    def add(self, got: Mapping, r: list[str]) -> None:
+        p = got["p"]
+        if not 0.0 < p < 1.0:                       # p missing (NaN), 0 or 1: nothing to compare
+            self.not_checkable += 1
+            return
+        self.checked += 1
+        gap = abs(log10_two_sided_p(got["beta"] / got["se"]) - math.log10(p))
+        if gap <= CI_P_LOG10_TOLERANCE or gap <= p_rounding_log10(r[self.i_p], p, self.neg_log10):
+            self.agree += 1
+
+    def result(self) -> dict:
+        passed = self.checked > 0 and 100 * self.agree >= CI_P_MIN_AGREEMENT_PERCENT * self.checked
+        return {"rule": "or_ci_vs_p", "ci_level": CI_LEVEL, "z": self.z, "log10_tolerance": CI_P_LOG10_TOLERANCE,
+                "min_agreement_percent": CI_P_MIN_AGREEMENT_PERCENT, "rows_checked": self.checked,
                 "rows_agree": self.agree, "rows_disagree": self.checked - self.agree,
                 "rows_not_checkable": self.not_checkable, "passed": passed}
 

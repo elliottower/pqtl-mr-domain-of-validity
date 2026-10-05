@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import math
 
+import numpy as np
 import pandas as pd
 import pytest
 from fake_remote import FakeRemote
@@ -16,8 +17,9 @@ from stage_b.author_formats import AUTHOR_FORMATS, LASKAR_HEADER, SPARK_HEADER, 
 from stage_b.checkpoint import collect_entry
 from stage_b.collect import collect_one, collect_tasks, read_record, record_path, supersede_absent
 from stage_b.fetch import Endpoints, RemoteSources, VolumeFetcher, gwas_catalog_study_dir
-from stage_b.outcome_files import (AuthorReader, OrCiCheck, SsfReader, half_unit, p_value, parse_md5sum, parse_meta_yaml,
-                                   ssf_columns)
+from stage_b.outcome_files import (MODE_REJECT_REASONS, REJECT_REASONS, AuthorReader, CiPCheck, OrCiCheck, SsfReader,
+                                   choose_uncertainty_mode, ci_z_for_level, half_unit, log10_two_sided_p, p_value,
+                                   parse_md5sum, parse_meta_yaml, ssf_columns)
 from stage_b.pipeline import DirStore, process_unit
 from stage_b.schemas import (CollectError, CollectRecord, CollectTask, HypothesisInput, OutcomeSpec, SourceAbsent,
                              SourceUnreadable)
@@ -446,8 +448,8 @@ SSF_BETA_HEADER = ["chromosome", "base_pair_location", "effect_allele", "other_a
 SSF_OR_ONLY_HEADER = [c if c != "beta" else "odds_ratio" for c in SSF_BETA_HEADER]
 
 
-def ssf_row(ea="A", oa="G", effect="0.1", se="0.01", p="0.5", rsid="rs1", chrom="1", pos="1000") -> list[str]:
-    return [chrom, pos, ea, oa, effect, se, "0.3", p, rsid]
+def ssf_row(ea="A", oa="G", effect="0.1", se="0.01", p="0.5", rsid="rs1", chrom="1", pos="1000", eaf="0.3") -> list[str]:
+    return [chrom, pos, ea, oa, effect, se, eaf, p, rsid]
 
 
 def laskar_row(ea="G", a1="A", a2="G", odds="1.2", se="0.05", p="0.01", rsid="rs1", lo="1.1", hi="1.3") -> list[str]:
@@ -533,6 +535,12 @@ REJECTED = [     # (reader, header, row) -> the reason
     ("ssf", SSF_OR_ONLY_HEADER, ssf_row(effect="-1.2"), "or_nonpositive_or_nonfinite"),
     ("ssf", SSF_OR_ONLY_HEADER, ssf_row(effect="inf"), "or_nonpositive_or_nonfinite"),
     ("ssf", SSF_OR_ONLY_HEADER, ssf_row(effect="NA"), "or_nonpositive_or_nonfinite"),
+    ("ssf", SSF_BETA_HEADER, ssf_row(effect="NA"), "beta_nonfinite"),
+    ("ssf", SSF_BETA_HEADER, ssf_row(effect="inf"), "beta_nonfinite"),
+    ("ssf", SSF_BETA_HEADER, ssf_row(effect="-inf", se="0"), "beta_nonfinite"),
+    ("ssf", SSF_BETA_HEADER, ssf_row(eaf="1.2"), "eaf_outside_0_1"),
+    ("ssf", SSF_BETA_HEADER, ssf_row(eaf="-0.01"), "eaf_outside_0_1"),
+    ("ssf", SSF_BETA_HEADER, ssf_row(eaf="inf"), "eaf_outside_0_1"),
     ("ssf", SSF_BETA_HEADER, ssf_row(effect="0.1x"), "unparseable_number"),
     ("ssf", SSF_BETA_HEADER, ssf_row(pos="12a"), "unparseable_number"),
     ("ssf", SSF_BETA_HEADER, ssf_row(chrom="#NA"), "no_position"),
@@ -669,3 +677,214 @@ def test_an_unreadable_outcome_keeps_its_unreadable_record_while_its_hypothesis_
     published = pd.read_csv(tmp_path / "out" / "collected_files.tsv", sep="\t", dtype=str, keep_default_na=False)
     assert published[["key", "status"]].values.tolist() == [[SSF38, "unreadable"]]
     assert "no other_allele column" in published.loc[0, "detail"]
+
+
+# ---- uncertainty modes: native_se, or_ci_derived_se, pvalue_coloc --------------------------------------------
+
+SSF_OR_CI_HEADER = ["chromosome", "base_pair_location", "effect_allele", "other_allele", "odds_ratio", "standard_error",
+                    "effect_allele_frequency", "p_value", "rsid", "ci_upper", "ci_lower"]
+
+
+def or_ci_row(odds="1.2", lower="1.1", upper="1.3", p="0.01", eaf="0.3", se="#NA", pos="1000") -> list[str]:
+    return ["1", pos, "A", "G", odds, se, eaf, p, "rs1", upper, lower]
+
+
+def or_ci(header=SSF_OR_CI_HEADER) -> SsfReader:
+    return SsfReader(header, 0, "GWAS Catalog X", "or_ci_derived_se")
+
+
+def pvalue(header=SSF_BETA_HEADER) -> SsfReader:
+    return SsfReader(header, 0, "GWAS Catalog X", "pvalue_coloc")
+
+
+def exact_or_ci_row(beta: float, se: float, p: float | None = None, digits: int | None = None) -> list[str]:
+    """A row whose limits are exp(beta -/+ 1.96 se), at full precision or printed with `digits` significant digits."""
+    fmt = (lambda x: repr(x)) if digits is None else (lambda x: f"{x:.{digits}g}")
+    p = math.erfc(abs(beta / se) / math.sqrt(2)) if p is None else p
+    return or_ci_row(odds=fmt(math.exp(beta)), lower=fmt(math.exp(beta - 1.96 * se)), upper=fmt(math.exp(beta + 1.96 * se)),
+                     p=repr(p))
+
+
+def test_each_mode_has_its_own_reasons_and_every_reason_is_listed_once():
+    assert len(set(REJECT_REASONS)) == len(REJECT_REASONS)
+    own = [r for reasons in MODE_REJECT_REASONS.values() for r in reasons]
+    assert len(own) == len(set(own)) and set(own) <= set(REJECT_REASONS)
+    assert ci_z_for_level(0.95) == 1.96 and ci_z_for_level(0.90) == pytest.approx(1.6448536269514722, rel=1e-12)
+    with pytest.raises(ValueError):
+        ci_z_for_level(95)
+
+
+def test_the_ci_route_gives_the_se_of_ln_or_from_the_width_of_the_log_interval_whatever_its_centre():
+    got = or_ci().row(exact_or_ci_row(math.log(2.0), 0.1))
+    assert got["beta"] == pytest.approx(math.log(2.0), rel=1e-15) and got["se"] == pytest.approx(0.1, rel=1e-12)
+    # symmetric on the natural scale, not on the log scale: SE from ln U - ln L only, beta from OR only
+    got = or_ci().row(or_ci_row(odds="2.0", lower="1.8", upper="2.2"))
+    assert got["se"] == pytest.approx((math.log(2.2) - math.log(1.8)) / (2 * 1.96), rel=1e-15)
+    assert got["beta"] == pytest.approx(math.log(2.0), rel=1e-15)
+    assert or_ci().row(or_ci_row(se="0.05"))["se"] == pytest.approx((math.log(1.3) - math.log(1.1)) / 3.92, rel=1e-15)
+
+
+def test_ci_derived_se_recovers_the_se_within_the_rounding_of_six_printed_digits_over_many_rows():
+    rng = np.random.default_rng()
+    beta, se = rng.normal(0, 0.3, 20_000), rng.uniform(0.005, 0.5, 20_000)
+    derived = np.array([or_ci().row(exact_or_ci_row(b, s, digits=6))["se"] for b, s in zip(beta, se)])
+    # each limit carries a relative rounding of at most 5e-6, so ln U - ln L is off by at most 1e-5
+    assert np.max(np.abs(derived - se)) <= 1e-5 / 3.92 * 1.0001
+
+
+@pytest.mark.parametrize("odds,lower,upper,expected", [
+    ("1.295", "1.10", "1.29", "read"),                  # 0.005 above U: within half a unit of OR (0.0005) and of U (0.005)
+    ("1.30", "1.10", "1.28", "or_outside_ci"),          # 0.02 above U: beyond 0.005 + 0.005
+    ("0.95", "0.955", "1.10", "read"),                  # 0.005 below L: within 0.005 + 0.0005
+    ("0.95", "0.97", "1.10", "or_outside_ci"),
+    ("1.2000", "1.2001", "1.3", "read"),                # 1e-4 below L: within 5e-5 + 5e-5
+    ("1.2000", "1.2002", "1.3", "or_outside_ci"),       # 2e-4 below L: beyond 1e-4
+])
+def test_an_odds_ratio_outside_its_interval_is_read_only_within_the_rounding_of_the_printed_decimals(odds, lower, upper, expected):
+    got = or_ci().row(or_ci_row(odds=odds, lower=lower, upper=upper))
+    assert (got if isinstance(got, str) else "read") == expected
+
+
+@pytest.mark.parametrize("lower,upper,reason", [
+    ("#NA", "1.3", "ci_nonpositive_or_nonfinite"), ("1.1", "NA", "ci_nonpositive_or_nonfinite"),
+    ("0", "1.3", "ci_nonpositive_or_nonfinite"), ("-0.1", "1.3", "ci_nonpositive_or_nonfinite"),
+    ("1.1", "inf", "ci_nonpositive_or_nonfinite"), ("1.1", "-inf", "ci_nonpositive_or_nonfinite"),
+    ("1.3", "1.1", "ci_not_increasing"), ("1.2", "1.2", "ci_not_increasing"), ("1.1x", "1.3", "unparseable_number"),
+])
+def test_malformed_reversed_and_nonpositive_limits_are_rejected_each_with_its_reason(lower, upper, reason):
+    assert or_ci().row(or_ci_row(odds="1.2", lower=lower, upper=upper)) == reason
+    if reason != "unparseable_number":                                    # a field that is not a number comes first
+        assert or_ci().row(or_ci_row(odds="0", lower=lower, upper=upper)) == "or_nonpositive_or_nonfinite"
+
+
+NEG_LOG10 = [c if c != "p_value" else "neg_log_10_p_value" for c in SSF_BETA_HEADER]
+
+
+def test_p_zero_is_read_in_native_se_and_in_or_ci_derived_se_and_rejected_in_pvalue_coloc():
+    assert ssf().row(ssf_row(p="0"))["p"] == 0.0
+    assert or_ci().row(or_ci_row(p="0"))["p"] == 0.0
+    assert pvalue().row(ssf_row(p="0", se="NA")) == "p_zero_pvalue_coloc"
+    assert pvalue(NEG_LOG10).row(ssf_row(p="400", se="NA")) == "p_zero_pvalue_coloc"      # 10^-400 is 0 as a double
+    assert pvalue().row(ssf_row(p="#NA", se="NA")) == "p_missing_pvalue_coloc"
+    assert math.isnan(ssf().row(ssf_row(p="#NA"))["p"]) and math.isnan(or_ci().row(or_ci_row(p="#NA"))["p"])
+    assert pvalue().row(ssf_row(p="1", se="NA"))["p"] == 1.0 and pvalue().row(ssf_row(p="1.5", se="NA")) == "p_outside_0_1"
+
+
+@pytest.mark.parametrize("eaf,native,pvalue_mode", [
+    ("0.3", 0.3, 0.3), ("0", 0.0, "eaf_not_inside_0_1_pvalue_coloc"), ("1", 1.0, "eaf_not_inside_0_1_pvalue_coloc"),
+    ("#NA", "nan", "eaf_not_inside_0_1_pvalue_coloc"), ("1.0001", "eaf_outside_0_1", "eaf_outside_0_1"),
+    ("-0.0001", "eaf_outside_0_1", "eaf_outside_0_1"),
+])
+def test_effect_allele_frequency_bounds_in_each_mode(eaf, native, pvalue_mode):
+    for got, want in ((ssf().row(ssf_row(eaf=eaf)), native), (or_ci().row(or_ci_row(eaf=eaf)), native),
+                      (pvalue().row(ssf_row(eaf=eaf, se="NA")), pvalue_mode)):
+        if want == "nan":
+            assert math.isnan(got["eaf"])
+        elif isinstance(want, str):
+            assert got == want
+        else:
+            assert got["eaf"] == want
+
+
+def test_a_pvalue_coloc_row_keeps_beta_for_the_direction_reads_no_se_and_ignores_the_se_field():
+    for token in ("NA", "#NA", "0.01", "x"):
+        got = pvalue().row(ssf_row(effect="-3.2", se=token, p="0.0014"))
+        assert (got["beta"], got["p"], got["eaf"]) == (-3.2, 0.0014, 0.3) and math.isnan(got["se"])
+    assert pvalue().row(ssf_row(effect="NA", se="NA")) == "beta_nonfinite"
+
+
+def test_a_reader_refuses_a_mode_its_header_or_format_cannot_give():
+    with pytest.raises(SourceUnreadable, match="or_ci_derived_se needs an odds_ratio effect with ci_lower and ci_upper"):
+        or_ci(SSF_BETA_HEADER)
+    with pytest.raises(SourceUnreadable, match="or_ci_derived_se needs"):
+        or_ci([c for c in SSF_OR_CI_HEADER if c != "ci_lower"])
+    with pytest.raises(SourceUnreadable, match="pvalue_coloc needs a beta effect and a p-value column"):
+        pvalue(SSF_OR_CI_HEADER)
+    with pytest.raises(SourceUnreadable, match="pvalue_coloc needs"):
+        pvalue([c for c in SSF_BETA_HEADER if c != "p_value"])
+    for mode in ("or_ci_derived_se", "pvalue_coloc"):
+        with pytest.raises(SourceUnreadable, match="read in native_se only"):
+            AuthorReader(AUTHOR_FORMATS["GCST008226"], list(LASKAR_HEADER), mode)
+
+
+def test_the_se_census_counts_only_rows_with_a_position_and_a_valid_pair_of_alleles():
+    states = [ssf().se_state(r) for r in (ssf_row(se="#NA"), ssf_row(se="NA"), ssf_row(se=""), ssf_row(se=" #NA "),
+                                          ssf_row(se="0.01"), ssf_row(se="0"), ssf_row(se="x"), ssf_row(ea="N", se="#NA"),
+                                          ssf_row(chrom="NA", se="#NA"), ssf_row()[:-1])]
+    assert states == ["missing", "missing", "missing", "missing", "present", "present", "present", "", "", ""]
+    assert [laskar().se_state(r) for r in (laskar_row(se="NA"), laskar_row(se="0.05"), laskar_row(ea="T", a1="A", a2="G"))] == [
+        "missing", "present", ""]
+
+
+OR_CI_COLS = ssf_columns(SSF_OR_CI_HEADER, "X")
+BETA_COLS = ssf_columns(SSF_BETA_HEADER, "X")
+
+
+@pytest.mark.parametrize("cols,missing,present,mode,reason", [
+    (BETA_COLS, 0, 10, "native_se", ""), (OR_CI_COLS, 0, 10, "native_se", ""), (None, 0, 10, "native_se", ""),
+    (OR_CI_COLS, 10, 0, "or_ci_derived_se", ""), (BETA_COLS, 10, 0, "pvalue_coloc", ""),
+    (OR_CI_COLS, 9, 1, None, "missing in 9 and present in 1 rows"), (BETA_COLS, 1, 9, None, "missing in 1 and present in 9 rows"),
+    (None, 10, 0, None, "missing in every row and the header gives no other route"),
+    (ssf_columns(SSF_OR_ONLY_HEADER, "X"), 10, 0, None, "no other route"),                      # an odds ratio without limits
+    (ssf_columns(SSF_BETA_HEADER + ["ci_lower", "ci_upper"], "X"), 10, 0, None, "no other route"),   # a beta with limits
+    (ssf_columns([c for c in SSF_BETA_HEADER if c != "effect_allele_frequency"], "X"), 10, 0, None, "no other route"),
+    (BETA_COLS, 0, 0, None, "no data row with a position and a valid pair of alleles"),
+])
+def test_the_mode_is_chosen_once_per_file_and_a_file_mixing_missing_and_present_se_fails_closed(cols, missing, present, mode,
+                                                                                                    reason):
+    got, why = choose_uncertainty_mode(cols, missing, present)
+    assert got == mode and reason in why and (why == "") == (mode is not None)
+
+
+def ci_p(rows) -> dict:
+    reader = or_ci()
+    check = CiPCheck(reader)
+    for r in rows:
+        got = reader.row(r)
+        assert not isinstance(got, str), got
+        check.add(got, r)
+    return check.result()
+
+
+def test_the_ci_versus_p_check_agrees_where_the_published_p_is_the_wald_p_of_the_interval():
+    rng = np.random.default_rng()
+    # |z| <= 0.2 * 5 / 0.05 = 20 almost surely: every published p is a positive double below 1
+    rows = [exact_or_ci_row(b, s) for b, s in zip(rng.normal(0, 0.2, 2000), rng.uniform(0.05, 0.2, 2000))]
+    got = ci_p(rows)
+    assert (got["rows_checked"], got["rows_agree"], got["passed"]) == (2000, 2000, True)
+    assert set(got) == {"rule", "ci_level", "z", "log10_tolerance", "min_agreement_percent", "rows_checked", "rows_agree",
+                        "rows_disagree", "rows_not_checkable", "passed"}                    # counts and pass/fail only
+
+
+@pytest.mark.parametrize("bad,passed", [(5, True), (6, False)])
+def test_the_ci_versus_p_check_passes_only_when_at_least_95_percent_of_checkable_rows_agree(bad, passed):
+    good = [exact_or_ci_row(0.1 + 0.001 * i, 0.05) for i in range(100 - bad)]
+    off = [exact_or_ci_row(0.1, 0.05, p=10 * math.erfc(2 / math.sqrt(2)) / 1.5) for _ in range(bad)]   # 0.82 log10 off
+    got = ci_p(good + off)
+    assert (got["rows_checked"], got["rows_agree"], got["rows_disagree"], got["passed"]) == (100, 100 - bad, bad, passed)
+
+
+def test_the_ci_versus_p_check_allows_the_printed_rounding_of_p_where_it_is_looser_than_0_1():
+    beta = 1.8119 * 0.1                                       # z = 1.8119: p = 0.0700, 0.155 below 0.1 on the log10 scale
+    assert ci_p([or_ci_row(odds=repr(math.exp(beta)), lower=repr(math.exp(beta - 0.196)), upper=repr(math.exp(beta + 0.196)),
+                           p="0.1")])["rows_agree"] == 1      # "0.1" may stand for anything in [0.05, 0.15]
+    assert ci_p([or_ci_row(odds=repr(math.exp(beta)), lower=repr(math.exp(beta - 0.196)), upper=repr(math.exp(beta + 0.196)),
+                           p="0.10")])["rows_agree"] == 0     # "0.10": [0.095, 0.105]
+
+
+def test_rows_with_p_missing_zero_or_one_are_not_checkable_and_no_checkable_row_fails_the_file():
+    got = ci_p([or_ci_row(p="#NA"), or_ci_row(p="0"), or_ci_row(p="1")])
+    assert (got["rows_checked"], got["rows_not_checkable"], got["passed"]) == (0, 3, False)
+    with pytest.raises(ValueError, match="applies to or_ci_derived_se"):
+        CiPCheck(ssf())
+
+
+def test_log10_of_the_two_sided_p_is_exact_where_erfc_is_a_double_and_its_asymptotic_series_takes_over(monkeypatch):
+    zs = (1.0, 5.0, 20.0, 28.0, 35.0)
+    exact = [math.log10(math.erfc(z / math.sqrt(2))) for z in zs]
+    assert [log10_two_sided_p(z) for z in zs] == pytest.approx(exact, rel=1e-12)
+    assert log10_two_sided_p(-5.0) == log10_two_sided_p(5.0)
+    monkeypatch.setattr(math, "erfc", lambda x: 0.0)           # force the series, and compare it where erfc is exact
+    assert [log10_two_sided_p(z) for z in zs[2:]] == pytest.approx(exact[2:], abs=1e-6)
+    beyond = [log10_two_sided_p(z) for z in (40.0, 60.0, 200.0)]
+    assert all(math.isfinite(v) for v in beyond) and beyond == sorted(beyond, reverse=True)

@@ -11,7 +11,7 @@ from v8_run_guard import RunNotAuthorized
 
 from stage_b.launch import A_FILES, authorize, private_copy, sealed_stage_b, spawn_collect, spawn_units
 from stage_b.schemas import CollectRecord, InputContractError, InstrumentUnit, OutcomeSpec, Sentinel
-from stage_b.validate import RULES
+from stage_b.validate import RULES, result_sha256
 
 HERE = Path(__file__).resolve().parents[1]
 PREREG = HERE.parents[1] / "PREREG.md"
@@ -184,8 +184,16 @@ def catalog_record(key: str = "GCST1", sha: str = "a" * 64, status: str = "colle
                          bytes=5, sha256=sha, detail=detail)
 
 
-def report_for(*records: CollectRecord) -> dict:
-    return {"rules": RULES, "files": {r.key: {"sha256": r.sha256, "passed": r.status == "collected"} for r in records}}
+def report_for(*records: CollectRecord, mode: str = "native_se") -> dict:
+    return {"rules": RULES, "files": {r.key: {"sha256": r.sha256, "passed": r.status == "collected", "rules": RULES,
+                                              "uncertainty_mode": mode, "header_sha256": "c" * 64} for r in records}}
+
+
+def bound(record: CollectRecord, report: dict) -> CollectRecord:
+    """`record` as apply_validation leaves it when its file passed: bound to the mode, header and result."""
+    got = report["files"][record.key]
+    return record.model_copy(update={"uncertainty_mode": got["uncertainty_mode"], "header_sha256": got["header_sha256"],
+                                     "validation_sha256": result_sha256(got)})
 
 
 def test_units_are_not_spawned_without_a_validation_report_or_with_one_that_is_stale(tmp_path, stage_a, planned):
@@ -198,9 +206,15 @@ def test_units_are_not_spawned_without_a_validation_report_or_with_one_that_is_s
         spawn_units(prereg, TOKEN, *planned, stage_a, spawn, recorded=FILES, validation=(report_for(record), [recollected]))
     with pytest.raises(InputContractError, match="GCST2: not in the report"):
         spawn_units(prereg, TOKEN, *planned, stage_a, spawn, recorded=FILES,
-                    validation=(report_for(record), [record, catalog_record("GCST2")]))
+                    validation=(report_for(record), [bound(record, report_for(record)), catalog_record("GCST2")]))
+    with pytest.raises(InputContractError, match=r"GCST1: the record's uncertainty mode \(none\) is not bound"):
+        spawn_units(prereg, TOKEN, *planned, stage_a, spawn, recorded=FILES, validation=(report_for(record), [record]))
+    other_mode = bound(record, report_for(record, mode="or_ci_derived_se"))
+    with pytest.raises(InputContractError, match=r"GCST1: the record's uncertainty mode \(or_ci_derived_se\) is not bound"):
+        spawn_units(prereg, TOKEN, *planned, stage_a, spawn, recorded=FILES, validation=(report_for(record), [other_mode]))
     assert spawn.calls == []
     indexed = CollectRecord(status="remote_indexed", source="gwas_catalog", key="GCST3", name="x.h.tsv.gz")
+    record = bound(record, report_for(record))
     calls = spawn_units(prereg, TOKEN, *planned, stage_a, spawn, recorded=FILES, validation=(report_for(record), [record, indexed]))
     assert len(calls) == 3
     src = (HERE / "launch_stage_b.py").read_text()
@@ -224,7 +238,8 @@ def test_the_whole_files_are_purged_only_after_stage_b_is_sealed(tmp_path, stage
         "commit = clean_commit(REPO)", "seal = sealed_stage_b(PREREG, HERE / 'output' / MANIFEST_NAME)"]
 
 
-@pytest.mark.parametrize("name", ["run_unit", "collect_file", "plan_remote", "validate_outcomes", "validate_outcome_file"])
+@pytest.mark.parametrize("name", ["run_unit", "collect_file", "plan_remote", "validate_outcomes", "validate_outcome_file",
+                                  "restore_validated_records"])
 def test_every_real_run_modal_function_guards_before_anything_else(name):
     fn = _function(HERE / "modal_stage_b.py", name)
     assert ast.unparse(fn.body[0]) == "authorize(PREREG_IMAGE, run_token, A_IMAGE)"
@@ -258,9 +273,10 @@ def test_launcher_spawns_and_assembles_only_through_the_guard():
     src = (HERE / "launch_stage_b.py").read_text()
     assert "spawn_units(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT" in src
     assert "spawn_collect(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT" in src
-    for name in ("cmd_plan", "cmd_collect", "cmd_validate", "cmd_spawn", "cmd_assemble"):
+    for name in ("cmd_plan", "cmd_collect", "cmd_validate", "cmd_restore_validated", "cmd_spawn", "cmd_assemble"):
         assert ast.unparse(_function(HERE / "launch_stage_b.py", name).body[0]) == "commit = clean_commit(REPO)"
-    assert ast.unparse(_function(HERE / "launch_stage_b.py", "cmd_validate").body[1]) == "authorize(PREREG, a.run_token, A_OUTPUT)"
+    for name in ("cmd_validate", "cmd_restore_validated"):
+        assert ast.unparse(_function(HERE / "launch_stage_b.py", name).body[1]) == "authorize(PREREG, a.run_token, A_OUTPUT)"
     assemble = ast.unparse(_function(HERE / "launch_stage_b.py", "cmd_assemble").body[1])
     assert assemble == "sealed = authorize(PREREG, a.run_token, A_OUTPUT)"
     assert "repo_commit=commit, tools=common_tools(tools)," in src and "collected=collected)" in src

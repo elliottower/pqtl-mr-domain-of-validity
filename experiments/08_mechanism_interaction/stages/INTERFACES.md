@@ -277,8 +277,9 @@ Also `regional_manifest.tsv` (one row per regional extract of a unit: source, pr
 variants, sha256; units that extract the same region, such as the units of an assay that serves
 several genes, each give a row), `collected_files.tsv` (one row per collect record: source, key, status, name,
 bytes, sha256, md5, etag, last_modified, source_url, detail, utc, layout, build, position_offset,
-rsid_rule, meta_sha256; the last five are filled only for a GWAS Catalog file read without a
-harmonised copy, and `detail` holds the reason of an `unreadable` record; `source_url` holds only the host
+rsid_rule, meta_sha256, uncertainty_mode, header_sha256, validation_sha256; layout to meta_sha256 are
+filled only for a GWAS Catalog file read without a harmonised copy, the last three only for a GWAS
+Catalog whole file the pre-analysis validation passed, and `detail` holds the reason of an `unreadable` record; `source_url` holds only the host
 of the record's address, for every source, such as `download.decode.is` or `ftp.ebi.ac.uk`, and
 `synapse` for a Synapse entity, whose address has no host, while the record on the private volume
 keeps the address it was written with: `stage_b.assemble.source_host`), `run_info.json` (stage, run
@@ -430,6 +431,32 @@ each with a result for the sha256 its record names, no error, and status `unread
 the file failed (`stage_b.validate.require_validation`, called by `stage_b.launch.spawn_units` with
 the report and records `stage_state` reads from the volume).
 
+Uncertainty mode (`stage_b.outcome_files.choose_uncertainty_mode`). Before a GWAS-SSF or
+author-format file is read, a first pass counts its `standard_error` field as missing or present
+over the rows with a position and a valid pair of alleles; one mode is chosen for the whole file from
+the header and those two counts, never row by row: `native_se` where it is present on every such
+row; where it is missing on every such row, `or_ci_derived_se` for an odds-ratio file with
+`ci_lower` and `ci_upper` (SE of ln(OR) = (ln U − ln L) / (2 × 1.96)) and `pvalue_coloc` for a beta
+file with a p-value and an effect-allele frequency and no confidence limits (coloc.abf's p-value
+form: p, MAF of the file's own frequency, N, `type = "cc"`, s; no beta or varbeta); a file with the
+field present on some rows and missing on others, or with no route, fails. A harmonised file is
+`native_se`. Mode-specific row rules (`outcome_files.REJECT_REASONS`): in `or_ci_derived_se` a
+limit that is missing, infinite or not positive, a lower limit not below the upper, or an OR outside
+the interval by more than half a unit in the last printed decimal of the OR and of the limit; in
+`pvalue_coloc` a p that is missing or 0, or a frequency missing, 0 or 1. In every mode of the GWAS-SSF
+and author readers a beta that is missing or infinite, and a frequency outside [0, 1], is not read.
+An `or_ci_derived_se` file also fails unless at least 95% of its rows read with 0 < p < 1 give a
+two-sided Wald p from ln(OR) / SE within 0.1 on the log10 scale of the published p, or within the
+published p's printed rounding where that is looser (`outcome_files.CiPCheck`). A file that passes
+has its `collected` record superseded by one naming `uncertainty_mode`, `header_sha256` and
+`validation_sha256` (the sha256 of its result), which enter the collect digest; `spawn` also refuses
+unless every `collected` record names the mode, header hash and result hash of its result.
+`check-validation --expected <json>` compares the classification of a report (files by mode, failed,
+error) with an expected one and writes the comparison to `inputs/stage_b/validation/`.
+`restore-validated` moves the `collected` record of a file back only where its validation failed for
+its standard error alone (`stage_b.validate.failed_only_for_standard_error`), after its bytes match
+the recorded sha256; nothing is deleted, and the next `validate` reads it again.
+
 Re-collection. `collect --run-token <token> --accessions <acc> ...` (or `--accessions-file`) spawns
 `collect_file` for those planned GWAS Catalog tasks only, with `supersede_absent_record`: an
 `absent` record is first moved to `/stage_b/superseded/collect/gwas_catalog/<acc>__<utc>.json`
@@ -483,7 +510,7 @@ file the unit reads (`collect.collect_tasks` of the unit), ordered by source and
 
 | record `status` | entry |
 |---|---|
-| `collected` | `source`, `key`, `status`, `name`, `bytes`, `sha256` of the record; for a GWAS Catalog file read without a harmonised copy also `layout`, `build`, `position_offset`, `rsid_rule`, `meta_sha256` |
+| `collected` | `source`, `key`, `status`, `name`, `bytes`, `sha256` of the record; for a GWAS Catalog file read without a harmonised copy also `layout`, `build`, `position_offset`, `rsid_rule`, `meta_sha256`; for a GWAS Catalog whole file the pre-analysis validation passed also `uncertainty_mode`, `header_sha256`, `validation_sha256` |
 | `absent` | `source`, `key`, `status`, `name` as the pinned listing gives it (else empty), `bytes` null, `sha256` empty |
 | `unreadable` | `source`, `key`, `status`, `name` empty, `bytes` null, `sha256` empty, `reason` (the record's `detail`) |
 | `remote_indexed` | `source`, `key`, `status`, `name` as the source's listing gives it, `bytes` null, `sha256` empty, `release` (the pinned release of the source: GWAS Catalog `r2026-09-13`) |

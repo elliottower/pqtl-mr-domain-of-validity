@@ -32,6 +32,17 @@ and these outcomes:
 
 The splicing step finds a liver sQTL signal at the sentinel and no eQTL signal (splicing_candidate).
 
+Two more GWAS Catalog study directories hold GWAS-SSF files with `standard_error` missing in every
+row, each carrying the SHARED signal at the sentinel, in the layouts of the deposits that have them:
+
+    GCST90000005            odds ratio with ci_lower and ci_upper (`#NA` standard error, the 21
+                            columns of GCST90475575 ...)                     -> or_ci_derived_se
+    GCST90000006            beta (a z-score, as their metadata states) and p, no confidence limits
+                            (`NA` standard error, the 9 columns of GCST90271612 ...) -> pvalue_coloc
+
+They are read by `uncertainty_mode_unit` (the deCODE unit with these two outcomes), which the dry run
+collects into a root of its own, validates (stage_b/validate.py) and analyzes.
+
 The deCODE assay also serves a second gene, SECOND_GENE (`second_gene_unit`): a unit of its own with
 the same sentinel, window and collected file. For that gene the eQTL Catalogue holds introns and no
 expression trait, and VEP reports no consequence, so its unit has the same colocalization, no VEP hit
@@ -49,6 +60,7 @@ The synthetic Ensembl answers an rsID it does not hold as rest.ensembl.org does:
 `{"error": "No variant found with ID '<rsID>'"}` on the VEP endpoint (stage_b/fetch.py cites both).
 """
 import gzip
+import hashlib
 import io
 import json
 import math
@@ -68,7 +80,7 @@ from stage_b import collect as collect_module
 from stage_b import fetch as fetch_module
 from stage_b import remote as remote_errors
 from stage_b.assemble import build_evidence, collect_unit_dir, regional_rows
-from stage_b.checkpoint import volume_collect_digest
+from stage_b.checkpoint import collect_entry, volume_collect_digest
 from stage_b.collect import collect_one, collect_tasks, purge_raw, read_record
 from stage_b.fetch import (SYNAPSE_RSID_MAPS, SYNAPSE_UKBPPP_EUR, Endpoints, RemoteSources, VolumeFetcher, gwas_catalog_dir,
                            gwas_catalog_study_dir)
@@ -76,6 +88,8 @@ from stage_b.schemas import (WINDOW_PRIMARY, CollectTask, HypothesisInput, Instr
                              RetryableSourceError, Sentinel, SourceAbsent, SourceFile, StageBError)
 from stage_b.status import error_of, status_report, volume_state
 from stage_b.units import unit_key
+from stage_b.validate import (apply_validation, gwas_catalog_records, in_scope, require_validation, result_sha256,
+                              validate_file, validation_report)
 
 SEED = 20261002
 N_VARIANTS, N_EUR, N_OTHER, SPACING = 240, 503, 20, 5_000
@@ -91,8 +105,14 @@ TAR_NAME = f"SYNTH_P00000_{OID}_v1_Synthetic.tar"
 MAP_NAME = "olink_rsid_map_mac5_info03_b0_7_chr1_patched_v2.tsv.gz"
 SHARED, GRCH37 = "FINNGEN_R12_SYN_SHARED", "ieu-b-9001"
 DISTINCT, FEW, NO_DIR, NO_FILE = "GCST90000001", "GCST90000002", "GCST90000003", "GCST90000004"
+OR_CI, PVALUE = "GCST90000005", "GCST90000006"      # GWAS-SSF files without a standard error
 OUTCOME_SOURCE = {SHARED: "finngen", GRCH37: "opengwas", DISTINCT: "gwas_catalog", FEW: "gwas_catalog",
-                  NO_DIR: "gwas_catalog", NO_FILE: "gwas_catalog"}
+                  NO_DIR: "gwas_catalog", NO_FILE: "gwas_catalog", OR_CI: "gwas_catalog", PVALUE: "gwas_catalog"}
+OR_CI_HEADER = ["chromosome", "base_pair_location", "effect_allele", "other_allele", "odds_ratio", "standard_error",
+                "effect_allele_frequency", "p_value", "rsid", "ci_upper", "ci_lower", "alt", "n", "case_af", "num_cases",
+                "control_af", "num_controls", "r2", "q_pval", "i2", "direction"]
+PVALUE_HEADER = ["chromosome", "base_pair_location", "effect_allele", "other_allele", "beta", "standard_error",
+                 "effect_allele_frequency", "p_value", "rs_id"]
 UNIT_OUTCOMES = {"decode": (SHARED, GRCH37, DISTINCT, FEW, NO_DIR, NO_FILE), "ukbppp": (SHARED, DISTINCT),
                  "interval": (SHARED,)}
 EXPECTED_STATE = {SHARED: "supportive", GRCH37: "supportive", DISTINCT: "inconclusive", FEW: "inconclusive",
@@ -202,6 +222,30 @@ def gwas_catalog_text(t: pd.DataFrame) -> str:
                    for r in t.itertuples()])
 
 
+def or_ci_text(t: pd.DataFrame) -> str:
+    """A GWAS-SSF odds-ratio file whose standard_error is `#NA` on every row: OR = exp(beta) and the
+    95% limits exp(beta -/+ 1.96 se), so the limits give back se."""
+    n = N_CASE + N_CONTROL
+    return _lines(OR_CI_HEADER, [[CHROM, r.pos, r.ea, r.oa, math.exp(r.beta), "#NA", r.eaf, r.p, r.rsid,
+                                  math.exp(r.beta + 1.96 * r.se), math.exp(r.beta - 1.96 * r.se), r.ea, n, r.eaf, N_CASE,
+                                  r.eaf, N_CONTROL, 0.9, 0.5, 0.0, "++"] for r in t.itertuples()])
+
+
+def pvalue_text(t: pd.DataFrame) -> str:
+    """A GWAS-SSF beta file whose standard_error is `NA` on every row, its beta a z-score."""
+    return _lines(PVALUE_HEADER, [[CHROM, r.pos, r.ea, r.oa, r.beta / r.se, "NA", r.eaf, r.p, r.rsid]
+                                  for r in t.itertuples()])
+
+
+def ssf_study_files(accession: str, text: str) -> dict[str, bytes]:
+    """A study directory's GWAS-SSF data file `<accession>.tsv.gz`, its -meta.yaml and md5sum.txt."""
+    name, data = f"{accession}.tsv.gz", _gz(text)
+    md5 = hashlib.md5(data, usedforsecurity=False).hexdigest()
+    meta = (f"gwas_id: {accession}\ngenome_assembly: GRCh38\ncoordinate_system: 1-based\ndata_file_name: {name}\n"
+            f"file_type: GWAS-SSF v1.0\ndata_file_md5sum: {md5}\nis_harmonised: false\n").encode()
+    return {name: data, f"{name}-meta.yaml": meta, "md5sum.txt": f"{md5}  {name}\n".encode()}
+
+
 def finngen_text(t: pd.DataFrame) -> str:
     return _lines(["#chrom", "pos", "ref", "alt", "rsids", "nearest_genes", "pval", "mlogp", "beta", "sebeta", "af_alt",
                    "af_alt_cases", "af_alt_controls"],
@@ -306,6 +350,11 @@ def build_world(remote: FakeRemote, work: Path, indexed: bool = True) -> World:
     remote.files[gwascat + whole] = _gz(gwas_catalog_text(distinct))
     remote.files[gwas_catalog_dir("/gwascat", NO_FILE)] = listing("readme.txt")
     remote.files[gwas_catalog_study_dir("/gwascat", NO_FILE)] = listing("harmonised/", "readme.txt")
+    for accession, text in ((OR_CI, or_ci_text(shared)), (PVALUE, pvalue_text(shared))):
+        study_dir = gwas_catalog_study_dir("/gwascat", accession)
+        files = ssf_study_files(accession, text)
+        remote.files[study_dir] = listing(*files)
+        remote.files.update({study_dir + n: d for n, d in files.items()})
 
     # JSON endpoints: Ensembl, OpenGWAS, GTEx
     index = {rs: i for i, rs in enumerate(meta["rsid"])}
@@ -389,6 +438,12 @@ def build_world(remote: FakeRemote, work: Path, indexed: bool = True) -> World:
     units = [unit("decode", "0_0", DECODE_KEY, "GRCh38", pqtl_listing=listed("decode"), smp_listing=listed("decode_smp")),
              unit("interval", SOMAMER, "prot-a-9001", "GRCh37"), unit("ukbppp", OID, OID, "GRCh38")]
     return World(remote=remote, units=units, endpoints=endpoints, folders=folders, annotation=annotation, excluded=excluded)
+
+
+def uncertainty_mode_unit(unit: InstrumentUnit) -> InstrumentUnit:
+    """`unit` with the two GWAS-SSF outcomes that publish no standard error, OR_CI and PVALUE, as its
+    outcomes."""
+    return unit.model_copy(update={"outcomes": _outcomes((OR_CI, PVALUE))})
 
 
 def second_gene_unit(unit: InstrumentUnit) -> InstrumentUnit:
@@ -701,6 +756,45 @@ def scenario(world: World, root: Path, analyze: Callable[[InstrumentUnit, Volume
         checks["checkpoint_of_the_old_bytes_is_refused_and_left_as_it_was"] = (
             events["changed_bytes"].get("error_class") == "StaleCheckpointError" and remote.log[mark:] == []
             and {p.name: p.read_bytes() for p in sorted((changed / "units" / unit_name).iterdir())} == held)
+        # 7d. outcome files without a standard error, in a root of their own: collected, validated (one uncertainty
+        #     mode per file, bound to its record and to the collect digest), then analyzed in that mode
+        modes_root, mode_unit = root / "uncertainty_modes", uncertainty_mode_unit(decode_unit)
+        for t in collect_tasks([mode_unit]):
+            collect_one(t, world.sources(modes_root / "cache", decode_token="folder-token-three"), modes_root, commit,
+                        checkpoint_bytes=4096)
+        catalog = [r for r in gwas_catalog_records(modes_root) if in_scope(r)]
+        validated = {r.key: validate_file(modes_root, r, commit) for r in catalog}
+        bound = {r.key: apply_validation(modes_root, r, validated[r.key], commit) for r in catalog}
+        report = validation_report(gwas_catalog_records(modes_root), validated)
+        events["uncertainty_modes"] = {k: {f: v.get(f) for f in ("uncertainty_mode", "passed", "reasons", "se_census",
+                                                                 "ci_p_check", "rejected")} for k, v in validated.items()}
+        events["uncertainty_mode_spawn_guard"] = _raised(lambda: require_validation(report, gwas_catalog_records(modes_root)))
+        mode_result = analyze(mode_unit, world.fetcher(modes_root, opengwas_token="opengwas-token-two"), modes_root / "units")
+        orci, pval = mode_result["outcomes"][OR_CI], mode_result["outcomes"][PVALUE]
+        entries = {k: collect_entry(CollectTask(source="gwas_catalog", key=k), r) for k, r in bound.items()}
+        checks["validation_chooses_or_ci_derived_se_and_pvalue_coloc_and_both_pass"] = (
+            {k: (v["uncertainty_mode"], v["passed"]) for k, v in validated.items()}
+            == {OR_CI: ("or_ci_derived_se", True), PVALUE: ("pvalue_coloc", True)})
+        checks["ci_versus_p_check_passes_on_every_checkable_row"] = (
+            validated[OR_CI]["ci_p_check"]["passed"] and validated[OR_CI]["ci_p_check"]["rows_disagree"] == 0
+            and validated[OR_CI]["ci_p_check"]["rows_checked"] == N_VARIANTS)
+        checks["the_mode_is_bound_to_the_record_and_enters_the_collect_digest"] = (
+            {k: e.get("uncertainty_mode") for k, e in entries.items()} == {OR_CI: "or_ci_derived_se", PVALUE: "pvalue_coloc"}
+            and all(e["validation_sha256"] == result_sha256(validated[k]) for k, e in entries.items())
+            and mode_result["collect_sha256"] == volume_collect_digest(modes_root, mode_unit))
+        checks["spawn_guard_accepts_the_bound_records"] = events["uncertainty_mode_spawn_guard"] == {}
+        checks["or_ci_outcome_colocalizes_in_its_mode_with_susie"] = (
+            orci.get("uncertainty_mode") == "or_ci_derived_se" and bool(orci["coloc_run"]) and orci["pp"][4] > 0.8
+            and orci.get("s15g_method") == "coloc.susie" and orci.get("genetic_direction") == 1)
+        checks["pvalue_outcome_colocalizes_in_its_mode_without_susie"] = (
+            pval.get("uncertainty_mode") == "pvalue_coloc" and bool(pval["coloc_run"]) and pval["pp"][4] > 0.8
+            and pval.get("s15g_method", "").startswith("coloc.abf") and pval.get("susie") is None
+            and "pvalue_coloc" in pval.get("susie_note", "") and pval.get("genetic_direction") == 1)
+        checks["pvalue_form_gives_the_posteriors_of_the_beta_form_on_the_same_signal"] = (
+            bool(orci["coloc_run"]) and bool(pval["coloc_run"])
+            and all(abs(a - b) < 1e-6 for a, b in zip(orci["pp"], pval["pp"])) and orci["nsnps"] == pval["nsnps"])
+        checks["both_outcomes_keep_every_variant_of_the_window"] = (
+            orci["coverage"]["n_shared"] == pval["coverage"]["n_shared"] == first_shared["coverage"]["n_shared"])
         # 8. every unit is finished: the whole files are deleted, the records and the extracts stay
         events["purge_before_units_finish"] = _raised(lambda: purge_raw(root / "empty", units, commit))
         extracts = {p: p.read_bytes() for p in sorted((root / "units").rglob("*.tsv.gz"))}

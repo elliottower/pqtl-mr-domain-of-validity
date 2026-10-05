@@ -16,6 +16,12 @@ after it (the image bakes PREREG.md and the sealed stage A files).
     #    pre-analysis validation of the GWAS Catalog files read without a harmonised copy (stage_b/validate.py):
     #    aggregate parser diagnostics, and a file failing a fixed rule made `unreadable`
     $B validate --run-token <token>      # writes inputs/stage_b/validation/outcome_validation_<utc>.json
+    #    a file made unreadable by a reader defect, after the reader is fixed: its collected record moved back
+    #    (refused unless the bytes match the recorded sha256; nothing deleted), then `validate` again
+    $B restore-validated --run-token <token> --accessions GCST... [--accessions-file <file>]
+    #    the classification of the last report (files by uncertainty mode, failed, error) against an expected one;
+    #    accessions and counts only, written to inputs/stage_b/validation/classification_check_<utc>.json
+    $B check-validation --expected <json> [--report inputs/stage_b/validation/outcome_validation_<utc>.json]
     # 3. analyze: one call per instrument unit; refused while a file has no collect record, or while the
     #    validation report is missing or does not cover the current GWAS Catalog collect records
     $B spawn --run-token <token>
@@ -80,6 +86,7 @@ from stage_b.launch import (authorize, check_plan_inputs, planned_tasks, private
 from stage_b.schemas import CollectRecord, InputContractError, InstrumentUnit
 from stage_b.status import error_of, status_report
 from stage_b.units import load_hypotheses
+from stage_b.validate import check_classification
 
 HERE = Path(__file__).resolve().parent
 EXP = HERE.parents[1]
@@ -94,8 +101,8 @@ LOG = HERE / "launch_log.jsonl"
 APP = "pqtl-v8-stage-b"
 VOLUME = "pqtl-v8-stage-b"
 STAGE_ROOT = "stage_b"     # the stage B root on the volume (modal_stage_b.ROOT without the mount point)
-FUNCTIONS = ("plan_remote", "collect_file", "validate_outcomes", "validate_outcome_file", "run_unit", "stage_state",
-             "purge_raw_files")
+FUNCTIONS = ("plan_remote", "collect_file", "validate_outcomes", "validate_outcome_file", "restore_validated_records",
+             "run_unit", "stage_state", "purge_raw_files")
 
 
 def utc_now() -> str:
@@ -162,6 +169,38 @@ def cmd_validate(a: argparse.Namespace) -> None:
     out.write_text(json.dumps(report, indent=1))
     print(f"{report['files_validated']} files validated: {report['passed']} passed, failed {report['failed']}, "
           f"errors {report['errors']}; unreadable at collect {report['unreadable_at_collect']}; full report: {out}")
+
+
+# Undo the validation's `unreadable` for accessions whose failure was a reader defect (stage_b/validate.py
+# `restorable`): refused, nothing moved, unless every file's bytes still match its recorded sha256. Run
+# `validate` afterwards. The guard is the first statement (tests/test_launch_guard.py).
+def cmd_restore_validated(a: argparse.Namespace) -> None:
+    commit = clean_commit(REPO)
+    authorize(PREREG, a.run_token, A_OUTPUT)
+    accessions = accession_list(a)
+    if not accessions:
+        raise InputContractError("restore-validated needs --accessions or --accessions-file")
+    out = modal.Function.from_name(APP, "restore_validated_records").remote(accessions, a.run_token)
+    log_entry({"what": "restore_validated", "repo_commit": commit, "accessions": accessions, **out, "utc": utc_now()})
+    print(f"{len(out['restored'])} records restored to collected: {[r['key'] for r in out['restored']]}; "
+          "run `validate` again before `spawn`")
+
+
+def cmd_check_validation(a: argparse.Namespace) -> None:
+    """The classification of a validation report written by `validate` (the newest unless --report)
+    against the expected one (--expected: class -> accessions, stage_b.validate.CLASSES); refuses on
+    any difference. Reads local files only."""
+    reports = sorted((WORK / "validation").glob("outcome_validation_*.json"))
+    report = a.report or (reports[-1] if reports else None)
+    if report is None:
+        raise InputContractError(f"no validation report under {WORK / 'validation'}; run `validate` first")
+    got = check_classification(json.loads(report.read_text()), json.loads(a.expected.read_text()))
+    out = WORK / "validation" / f"classification_check_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
+    out.write_text(json.dumps({"report": str(report), "report_sha256": sha256_file(report), "expected": str(a.expected),
+                               "expected_sha256": sha256_file(a.expected), **got, "utc": utc_now()}, indent=1))
+    print(f"counts {got['counts']}; expected {got['expected_counts']}; written to {out}")
+    if not got["agrees"]:
+        raise InputContractError(f"the validation report differs from the expected classification: {got['mismatches']}")
 
 
 def cmd_spawn(a: argparse.Namespace) -> None:
@@ -301,19 +340,26 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     token_help = "token of the PREREG.md entry 'RUN_START stage=B token=<token>'"
-    for name in ("plan", "collect", "validate", "spawn", "assemble"):
+    for name in ("plan", "collect", "validate", "restore-validated", "spawn", "assemble"):
         sub.add_parser(name).add_argument("--run-token", required=True, help=token_help)
     sub.choices["collect"].add_argument("--source", nargs="*", help="collect only these sources (e.g. decode)")
     sub.choices["collect"].add_argument("--accessions", nargs="*",
                                         help="collect only these GWAS Catalog accessions again, superseding an `absent` record")
-    sub.choices["collect"].add_argument("--accessions-file", type=Path,
-                                        help="a file of accessions, one per line (first tab-separated field), as --accessions")
+    sub.choices["restore-validated"].add_argument("--accessions", nargs="*",
+                                                  help="GWAS Catalog accessions made unreadable by a reader defect")
+    for name in ("collect", "restore-validated"):
+        sub.choices[name].add_argument("--accessions-file", type=Path,
+                                       help="a file of accessions, one per line (first tab-separated field), as --accessions")
     for name in ("hypotheses", "units-dir", "collect-dir", "st29"):
         sub.choices["assemble"].add_argument(f"--{name}", type=Path, required=True)
+    check = sub.add_parser("check-validation")
+    check.add_argument("--expected", type=Path, required=True, help="JSON: class -> accessions (stage_b.validate.CLASSES)")
+    check.add_argument("--report", type=Path, help="a report `validate` wrote; the newest when not given")
     sub.add_parser("status")
     sub.add_parser("purge")
     a = ap.parse_args()
-    {"plan": cmd_plan, "collect": cmd_collect, "validate": cmd_validate, "spawn": cmd_spawn, "status": cmd_status, "assemble": cmd_assemble,
+    {"plan": cmd_plan, "collect": cmd_collect, "validate": cmd_validate, "restore-validated": cmd_restore_validated,
+     "check-validation": cmd_check_validation, "spawn": cmd_spawn, "status": cmd_status, "assemble": cmd_assemble,
      "purge": cmd_purge}[a.cmd](a)
 
 

@@ -223,6 +223,11 @@ class CollectTask(_Row):
 
 OutcomeLayout = Literal["", "gwas_ssf", "author"]
 RsidRule = Literal["", "column", "variant_id", "ukbppp_map"]
+# How a GWAS Catalog whole file gives the uncertainty of its effect, chosen once per file by the
+# pre-analysis validation (stage_b/validate.py): its own standard error, the standard error of
+# ln(OR) derived from its 95% confidence limits, or coloc.abf's p-value form (p, MAF, N, s).
+UncertaintyMode = Literal["native_se", "or_ci_derived_se", "pvalue_coloc"]
+UNCERTAINTY_MODES: tuple[UncertaintyMode, ...] = ("native_se", "or_ci_derived_se", "pvalue_coloc")
 
 
 class CollectRecord(_Row):
@@ -236,7 +241,12 @@ class CollectRecord(_Row):
     read: `layout` (`gwas_ssf`, or `author` for a reviewed author format of
     stage_b/author_formats.py; empty for a harmonised file), the genome `build` its positions are
     on, `position_offset` (1 for a 0-based file, so positions are 1-based), the `rsid_rule` and the
-    sha256 of the `-meta.yaml` it was derived from (`meta_sha256`)."""
+    sha256 of the `-meta.yaml` it was derived from (`meta_sha256`).
+
+    A GWAS Catalog whole file that passed the pre-analysis validation (stage_b/validate.py) also
+    records its `uncertainty_mode`, bound to the sha256 of the header line it was chosen from
+    (`header_sha256`) and to the sha256 of the validation result that chose it (`validation_sha256`);
+    all three are empty before validation and for every other record."""
 
     status: Literal["collected", "absent", "unreadable", "remote_indexed"]
     source: CollectSource
@@ -256,6 +266,9 @@ class CollectRecord(_Row):
     position_offset: Literal[0, 1] = 0
     rsid_rule: RsidRule = ""
     meta_sha256: str = ""
+    uncertainty_mode: UncertaintyMode | Literal[""] = ""
+    header_sha256: str = ""
+    validation_sha256: str = ""
 
 
 # ---- outputs ----------------------------------------------------------------------------------
@@ -313,4 +326,5 @@ class RegionalManifestRow(_Row):
 
 REGIONAL_MANIFEST_COLUMNS = list(RegionalManifestRow.model_fields)
 COLLECTED_FILES_COLUMNS = ["source", "key", "status", "name", "bytes", "sha256", "md5", "etag", "last_modified",
-                           "source_url", "detail", "utc", "layout", "build", "position_offset", "rsid_rule", "meta_sha256"]
+                           "source_url", "detail", "utc", "layout", "build", "position_offset", "rsid_rule", "meta_sha256",
+                           "uncertainty_mode", "header_sha256", "validation_sha256"]

@@ -80,9 +80,10 @@ class StubBackend:
 
 
 class FakeFetcher:
-    def __init__(self, fail_outcomes=(), qtl_error: Exception | None = None):
+    def __init__(self, fail_outcomes=(), qtl_error: Exception | None = None, modes: dict[str, str] | None = None):
         self.fail_outcomes = set(fail_outcomes)
         self.qtl_error = qtl_error
+        self.modes = modes or {}
         self.calls: dict[str, int] = {}
 
     def _count(self, k):
@@ -103,6 +104,9 @@ class FakeFetcher:
 
     def outcome_build(self, spec):
         return OUTCOME_BUILD[spec.source]
+
+    def outcome_mode(self, spec):
+        return self.modes.get(spec.accession, "native_se")
 
     def ld_panel(self, chrom, center, half_width):
         self._count("ld")
@@ -198,6 +202,32 @@ def test_primary_window_is_500kb_and_s15c_is_1mb(tmp_path):
     assert sorted(by_id["primary"].d1.snp) == sorted(inside)
     assert len(inside) == 111
     assert len(by_id["s15c"].d1.snp) == 200
+
+
+def test_a_pvalue_coloc_outcome_is_kept_without_an_se_sent_in_the_pvalue_form_and_s15g_falls_back_to_abf(tmp_path):
+    class NoSe(FakeFetcher):
+        def outcome_region(self, spec, chrom, center, half_width):
+            t = super().outcome_region(spec, chrom, center, half_width)
+            t["se"] = float("nan")                                   # the reader gives no SE in pvalue_coloc
+            t["eaf"] = 0.8                                           # the outcome's own frequency, not the pQTL's 0.3
+            return t
+
+    backend = StubBackend(H4)
+    res = run(unit(("F_ok",)), NoSe(modes={"F_ok": "pvalue_coloc"}), backend, DirStore(tmp_path / "u"))
+    rec = res["outcomes"]["F_ok"]
+    assert (rec["uncertainty_mode"], rec["coloc_run"], rec["coverage"]["n_shared"]) == ("pvalue_coloc", True, N)
+    assert rec["harmonization"]["missing_effect"] == 0                 # no row dropped for its missing SE
+    sent = {t.id: t.model_dump(exclude_none=True) for t in backend.tasks}
+    for tid in ("primary", "s15a", "s15b", "s15c", "s16"):
+        d2 = sent[tid]["d2"]
+        assert "beta" not in d2 and "varbeta" not in d2 and d2["pvalues"] == [1e-3] * N
+        assert d2["MAF"] == pytest.approx([0.2] * N) and (d2["type"], d2["N"], d2["s"]) == ("cc", 10000.0, pytest.approx(0.1))
+        assert "beta" in sent[tid]["d1"] and "varbeta" in sent[tid]["d1"]          # the pQTL side keeps the beta form
+    assert "s15g" not in sent and rec["susie"] is None and "pvalue_coloc" in rec["susie_note"]
+    assert rec["s15g_pp_h4"] == 0.9 and rec["s15g_method"].startswith("coloc.abf")
+    assert rec["genetic_direction"] == 1                                # beta still gives the direction
+    native = run(unit(("F_ok",)), FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "native"))["outcomes"]["F_ok"]
+    assert native["uncertainty_mode"] == "native_se" and native["s15g_method"] == "coloc.susie"
 
 
 def test_s15g_falls_back_to_abf_without_two_credible_sets(tmp_path):

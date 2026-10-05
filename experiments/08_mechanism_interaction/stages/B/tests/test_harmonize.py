@@ -97,3 +97,17 @@ def test_harmonize_recovers_the_true_outcome_sign_under_any_reported_coding():
     got = dict(zip(h["rsid"], h["beta_o"]))
     assert all(got[k] == pytest.approx(v) for k, v in truth.items())
     assert h["eaf_o"].to_numpy() == pytest.approx(h["eaf_p"].to_numpy())
+
+
+def test_rows_without_an_se_are_kept_only_where_the_outcome_mode_uses_no_se():
+    p = table([{"rsid": f"rs{i}", "pos": i, "ea": "A", "oa": "G", "eaf": 0.3} for i in range(5)])
+    o = table([{"rsid": "rs0", "ea": "A", "oa": "G", "se": float("nan")},                 # no SE: kept in pvalue_coloc only
+               {"rsid": "rs1", "ea": "G", "oa": "A", "se": float("nan"), "eaf": 0.8},     # flipped, frequency aligned
+               {"rsid": "rs2", "ea": "A", "oa": "G", "se": float("nan"), "p": 0.0},       # p = 0: never in the p-value form
+               {"rsid": "rs3", "ea": "A", "oa": "G", "se": float("nan"), "eaf": float("nan")},   # no frequency for the MAF
+               {"rsid": "rs4", "ea": "A", "oa": "G", "beta": float("nan")}])               # no direction
+    native, counts_native = harmonize(p, o)
+    assert list(native["rsid"]) == [] and counts_native["missing_effect"] == 5
+    pvalue, counts_pvalue = harmonize(p, o, outcome_se=False)
+    assert list(pvalue["rsid"]) == ["rs0", "rs1"] and counts_pvalue["missing_effect"] == 3
+    assert pvalue["se_o"].isna().all() and list(pvalue["beta_o"]) == [0.1, -0.1] and list(pvalue["eaf_o"]) == pytest.approx([0.3, 0.2])

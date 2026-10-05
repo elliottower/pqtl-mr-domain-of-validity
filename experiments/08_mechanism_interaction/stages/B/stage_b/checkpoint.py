@@ -21,7 +21,10 @@ entry per whole file the unit reads (`collect.collect_tasks` of the unit), sorte
 
     collected       source, key, status, name, bytes, sha256 of the file on the volume; for a GWAS
                     Catalog file without a harmonised copy (a record with a `layout`), also layout,
-                    build, position_offset, rsid_rule and meta_sha256, which say how it is read
+                    build, position_offset, rsid_rule and meta_sha256, which say how it is read; for a
+                    GWAS Catalog file the pre-analysis validation passed, also uncertainty_mode,
+                    header_sha256 and validation_sha256, so a unit's fingerprint changes with the
+                    mode its outcome is colocalized in (stage_b/validate.py)
     absent          source, key, status, and the name the pinned listing gives the file (or "")
     unreadable      source, key, status, name, bytes, sha256 and the reason (`detail`), which a
                     fixed rule of stage_b/outcome_files.py or stage_b/author_formats.py gave; name
@@ -159,6 +162,8 @@ def collect_entry(task: CollectTask, record: CollectRecord) -> dict:
         entry = {**entry, "name": record.name, "bytes": record.bytes, "sha256": record.sha256}
         if record.layout:
             entry.update({k: getattr(record, k) for k in ("layout", "build", "position_offset", "rsid_rule", "meta_sha256")})
+        if record.uncertainty_mode:
+            entry.update({k: getattr(record, k) for k in ("uncertainty_mode", "header_sha256", "validation_sha256")})
         return entry
     if record.status == "absent":
         return {**entry, "name": task.name, "bytes": None, "sha256": ""}

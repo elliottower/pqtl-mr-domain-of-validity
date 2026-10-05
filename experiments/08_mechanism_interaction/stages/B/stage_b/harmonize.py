@@ -74,11 +74,23 @@ def alignment_sign(ea_p: str, oa_p: str, eaf_p: float, ea_o: str, oa_o: str, eaf
     return "allele_mismatch"
 
 
-def harmonize(pqtl: pd.DataFrame, outcome: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int]]:
+def _outcome_usable(r, outcome_se: bool) -> bool:
+    """The outcome side of a merged row carries what its colocalization reads: a finite beta and a
+    positive finite SE where the mode uses an SE; where it does not (pvalue_coloc), a finite beta
+    (direction only), p in (0, 1] and a frequency in (0, 1), and no SE is required."""
+    if not np.isfinite(r.beta_o):
+        return False
+    if outcome_se:
+        return bool(np.isfinite(r.se_o) and r.se_o > 0)
+    return bool(0 < r.p_o <= 1 and 0 < r.eaf_o < 1)
+
+
+def harmonize(pqtl: pd.DataFrame, outcome: pd.DataFrame, outcome_se: bool = True) -> tuple[pd.DataFrame, dict[str, int]]:
     """Join two canonical tables by rsID and align the outcome to the pQTL effect allele.
     Returns the harmonized table (HARMONIZED_COLUMNS; position and alleles from the pQTL file)
     and a count per drop reason. An rsID that still maps to more than one aligned pair is
-    dropped entirely."""
+    dropped entirely. `outcome_se` is False for an outcome read in pvalue_coloc, whose rows carry
+    no SE and are not dropped for it (`_outcome_usable`)."""
     counts = {"pqtl_no_rsid": int((pqtl["rsid"] == "").sum()),
               "outcome_no_rsid": int((outcome["rsid"] == "").sum()),
               "allele_mismatch": 0, "palindromic_ambiguous_maf": 0, "palindromic_no_frequency": 0,
@@ -88,8 +100,7 @@ def harmonize(pqtl: pd.DataFrame, outcome: pd.DataFrame) -> tuple[pd.DataFrame, 
     m = p.merge(o, on="rsid", suffixes=("_p", "_o"))
     rows = []
     for r in m.itertuples(index=False):
-        if not (np.isfinite(r.beta_p) and np.isfinite(r.se_p) and np.isfinite(r.beta_o) and np.isfinite(r.se_o)
-                and r.se_p > 0 and r.se_o > 0):
+        if not (np.isfinite(r.beta_p) and np.isfinite(r.se_p) and r.se_p > 0 and _outcome_usable(r, outcome_se)):
             counts["missing_effect"] += 1
             continue
         s = alignment_sign(r.ea_p, r.oa_p, r.eaf_p, r.ea_o, r.oa_o, r.eaf_o)

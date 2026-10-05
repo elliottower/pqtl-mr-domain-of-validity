@@ -67,7 +67,8 @@ from stage_b.parsers import (decode_to_canonical, filter_decode, filter_decode_a
                              ukbppp_to_canonical)
 from stage_b.remote import ABSENT_STATUS, CORRUPT, attempt, http, http_json, status_kind
 from stage_b.schemas import (OUTCOME_BUILD, Build, CollectError, CollectRecord, CollectTask, InstrumentUnit,
-                             LDReferenceError, OutcomeSpec, RetryableSourceError, Sentinel, SourceAbsent, SourceUnreadable)
+                             LDReferenceError, OutcomeSpec, RetryableSourceError, Sentinel, SourceAbsent, SourceUnreadable,
+                             UncertaintyMode)
 
 EQTL_CATALOGUE_ENABLED = True
 
@@ -572,14 +573,15 @@ class VolumeFetcher:
                 return filter_gwas_catalog(tabix_rows(record.source_url, chrom, lo, hi, Path(tmp), what), header, chrom,
                                            center, half_width)
         path = collected_file(self.root, record)
+        mode = record.uncertainty_mode or "native_se"
 
         def read() -> pd.DataFrame:
             with _open_text(path) as fh:
                 header, rows = _header_and_rows(fh, "\t", what)
                 if record.layout == "gwas_ssf":
-                    return filter_gwas_ssf(rows, header, chrom, center, half_width, record.position_offset, what)
+                    return filter_gwas_ssf(rows, header, chrom, center, half_width, record.position_offset, what, mode)
                 if record.layout == "author":
-                    return filter_author(AUTHOR_FORMATS[spec.accession], rows, header, chrom, center, half_width, what)
+                    return filter_author(AUTHOR_FORMATS[spec.accession], rows, header, chrom, center, half_width, what, mode)
                 return filter_gwas_catalog(rows, header, chrom, center, half_width)
         df = _local(read, what)
         return self._map_rsids(df, chrom, record) if record.rsid_rule == "ukbppp_map" else df
@@ -602,6 +604,17 @@ class VolumeFetcher:
             if record.status == "collected" and record.build:
                 return record.build
         return OUTCOME_BUILD[spec.source]
+
+    def outcome_mode(self, spec: OutcomeSpec) -> UncertaintyMode:
+        """The uncertainty mode an outcome is colocalized in: the mode the pre-analysis validation
+        wrote to a collected GWAS Catalog file's record, native_se for every other outcome (FinnGen,
+        OpenGWAS, a file queried by region) and for a record the validation has not reached, which
+        `spawn` refuses (validate.require_validation)."""
+        if spec.source == "gwas_catalog":
+            record = read_record(self.root, "gwas_catalog", spec.accession)
+            if record.status == "collected" and record.uncertainty_mode:
+                return record.uncertainty_mode
+        return "native_se"
 
     # ---- 1000 Genomes EUR ------------------------------------------------------------------------
     def _eur_samples(self) -> Path:

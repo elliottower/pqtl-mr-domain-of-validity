@@ -21,6 +21,13 @@ directory that holds files under another fingerprint or under none.
 
 A source that keeps failing is never turned into "unavailable": no step counts failures, and no
 code path writes an unavailable record, a result or a collect record after any number of them.
+
+Each outcome is colocalized in the uncertainty mode its collect record names (`Fetcher.outcome_mode`,
+schemas.UncertaintyMode; native_se for every source but a GWAS Catalog file the validation gave
+another mode). In pvalue_coloc, harmonization keeps rows without an SE, the outcome dataset is
+coloc.abf's p-value form (coloc_backend.pvalue_dataset), beta gives the direction only, and S15g is
+not run with coloc.susie, which takes beta and varbeta only: its PP.H4 is the primary coloc.abf
+value, with the reason in `susie_note`, as where susie is not run for want of LD.
 """
 import gzip
 import hashlib
@@ -44,7 +51,7 @@ from stage_b.ld import aligned_ld, proxies
 from stage_b.parsers import restrict_window
 from stage_b.schemas import (PRIMARY_P1, PRIMARY_P2, PRIMARY_P12, S15A_P12, S15B_P12, VARIANT_COLUMNS,
                              WINDOW_PRIMARY, WINDOW_WIDE, Build, ColocBackendError, InstrumentUnit, LDReferenceError,
-                             OutcomeSpec, Sentinel, SourceAbsent, StaleCheckpointError)
+                             OutcomeSpec, Sentinel, SourceAbsent, StaleCheckpointError, UncertaintyMode)
 
 SOURCE_BUILD: dict[str, Build] = {"ukbppp": "GRCh38", "decode": "GRCh38", "interval": "GRCh37"}
 
@@ -54,6 +61,7 @@ class Fetcher(Protocol):
     def pqtl_region(self, unit: InstrumentUnit, chrom: str, center: int, half_width: int, smp: bool = False) -> pd.DataFrame: ...
     def outcome_region(self, spec: OutcomeSpec, chrom: str, center: int, half_width: int) -> pd.DataFrame: ...
     def outcome_build(self, spec: OutcomeSpec) -> Build: ...
+    def outcome_mode(self, spec: OutcomeSpec) -> UncertaintyMode: ...
     def ld_panel(self, chrom: str, center_grch38: int, half_width: int) -> tuple[pd.DataFrame, np.ndarray]: ...
     def vep(self, rsids: list[str], build: Build) -> list[dict]: ...
     def qtl_regions(self, gene_ensembl: str, chrom: str, center_grch38: int, half_width: int) -> dict[str, dict[str, pd.DataFrame]]: ...
@@ -165,34 +173,41 @@ def _region_step(store: DirStore, name: str, fetch: Callable[[], pd.DataFrame], 
     return store.json(meta_name)
 
 
+PVALUE_COLOC_SUSIE_NOTE = ("susie not run: the outcome file gives no standard error (pvalue_coloc), and coloc.susie "
+                           "takes beta and varbeta only")
+
+
 def colocalize_pair(pqtl_wide: pd.DataFrame, outcome_wide: pd.DataFrame, sentinel: Sentinel, outcome_center: int,
                     spec: OutcomeSpec, ld_meta: pd.DataFrame, dosage: np.ndarray, sentinel_proxies: set[str],
-                    backend: ColocBackend) -> dict:
-    """Primary coloc.abf on ±500 kb and the S15a-c, S15g variants for one instrument x outcome."""
+                    backend: ColocBackend, mode: UncertaintyMode) -> dict:
+    """Primary coloc.abf on ±500 kb and the S15a-c, S15g variants for one instrument x outcome, the
+    outcome read in its uncertainty `mode` (module docstring)."""
+    outcome_se = mode != "pvalue_coloc"
     p500 = restrict_window(pqtl_wide, sentinel.chrom, sentinel.pos, WINDOW_PRIMARY)
     o500 = restrict_window(outcome_wide, sentinel.chrom, outcome_center, WINDOW_PRIMARY)
-    h, counts = harmonize(p500, o500)
+    h, counts = harmonize(p500, o500, outcome_se)
     cov = coverage(n_variants(p500), n_variants(o500), h["rsid"], sentinel.rsid, sentinel_proxies)
-    rec = {"accession": spec.accession, "harmonization": counts, "coverage": cov,
+    rec = {"accession": spec.accession, "uncertainty_mode": mode, "harmonization": counts, "coverage": cov,
            "n_pqtl_window": n_variants(p500), "n_outcome_window": n_variants(o500),
            "s17_sentinel_p": sentinel_outcome_p(outcome_wide, sentinel.rsid)}
     reason = not_run_reason(True, True, len(h))
     if reason:
         return {**rec, "coloc_run": False, "not_run_reason": reason}
-    d2 = outcome_dataset(h, spec.n_case, spec.n_control)
+    d2 = outcome_dataset(h, spec.n_case, spec.n_control, mode)
     tasks = [_abf("primary", h, d2, PRIMARY_P12), _abf("s15a", h, d2, S15A_P12), _abf("s15b", h, d2, S15B_P12)]
-    h1m, _ = harmonize(pqtl_wide, outcome_wide)
+    h1m, _ = harmonize(pqtl_wide, outcome_wide, outcome_se)
     s15c_run = not not_run_reason(True, True, len(h1m))
     if s15c_run:
-        tasks.append(_abf("s15c", h1m, outcome_dataset(h1m, spec.n_case, spec.n_control), PRIMARY_P12))
-    susie_note = ""
-    try:
-        hs, ld = aligned_ld(h, ld_meta, dosage)
-        tasks.append(ColocTask(id="s15g", method="susie", p1=PRIMARY_P1, p2=PRIMARY_P2, p12=PRIMARY_P12,
-                               d1=pqtl_dataset(hs), d2=outcome_dataset(hs, spec.n_case, spec.n_control),
-                               LD=ld.tolist()))
-    except LDReferenceError as e:
-        susie_note = f"susie not run: {e}"
+        tasks.append(_abf("s15c", h1m, outcome_dataset(h1m, spec.n_case, spec.n_control, mode), PRIMARY_P12))
+    susie_note = "" if outcome_se else PVALUE_COLOC_SUSIE_NOTE
+    if outcome_se:
+        try:
+            hs, ld = aligned_ld(h, ld_meta, dosage)
+            tasks.append(ColocTask(id="s15g", method="susie", p1=PRIMARY_P1, p2=PRIMARY_P2, p12=PRIMARY_P12,
+                                   d1=pqtl_dataset(hs), d2=outcome_dataset(hs, spec.n_case, spec.n_control, mode),
+                                   LD=ld.tolist()))
+        except LDReferenceError as e:
+            susie_note = f"susie not run: {e}"
     res = backend.run(tasks)
     prim = res["primary"]
     if not isinstance(prim, AbfResult):
@@ -288,6 +303,7 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
 
     outcomes = {}
     builds = {spec.accession: fetcher.outcome_build(spec) for spec in unit.outcomes}
+    modes = {spec.accession: fetcher.outcome_mode(spec) for spec in unit.outcomes}
     for spec in unit.outcomes:
         tag = safe(spec.accession)
         center = pos.get(builds[spec.accession])
@@ -304,7 +320,7 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
         cname = f"coloc__{tag}.json"
         if not store.has(cname):
             store.put_json(cname, colocalize_pair(pqtl, store.table(f"outcome__{tag}.tsv.gz"), s, center, spec,
-                                                  ld_meta, dosage, sent_prox, backend))
+                                                  ld_meta, dosage, sent_prox, backend, modes[spec.accession]))
         outcomes[spec.accession] = store.json(cname)
 
     vep = {}
@@ -343,11 +359,13 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
                 smp = restrict_window(store.table("pqtl_smp.tsv.gz"), s.chrom, s.pos, WINDOW_PRIMARY)
                 o500 = restrict_window(store.table(f"outcome__{tag}.tsv.gz"), s.chrom,
                                        pos[builds[spec.accession]], WINDOW_PRIMARY)
-                h, _ = harmonize(smp, o500)
+                mode = modes[spec.accession]
+                h, _ = harmonize(smp, o500, mode != "pvalue_coloc")
                 if not_run_reason(True, True, len(h)):
                     store.put_json(name, {"coloc_run": False, "n_shared": int(len(h))})
                 else:
-                    r = backend.run([_abf("s16", h, outcome_dataset(h, spec.n_case, spec.n_control), PRIMARY_P12)])["s16"]
+                    r = backend.run([_abf("s16", h, outcome_dataset(h, spec.n_case, spec.n_control, mode),
+                                          PRIMARY_P12)])["s16"]
                     lead, gd = genetic_direction(r, h, spec.risk_coded)
                     store.put_json(name, {"coloc_run": True, "n_shared": int(len(h)), "pp_h4": r.pp[4],
                                           "lead_variant": lead, "genetic_direction": gd})

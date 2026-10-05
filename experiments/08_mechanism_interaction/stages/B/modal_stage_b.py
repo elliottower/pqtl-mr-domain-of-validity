@@ -70,8 +70,14 @@ reads every collected GWAS Catalog whole file (remote-indexed files are queried 
 validated) through the analysis reader, one
 `validate_outcome_file` call per file, and writes /vol/stage_b/validation/outcome_validation.json
 (aggregate parser diagnostics only; the previous report moved to validation/superseded/ first). A
-file that fails a rule fixed in stage_b/validate.py is made `unreadable`:
+file that fails a rule fixed in stage_b/validate.py is made `unreadable`; a file that passes has
+its record bound to the uncertainty mode the validation chose for it (native_se, or_ci_derived_se,
+pvalue_coloc):
     ... launch_stage_b.py validate --run-token <token>
+A file made `unreadable` for its standard error alone has its `collected` record moved back
+(`restore_validated_records`; refused unless its bytes match the recorded sha256 and its result
+failed for that reason only; nothing deleted), and is validated again:
+    ... launch_stage_b.py restore-validated --run-token <token> --accessions-file <file> ;  validate --run-token <token>
 
 Wiring probe and dry run (no study data; allowed before the run is logged). Both run in the run
 image with the volumes and the secret of the real-run functions, so a start of either is a
@@ -225,7 +231,7 @@ with image.imports():
     from stage_b.status import marked, volume_state
     from stage_b.synapse_source import SynapseSource
     from stage_b.validate import (REPORT_NAME, VALIDATION_DIR, apply_validation, gwas_catalog_records, in_scope,
-                                  validate_file, validation_report)
+                                  restorable, restore_validated, validate_file, validation_report)
     from synthetic_unit import build_world, scenario
 
 
@@ -313,6 +319,20 @@ def validate_outcomes(run_token: str) -> dict:
     write_report(ROOT / VALIDATION_DIR / REPORT_NAME, report)
     vol.commit()
     return report
+
+
+# Undo the validation's `unreadable` for files whose failure was a reader defect (stage_b/validate.py
+# `restorable`, `restore_validated`). Every key is checked, its bytes against the recorded sha256, before
+# anything is moved; one refusal moves nothing. Then run `validate` again. The guard stays first.
+@app.function(**RUN_CONTAINER, timeout=3600)
+def restore_validated_records(keys: list[str], run_token: str) -> dict:
+    authorize(PREREG_IMAGE, run_token, A_IMAGE)
+    run_commit(None)
+    vol.reload()
+    plans = [restorable(ROOT, key) for key in keys]
+    restored = [restore_validated(ROOT, plan, vol.commit) for plan in plans]
+    vol.commit()
+    return {"restored": restored}
 
 
 @app.function(**RUN_CONTAINER, timeout=24 * 3600, retries=3, max_containers=ANALYZE_CONTAINERS)
