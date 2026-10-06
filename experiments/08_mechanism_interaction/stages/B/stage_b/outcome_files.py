@@ -914,11 +914,15 @@ def map_rsids(rows: Iterable[list[str]], header: list[str], build: str, position
     return out
 
 
+def map_rsid(mapping: Mapping[tuple[int, frozenset], set[str]], pos: int, a: str, b: str) -> str:
+    """The one rsID `mapping` (map_rsids) gives at `pos` for the unordered allele pair {a, b}; "" when it
+    gives none or more than one."""
+    found = mapping.get((int(pos), frozenset((a, b))), set())
+    return next(iter(found)) if len(found) == 1 else ""
+
+
 def attach_map_rsids(df: pd.DataFrame, mapping: Mapping[tuple[int, frozenset], set[str]]) -> pd.DataFrame:
     """Each row's rsID from the map: the one rsID at its position with its two alleles; else ""."""
-    def one(pos: int, ea: str, oa: str) -> str:
-        found = mapping.get((int(pos), frozenset((ea, oa))), set())
-        return next(iter(found)) if len(found) == 1 else ""
     out = df.copy()
-    out["rsid"] = [one(p, a, b) for p, a, b in zip(df["pos"], df["ea"], df["oa"])]
+    out["rsid"] = [map_rsid(mapping, p, a, b) for p, a, b in zip(df["pos"], df["ea"], df["oa"])]
     return out

@@ -61,7 +61,9 @@ A unit checkpoint is resumed only in a directory bound to this run's fingerprint
 container, the stage_b/ code digest, the frozen plan hash, the versions of Python, the Python
 packages, R, coloc, susieR, jsonlite, bcftools/htslib and tabix read in the container at the start
 of the call, and the collect digest: the sha256 over the collect records of the unit's whole files,
-each with the size and sha256 of the bytes on the volume); any other directory raises. Pinned: R 4.4.3 (rocker/r-ver, dated CRAN snapshot for
+each with the size and sha256 of the bytes on the volume); any other directory raises. After a code fix
+changes that fingerprint, `supersede_stale_units` (launcher `supersede-units`) moves the stale directories
+of unfinished units, with their error markers, under /vol/stage_b/superseded/ and deletes nothing. Pinned: R 4.4.3 (rocker/r-ver, dated CRAN snapshot for
 transitive packages), coloc 5.2.3, susieR 0.12.35, jsonlite 2.0.0, htslib/bcftools 1.21, and the
 Python wheels below.
 
@@ -93,8 +95,11 @@ guard, the mounted volumes (top level; the deCODE annotation files and the table
 size against their pins and by header only), the tool versions against the pins, which names the
 secret sets, whether Synapse and OpenGWAS accept their credentials, whether Synapse's file-handle
 service answers as stage_b/synapse_source.py expects (on an rsID map; the link is not followed),
-and whether tabix reads a remote header. It never calls `authorize`, makes no request to deCODE and
-opens no regional file. The report is printed and written to /vol/probe/probe.json on
+whether tabix reads a remote header, and whether the 1000 Genomes LD panel can be matched by rsID: on
+a 20 kb region of chromosome 22 (a few hundred records, genotypes only) the share of records whose
+ID column holds an rsID, and `ld_panel` run on it, which annotates the records from the collected
+chr22 UKB-PPP rsID map and applies its threshold check (stage_b/ld.py). It never calls `authorize`,
+makes no request to deCODE and opens no association file. The report is printed and written to /vol/probe/probe.json on
 pqtl-v8-stage-b, the previous one moved to /vol/probe/superseded/ first. `dry_run` serves the
 synthetic sources of synthetic_unit.py from a server inside the container (fake_remote.py) and runs
 the real collect and analyze code against it under /vol/dry_run/<utc>/, with faults injected:
@@ -225,7 +230,7 @@ with image.imports():
     from stage_b.fetch import (DECODE_FILE_URL, ENSEMBL_REST, EQTLCAT_PATHS, GWASCAT_FTP, KG_PANEL, KG_VCF, OPENGWAS_API,
                                SYNAPSE_RSID_MAPS, SYNAPSE_UKBPPP_EUR, Endpoints, RemoteSources, VolumeFetcher, https_path)
     from stage_b.launch import A_FILES, authorize, sealed_stage_b
-    from stage_b.pipeline import DirStore, process_unit, reset_unavailable
+    from stage_b.pipeline import DirStore, process_unit, reset_unavailable, supersede_units
     from stage_b.plan import PLAN_TABLES, make_plan, pinned_tables
     from stage_b.schemas import CollectTask, InstrumentUnit, StageBError
     from stage_b.sentinels import DECODE_ST02, INTERVAL_ST4, UKBPPP_ST9, sheet_header
@@ -350,6 +355,24 @@ def run_unit(unit_json: str, run_token: str) -> dict:
     return {"unit_key": unit.unit_key, "pqtl_available": result["pqtl_available"], "outcomes": len(result["outcomes"])}
 
 
+# Archive the stale directories of unfinished units (stage_b.pipeline.supersede_units) after a code fix
+# changed their fingerprint: each unit's fingerprint is computed here as `checkpointed_unit` computes it,
+# a directory bound to another one is moved to /stage_b/superseded/units/<utc>/ with its error marker, and
+# nothing is deleted. Refused, nothing moved, if any unit given holds result.json. The guard stays first.
+@app.function(**RUN_CONTAINER, timeout=3600)
+def supersede_stale_units(unit_jsons: list[str], run_token: str) -> dict:
+    authorize(PREREG_IMAGE, run_token, A_IMAGE)
+    run_commit(None)
+    vol.reload()
+    units = [InstrumentUnit.model_validate_json(line) for line in unit_jsons]
+    pins, tools, code = verified_source_pins(INPUTS_MANIFEST_IMAGE, EXP_INPUTS), tool_versions(), package_sha256(PACKAGE_IMAGE)
+    current = {u.unit_key: unit_fingerprint(u, pins, code, PLAN_SHA256, tools, volume_collect_digest(ROOT, u)) for u in units}
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    out = supersede_units(ROOT, current, stamp, vol.commit)
+    vol.commit()
+    return {**out, "stamp": stamp, "code_sha256": code}
+
+
 @app.function(timeout=600, volumes={"/vol": vol})
 def reset_unit(unit_key: str) -> list[str]:
     vol.reload()
@@ -435,6 +458,34 @@ def _remote_header(url: str) -> dict:
             "stderr": res.stderr[-300:]}
 
 
+PROBE_LD_CHROM, PROBE_LD_CENTER, PROBE_LD_HALF = "22", 30_000_000, 10_000   # a few hundred records of the LD panel
+
+
+def _ld_panel_rsids() -> dict:
+    """The registered 1000 Genomes panel on a 20 kb region of chromosome 22 (genotypes, no association
+    statistic): the share of its records whose ID column holds an rsID, and the records `ld_panel` keeps
+    after annotating them from the collected UKB-PPP rsID map of the chromosome (stage_b/ld.py), with
+    its threshold check. Aggregate counts only."""
+    lo, hi = PROBE_LD_CENTER - PROBE_LD_HALF, PROBE_LD_CENTER + PROBE_LD_HALF
+    url = KG_VCF.format(chrom=PROBE_LD_CHROM)
+    ids: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for name in (PROBE_LD_CHROM, f"chr{PROBE_LD_CHROM}"):
+            cmd = f"bcftools view -G -r {name}:{lo}-{hi} -m2 -M2 -Ou '{url}' | bcftools query -f '%ID\\n'"
+            res = subprocess.run(["bash", "-o", "pipefail", "-c", cmd], cwd=tmp, capture_output=True, text=True, timeout=1800,
+                                 check=True)
+            ids = res.stdout.splitlines()
+            if ids:
+                break
+    fetcher = VolumeFetcher(ROOT, os.environ.get("OPENGWAS", ""), DECODE_INPUTS / "assocvariants.annotated.txt.gz",
+                            DECODE_INPUTS / "assocvariants.excluded.txt.gz", endpoints())
+    meta, dosage = fetcher.ld_panel(PROBE_LD_CHROM, PROBE_LD_CENTER, PROBE_LD_HALF)
+    return {"region": f"{PROBE_LD_CHROM}:{lo}-{hi}", "records": len(ids),
+            "id_column_rsid_fraction": sum(i.startswith("rs") for i in ids) / max(len(ids), 1),
+            "kept_with_a_map_rsid": int(len(meta)), "kept_fraction": len(meta) / max(len(ids), 1),
+            "eur_samples": dosage.shape[1]}
+
+
 def _credentials() -> dict:
     """Whether Synapse and OpenGWAS accept their credentials, and whether Synapse's file-handle
     service returns what stage_b/synapse_source.py reads, asked for one rsID map (a position-to-rsID
@@ -487,8 +538,8 @@ def _plan_tables() -> dict:
 @app.function(**RUN_CONTAINER, timeout=1800)
 def probe() -> dict:
     """WIRING ONLY, in the container configuration of the real-run functions: imports, baked files,
-    mounted volumes, tool versions, credentials. Reads no regional statistics, makes no request to
-    deCODE and never calls `authorize`."""
+    mounted volumes, tool versions, credentials, the LD panel's rsID annotation. Reads no association
+    statistics, makes no request to deCODE and never calls `authorize`."""
     vol.reload()
     pinned_bytes = {f["path"]: f["bytes"] for f in json.loads(INPUTS_MANIFEST_IMAGE.read_text())["files"]}
     decode = {}
@@ -530,6 +581,7 @@ def probe() -> dict:
                     "eqtl_catalogue_paths": _attempt(lambda: _http_status(EQTLCAT_PATHS)),
                     "1000g_panel": _attempt(lambda: _http_status(KG_PANEL)),
                     "1000g_vcf_header_chr22": _attempt(lambda: _remote_header(KG_VCF.format(chrom="22")))},
+        "ld_panel_rsids": _attempt(_ld_panel_rsids),
     }
     log = report["prereg_log"].get("value", {})
     seal = report["baked"]["stage_a"][MANIFEST_NAME].get("sha256")
@@ -577,6 +629,11 @@ def probe() -> dict:
                           for name, present in report["secret_for_collect"].items() if not present]
     if vcf.get("returncode") != 0 or not vcf.get("header_lines"):
         problems.append(f"tabix could not read a remote header: {report['network']['1000g_vcf_header_chr22']}")
+    ld = report["ld_panel_rsids"]
+    if not ld["ok"]:
+        problems.append(f"1000 Genomes LD panel with rsIDs from the UKB-PPP map: {ld['error']}")
+    elif ld["value"]["records"] == 0 or ld["value"]["eur_samples"] != 503:
+        problems.append(f"1000 Genomes LD panel probe read no records or not the 503 EUR samples: {ld['value']}")
     report["problems"], report["passed"] = problems, not problems
     write_report(PROBE_REPORT, report)
     vol.commit()

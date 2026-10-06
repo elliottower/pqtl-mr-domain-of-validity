@@ -2,22 +2,45 @@
 §Flags, S15g). Variants are matched to the panel by rsID, like everything else in stage B.
 
 Input is the text of `bcftools query -f '%CHROM\t%POS\t%ID\t%REF\t%ALT[\t%GT]\n'` over the EUR
-samples; fetch.py produces it.
+samples; fetch.py produces it. The registered panel (the 20190312 biallelic SNV and indel release
+on GRCh38) carries "." in its ID column, so a record's rsID is not read from the panel: it is the
+rsID the UKB-PPP rsID map of the chromosome (Synapse syn51396727, the map the plan registers for
+rsID matching) gives for the record's GRCh38 position (the map's POS38) and its unordered pair of
+REF and ALT alleles, as for a GWAS-SSF file without an rsID column (outcome_files.map_rsids,
+`map_rsid`). No liftover and no strand flip: a record whose pair is the complement of the map's has
+no rsID. A record with no such map row, or with rows naming more than one rsID, has no rsID and is
+dropped. The share of EUR-polymorphic records (`eur_polymorphic`) that get an rsID must reach
+MIN_RSID_FRACTION.
 """
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 import numpy as np
 import pandas as pd
 
+from stage_b.outcome_files import map_rsid
 from stage_b.schemas import PROXY_R2, LDReferenceError
 
-MIN_RSID_FRACTION = 0.5   # a panel whose ID column is mostly not rsIDs cannot be matched by rsID
+# The check exists to detect a panel whose records cannot be matched by rsID. It is taken over the records
+# polymorphic among the EUR samples only: an EUR-monomorphic record carries no LD information, and most of the
+# panel's records without a map rsID are rare variants that are monomorphic in EUR.
+MIN_RSID_FRACTION = 0.5
 
 
-def parse_genotypes(lines: Iterable[str]) -> tuple[pd.DataFrame, np.ndarray]:
-    """(meta with rsid/ref/alt, dosage matrix variants x samples). Multiallelic records and
-    rsIDs seen more than once are dropped; a missing genotype takes the variant's mean dosage."""
-    meta, rows = [], []
+def eur_polymorphic(genotypes: Iterable[str]) -> bool:
+    """True when the called alleles of the EUR genotypes hold at least one reference (0) and at least one
+    alternate allele; a missing allele (.) counts as neither. Haploid calls count their one allele."""
+    alleles = {x for gt in genotypes for x in gt.replace("|", "/").split("/") if x != "."}
+    return "0" in alleles and bool(alleles - {"0"})
+
+
+def parse_genotypes(lines: Iterable[str],
+                    rsids: Mapping[tuple[int, frozenset], set[str]]) -> tuple[pd.DataFrame, np.ndarray]:
+    """(meta with rsid/ref/alt, dosage matrix variants x samples). `rsids` is the UKB-PPP map at the
+    records' GRCh38 positions (outcome_files.map_rsids on GRCh38). Each record takes its rsID from
+    it (module docstring); the panel's ID column is not read. Multiallelic records, records without
+    an rsID and rsIDs seen on more than one record are dropped; a missing genotype takes the
+    variant's mean dosage."""
+    meta, rows, polymorphic = [], [], []
     for line in lines:
         f = line.rstrip("\n").split("\t")
         if len(f) < 6 or "," in f[4]:
@@ -26,16 +49,22 @@ def parse_genotypes(lines: Iterable[str]) -> tuple[pd.DataFrame, np.ndarray]:
         for gt in f[5:]:
             a = gt.replace("|", "/").split("/")
             g.append(float("nan") if "." in a else float(sum(int(x) for x in a)))
-        meta.append({"chrom": f[0], "pos": int(f[1]), "rsid": f[2], "ref": f[3].upper(), "alt": f[4].upper()})
+        pos, ref, alt = int(f[1]), f[3].upper(), f[4].upper()
+        meta.append({"chrom": f[0], "pos": pos, "rsid": map_rsid(rsids, pos, ref, alt), "ref": ref, "alt": alt})
         rows.append(g)
+        polymorphic.append(eur_polymorphic(f[5:]))
     if not rows:
         raise LDReferenceError("no biallelic records returned for the region")
     m = pd.DataFrame(meta)
     d = np.array(rows, dtype=float)
-    rs_frac = float(m["rsid"].str.startswith("rs").mean())
+    poly = np.array(polymorphic)
+    if not poly.any():
+        raise LDReferenceError("no record of the region is polymorphic among the EUR samples")
+    rs_frac = float((m["rsid"].to_numpy()[poly] != "").mean())
     if rs_frac < MIN_RSID_FRACTION:
-        raise LDReferenceError(f"only {rs_frac:.2f} of panel records carry an rsID; rsID matching is impossible")
-    keep = m["rsid"].str.startswith("rs") & ~m["rsid"].duplicated(keep=False)
+        raise LDReferenceError(f"only {rs_frac:.2f} of the EUR-polymorphic panel records carry an rsID; "
+                               "rsID matching is impossible")
+    keep = (m["rsid"] != "") & ~m["rsid"].duplicated(keep=False)
     m, d = m[keep.to_numpy()].reset_index(drop=True), d[keep.to_numpy()]
     col_mean = np.nanmean(d, axis=1, keepdims=True)
     d = np.where(np.isnan(d), col_mean, d)

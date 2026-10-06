@@ -264,11 +264,11 @@ def test_unreadable_and_unharmonised_records_enter_the_collect_digest_with_how_t
                                         "bytes": None, "sha256": "", "reason": "GWAS Catalog GCST1: no beta"}
 
 
-def test_a_unit_with_a_gwas_catalog_outcome_reads_the_rsid_map_of_its_chromosome():
+def test_a_unit_with_a_gwas_catalog_outcome_reads_the_rsid_map_of_its_chromosome_once():
     u = unit(("F_ok",)).model_copy(update={"outcomes": (spec("GCST1"),)})
     assert [(t.source, t.key) for t in collect_tasks([u])] == [("decode", "1_1"), ("decode_smp", "1_1"), ("gwas_catalog", "GCST1"),
                                                                ("ukbppp_rsid_map", "1")]
-    assert ("ukbppp_rsid_map", "1") not in [(t.source, t.key) for t in collect_tasks([unit(("F_ok",))])]
+    assert ("ukbppp_rsid_map", "1") in [(t.source, t.key) for t in collect_tasks([unit(("F_ok",))])]   # read for LD by every unit
 
 
 # ---- the re-collection of accessions recorded absent under the harmonised-only rule -----------------

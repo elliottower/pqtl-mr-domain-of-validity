@@ -97,6 +97,20 @@ class LDReferenceError(StageBError):
     """The 1000 Genomes EUR reference cannot supply LD for a region."""
 
 
+class LDUnavailable(StageBError):
+    """The registered 1000 Genomes panel has no record in the unit's window (chrX outside the
+    pseudoautosomal regions, or a region query that returns no record). Not a failure: the unit runs
+    without LD and records the reason: the proxy-dependent coverage fields are missing and S15g takes the
+    primary coloc.abf value (stage_b/pipeline.py).
+    Distinct from LDReferenceError, which a window that has records but cannot be matched still raises."""
+
+
+class SentinelUnresolved(StageBError):
+    """A sentinel given as several rsIDs that Ensembl does not resolve to one variant (they name
+    different variants, or Ensembl knows none of them). The unit takes the registered consequence of
+    an unavailable regional file, with the reason in its result (fetch.VolumeFetcher.positions)."""
+
+
 class StaleCheckpointError(StageBError):
     """A unit checkpoint directory was written under another run fingerprint (stage_b/checkpoint.py)."""
 

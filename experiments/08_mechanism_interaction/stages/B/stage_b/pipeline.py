@@ -28,6 +28,21 @@ another mode). In pvalue_coloc, harmonization keeps rows without an SE, the outc
 coloc.abf's p-value form (coloc_backend.pvalue_dataset), beta gives the direction only, and S15g is
 not run with coloc.susie, which takes beta and varbeta only: its PP.H4 is the primary coloc.abf
 value, with the reason in `susie_note`, as where susie is not run for want of LD.
+
+Where the registered LD panel has no record in the unit's window (fetch.VolumeFetcher.ld_panel raises
+LDUnavailable: chrX outside the pseudoautosomal regions), the unit is not failed. ld_unavailable.json
+records the reason and the unit runs without LD: the sentinel has no known proxies, so
+`sentinel_or_proxy_retained` is missing unless the sentinel itself is shared and `low_coverage` is
+missing where it would depend on that (evidence.coverage); coloc.susie is not run, so S15g takes the
+primary coloc.abf PP.H4 with the reason in `susie_note`, as for a pvalue_coloc outcome (the 2026-10-05
+amendment and the plan's S15g); the VEP step asks for the lead variant alone. The primary coloc.abf, S15a-f,
+S16 and S17 do not use LD and run as usual. The result carries the reason as `ld_unavailable`.
+
+A sentinel given as several rsIDs is resolved through Ensembl (fetch.resolve_sentinel): the unit
+then runs on Ensembl's name and position for it, and a regional row whose rsID is any of its aliases
+(the listed ids and Ensembl's names and synonyms) is read as the sentinel (`with_sentinel_name`). A
+sentinel Ensembl does not resolve (SentinelUnresolved) gives a result with `pqtl_available` false, the
+registered consequence of an unavailable regional file, and the reason in `pqtl_detail`.
 """
 import gzip
 import hashlib
@@ -51,7 +66,8 @@ from stage_b.ld import aligned_ld, proxies
 from stage_b.parsers import restrict_window
 from stage_b.schemas import (PRIMARY_P1, PRIMARY_P2, PRIMARY_P12, S15A_P12, S15B_P12, VARIANT_COLUMNS,
                              WINDOW_PRIMARY, WINDOW_WIDE, Build, ColocBackendError, InstrumentUnit, LDReferenceError,
-                             OutcomeSpec, Sentinel, SourceAbsent, StaleCheckpointError, UncertaintyMode)
+                             LDUnavailable, OutcomeSpec, Sentinel, SentinelUnresolved, SourceAbsent, StaleCheckpointError,
+                             UncertaintyMode)
 
 SOURCE_BUILD: dict[str, Build] = {"ukbppp": "GRCh38", "decode": "GRCh38", "interval": "GRCh37"}
 
@@ -148,6 +164,21 @@ def _jsonable(x):
     raise TypeError(f"not JSON serializable: {type(x)}")
 
 
+def with_sentinel_name(df: pd.DataFrame, aliases: set[str], name: str) -> pd.DataFrame:
+    """`df` with every row whose rsID is one of the sentinel's `aliases` renamed to `name`; rows that are
+    then the same variant twice (same rsID, chromosome, position and alleles, as a deCODE row listing two
+    of the aliases gives) are kept once. Unchanged when `aliases` is empty."""
+    if not aliases:
+        return df
+    hit = df["rsid"].isin(aliases).to_numpy()
+    if not hit.any():
+        return df
+    out = df.copy()
+    out.loc[hit, "rsid"] = name
+    repeat = out.duplicated(subset=[c for c in ("rsid", "chrom", "pos", "ea", "oa", "ref", "alt") if c in out.columns])
+    return out[~(repeat.to_numpy() & hit)].reset_index(drop=True)
+
+
 def safe(name: str) -> str:
     return "".join(c if c.isalnum() or c in "._-" else "_" for c in name)
 
@@ -178,10 +209,12 @@ PVALUE_COLOC_SUSIE_NOTE = ("susie not run: the outcome file gives no standard er
 
 
 def colocalize_pair(pqtl_wide: pd.DataFrame, outcome_wide: pd.DataFrame, sentinel: Sentinel, outcome_center: int,
-                    spec: OutcomeSpec, ld_meta: pd.DataFrame, dosage: np.ndarray, sentinel_proxies: set[str],
-                    backend: ColocBackend, mode: UncertaintyMode) -> dict:
+                    spec: OutcomeSpec, ld_meta: pd.DataFrame, dosage: np.ndarray, sentinel_proxies: set[str] | None,
+                    backend: ColocBackend, mode: UncertaintyMode, ld_unavailable: str = "") -> dict:
     """Primary coloc.abf on ±500 kb and the S15a-c, S15g variants for one instrument x outcome, the
-    outcome read in its uncertainty `mode` (module docstring)."""
+    outcome read in its uncertainty `mode` (module docstring). With `ld_unavailable` (the reason the
+    panel has no record in the window), `sentinel_proxies` is None and coloc.susie is not run: S15g is
+    the primary coloc.abf PP.H4, with the reason in `susie_note`."""
     outcome_se = mode != "pvalue_coloc"
     p500 = restrict_window(pqtl_wide, sentinel.chrom, sentinel.pos, WINDOW_PRIMARY)
     o500 = restrict_window(outcome_wide, sentinel.chrom, outcome_center, WINDOW_PRIMARY)
@@ -199,8 +232,8 @@ def colocalize_pair(pqtl_wide: pd.DataFrame, outcome_wide: pd.DataFrame, sentine
     s15c_run = not not_run_reason(True, True, len(h1m))
     if s15c_run:
         tasks.append(_abf("s15c", h1m, outcome_dataset(h1m, spec.n_case, spec.n_control, mode), PRIMARY_P12))
-    susie_note = "" if outcome_se else PVALUE_COLOC_SUSIE_NOTE
-    if outcome_se:
+    susie_note = f"susie not run: {ld_unavailable}" if ld_unavailable else "" if outcome_se else PVALUE_COLOC_SUSIE_NOTE
+    if outcome_se and not ld_unavailable:
         try:
             hs, ld = aligned_ld(h, ld_meta, dosage)
             tasks.append(ColocTask(id="s15g", method="susie", p1=PRIMARY_P1, p2=PRIMARY_P2, p12=PRIMARY_P12,
@@ -275,9 +308,25 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
         return _checked_result(store, fingerprint, collect_sha256)
     s = unit.sentinel
     if not store.has("positions.json"):
-        store.put_json("positions.json", fetcher.positions(s))
+        try:
+            store.put_json("positions.json", fetcher.positions(s))
+        except SentinelUnresolved as e:
+            store.put_json("positions.json", {"GRCh37": None, "GRCh38": None, "unresolved": str(e)})
     pos = store.json("positions.json")
+    if pos.get("unresolved"):
+        result = {"unit_key": unit.unit_key, "fingerprint": fingerprint, "collect_sha256": collect_sha256,
+                  "pqtl_available": False, "pqtl_detail": f"no resolvable sentinel: {pos['unresolved']}",
+                  "sentinel_unresolved": pos["unresolved"], "outcomes": {}, "splicing": None, "vep": {}, "s16": {}}
+        store.put_json("result.json", result)
+        return result
+    resolved = pos.get("sentinel") or {}
+    aliases = set(resolved.get("aliases", []))
+    if resolved:
+        s = s.model_copy(update={"rsid": resolved["rsid"], "pos": resolved["pos"]})
     pos38 = pos.get("GRCh38")
+
+    def table(name: str) -> pd.DataFrame:
+        return with_sentinel_name(store.table(name), aliases, s.rsid)
 
     pmeta = _region_step(store, "pqtl", lambda: fetcher.pqtl_region(unit, s.chrom, s.pos, WINDOW_WIDE),
                          f"{s.chrom}:{s.pos - WINDOW_WIDE}-{s.pos + WINDOW_WIDE} {SOURCE_BUILD[unit.source]}")
@@ -287,19 +336,30 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
                   "s16": {}}
         store.put_json("result.json", result)
         return result
-    pqtl = store.table("pqtl.tsv.gz")
+    pqtl = table("pqtl.tsv.gz")
     p500 = restrict_window(pqtl, s.chrom, s.pos, WINDOW_PRIMARY)
 
     if pos38 is None:
         raise LDReferenceError(f"sentinel {s.rsid} has no GRCh38 position; 1000G EUR LD cannot be read")
-    if not store.has("ld.npz"):
-        m, d = fetcher.ld_panel(s.chrom, pos38, WINDOW_WIDE)
-        store.put_npz("ld.npz", rsid=m["rsid"].to_numpy(str), ref=m["ref"].to_numpy(str),
-                      alt=m["alt"].to_numpy(str), pos=m["pos"].to_numpy(int), dosage=d)
-    z = store.npz("ld.npz")
-    ld_meta = pd.DataFrame({"rsid": z["rsid"], "ref": z["ref"], "alt": z["alt"], "pos": z["pos"]})
-    dosage = z["dosage"]
-    sent_prox = proxies(ld_meta, dosage, s.rsid)
+    if not store.has("ld.npz") and not store.has("ld_unavailable.json"):
+        try:
+            m, d = fetcher.ld_panel(s.chrom, pos38, WINDOW_WIDE)
+            store.put_npz("ld.npz", rsid=m["rsid"].to_numpy(str), ref=m["ref"].to_numpy(str),
+                          alt=m["alt"].to_numpy(str), pos=m["pos"].to_numpy(int), dosage=d)
+        except LDUnavailable as e:
+            store.put_json("ld_unavailable.json", {"reason": str(e)})
+    ld_unavailable = store.json("ld_unavailable.json")["reason"] if store.has("ld_unavailable.json") else ""
+    sent_prox: set[str] | None
+    if ld_unavailable:
+        ld_meta = pd.DataFrame({"rsid": pd.Series(dtype=str), "ref": pd.Series(dtype=str), "alt": pd.Series(dtype=str),
+                                "pos": pd.Series(dtype=int)})
+        dosage, sent_prox = np.zeros((0, 0)), None
+    else:
+        z = store.npz("ld.npz")
+        rsid = np.where(np.isin(z["rsid"], sorted(aliases)), s.rsid, z["rsid"]) if aliases else z["rsid"]   # rows kept: dosage aligned
+        ld_meta = pd.DataFrame({"rsid": rsid, "ref": z["ref"], "alt": z["alt"], "pos": z["pos"]})
+        dosage = z["dosage"]
+        sent_prox = proxies(ld_meta, dosage, s.rsid)
 
     outcomes = {}
     builds = {spec.accession: fetcher.outcome_build(spec) for spec in unit.outcomes}
@@ -319,8 +379,8 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
             continue
         cname = f"coloc__{tag}.json"
         if not store.has(cname):
-            store.put_json(cname, colocalize_pair(pqtl, store.table(f"outcome__{tag}.tsv.gz"), s, center, spec,
-                                                  ld_meta, dosage, sent_prox, backend, modes[spec.accession]))
+            store.put_json(cname, colocalize_pair(pqtl, table(f"outcome__{tag}.tsv.gz"), s, center, spec,
+                                                  ld_meta, dosage, sent_prox, backend, modes[spec.accession], ld_unavailable))
         outcomes[spec.accession] = store.json(cname)
 
     vep = {}
@@ -330,7 +390,7 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
             continue
         vname = f"vep__{safe(lead)}.json"
         if not store.has(vname):
-            rsids = sorted(proxies(ld_meta, dosage, lead) | {lead})
+            rsids = [lead] if ld_unavailable else sorted(proxies(ld_meta, dosage, lead) | {lead})
             try:
                 hit = vep_protein_altering(fetcher.vep(rsids, SOURCE_BUILD[unit.source]), unit.gene_ensembl)
                 store.put_json(vname, {"rsids": rsids, "hit": hit, "detail": ""})
@@ -356,8 +416,8 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
             tag = safe(spec.accession)
             name = f"s16__{tag}.json"
             if not store.has(name):
-                smp = restrict_window(store.table("pqtl_smp.tsv.gz"), s.chrom, s.pos, WINDOW_PRIMARY)
-                o500 = restrict_window(store.table(f"outcome__{tag}.tsv.gz"), s.chrom,
+                smp = restrict_window(table("pqtl_smp.tsv.gz"), s.chrom, s.pos, WINDOW_PRIMARY)
+                o500 = restrict_window(table(f"outcome__{tag}.tsv.gz"), s.chrom,
                                        pos[builds[spec.accession]], WINDOW_PRIMARY)
                 mode = modes[spec.accession]
                 h, _ = harmonize(smp, o500, mode != "pvalue_coloc")
@@ -372,11 +432,60 @@ def process_unit(unit: InstrumentUnit, fetcher: Fetcher, backend: ColocBackend, 
             s16[spec.accession] = store.json(name)
 
     result = {"unit_key": unit.unit_key, "fingerprint": fingerprint, "collect_sha256": collect_sha256,
-              "pqtl_available": True, "pqtl_detail": "", "positions": pos,
-              "sentinel_proxies": sorted(sent_prox), "outcomes": outcomes, "vep": vep, "splicing": splicing,
+              "pqtl_available": True, "pqtl_detail": "", "positions": pos, "ld_unavailable": ld_unavailable,
+              "sentinel_proxies": None if sent_prox is None else sorted(sent_prox), "outcomes": outcomes, "vep": vep, "splicing": splicing,
               "s16": s16, "coloc_session": getattr(backend, "session", {})}
     store.put_json("result.json", result)
     return store.json("result.json")
+
+
+SUPERSEDED_UNITS = Path("superseded") / "units"
+SUPERSEDED_UNIT_ERRORS = Path("superseded") / "errors" / "units"
+
+
+def bound_fingerprint(unit_dir: Path) -> str | None:
+    """The fingerprint FINGERPRINT.json binds `unit_dir` to; None when it has none."""
+    path = unit_dir / FINGERPRINT_NAME
+    return json.loads(path.read_text()).get("fingerprint") if path.is_file() else None
+
+
+def supersede_units(root: Path, current: Mapping[str, str], stamp: str, commit: Callable[[], None] = lambda: None) -> dict:
+    """Archive the unit directories of `current` (unit key -> the fingerprint this run computes for the
+    unit) that `run_unit` would refuse as stale, so a new call starts them afresh. Nothing is deleted.
+
+    Refused, with nothing moved, when any of the units holds result.json: a finished unit is never
+    superseded. A directory bound to its current fingerprint is kept (a new call resumes it), and so is
+    its error marker. A directory bound to another fingerprint, or holding files and no FINGERPRINT.json,
+    is moved to <root>/superseded/units/<stamp>/<unit key>/, and the unit's error marker
+    (status.error_marker) to <root>/superseded/errors/units/<stamp>/<unit key>.json; the marker of a
+    unit without a directory is archived the same way. Returns the unit keys by what was done."""
+    units = root / "units"
+    finished = sorted(k for k in current if (units / k / "result.json").exists())
+    if finished:
+        raise StaleCheckpointError(f"{len(finished)} units hold result.json (first: {finished[0]}); a finished unit is "
+                                   "never superseded, and nothing was moved")
+    dest_units, dest_errors = root / SUPERSEDED_UNITS / stamp, root / SUPERSEDED_UNIT_ERRORS / stamp
+    taken = [p for p in (dest_units, dest_errors) if p.exists()]
+    if taken:
+        raise StaleCheckpointError(f"{taken[0]} already exists; a superseded directory is never overwritten")
+    out: dict[str, list[str]] = {"moved": [], "kept_current": [], "markers_archived": [], "untouched": []}
+    for key, fingerprint in sorted(current.items()):
+        unit_dir, marker = units / key, root / "errors" / "units" / f"{key}.json"
+        if unit_dir.is_dir() and any(unit_dir.iterdir()) and bound_fingerprint(unit_dir) == fingerprint:
+            out["kept_current"].append(key)
+            continue
+        if unit_dir.is_dir():
+            dest_units.mkdir(parents=True, exist_ok=True)
+            os.replace(unit_dir, dest_units / key)
+            out["moved"].append(key)
+        if marker.is_file():
+            dest_errors.mkdir(parents=True, exist_ok=True)
+            os.replace(marker, dest_errors / marker.name)
+            out["markers_archived"].append(key)
+        if key not in out["moved"] and key not in out["markers_archived"]:
+            out["untouched"].append(key)
+        commit()
+    return out
 
 
 def reset_unavailable(store: DirStore) -> list[str]:

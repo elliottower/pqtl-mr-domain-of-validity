@@ -22,10 +22,14 @@ from stage_b.checkpoint import (FINGERPRINT_NAME, PINNED_SOURCES, PY_PACKAGES, R
                                 collect_entry, common_tools, package_files, package_sha256, source_pins, tool_versions,
                                 unit_fingerprint, unit_tools, verified_source_pins)
 from stage_b.coloc_backend import AbfResult, ColocTask, SusieResult
-from stage_b.pipeline import DirStore, process_unit, reset_unavailable
+from stage_b.collect import collect_tasks
+from stage_b.launch import supersede_selection
+from stage_b.evidence import coverage
+from stage_b.pipeline import DirStore, process_unit, reset_unavailable, supersede_units, with_sentinel_name
 from stage_b.schemas import (EVIDENCE_COLUMNS, OUTCOME_BUILD, PRIMARY_P1, PRIMARY_P2, PRIMARY_P12, WINDOW_PRIMARY, CollectError,
                              CollectRecord, CollectTask, HypothesisInput, InputContractError, InstrumentUnit, OutcomeSpec,
-                             RetryableSourceError, Sentinel, SourceAbsent, SourceFile, StaleCheckpointError)
+                             LDReferenceError, LDUnavailable, RetryableSourceError, Sentinel, SentinelUnresolved, SourceAbsent,
+                             SourceFile, StaleCheckpointError)
 
 INTERFACES = Path(__file__).resolve().parents[2] / "INTERFACES.md"
 PACKAGE = Path(__file__).resolve().parents[1] / "stage_b"
@@ -857,8 +861,8 @@ def catalog_unit() -> InstrumentUnit:
 
 
 def unit_records(u: InstrumentUnit, decode_sha: str = "1" * 64) -> dict[tuple[str, str], CollectRecord]:
-    """One record per whole file of `catalog_unit` (its GWAS Catalog outcomes add the rsID map of its
-    chromosome): three collected, two absent, one queried by region."""
+    """One record per whole file of `catalog_unit` (with the rsID map of its chromosome, which every unit
+    reads): three collected, two absent, one queried by region."""
     return {("decode", "1_1"): collected("decode", "1_1", u.pqtl_listing.name, decode_sha, etag=u.pqtl_listing.etag),
             ("decode_smp", "1_1"): CollectRecord(status="absent", source="decode_smp", key="1_1", detail="decode_smp 1_1: HTTP 404"),
             ("gwas_catalog", "GCST1"): collected("gwas_catalog", "GCST1", "1-GCST1-EFO_1.h.tsv.gz", "2" * 64),
@@ -936,6 +940,207 @@ def test_a_checkpoint_is_refused_when_the_file_was_collected_again_with_other_by
         collect_unit_dir(u, store.root, fp(u, collect=new), new)
     assert collect_unit_dir(u, store.root, fp(u, collect=old), old)[0] == done
     assert process_unit(u, FakeFetcher(), StubBackend(H4), store, fp(u, collect=old), TOOLS, old) == done
+
+
+@pytest.mark.parametrize("make", [lambda: unit(("F_ok",)), ukb_unit,
+                                  lambda: unit(("F_ok",)).model_copy(update={
+                                      "unit_key": "interval__S.1__ENSG1", "source": "interval", "assay_id": "S.1",
+                                      "pqtl_listing": None, "smp_listing": None, "pqtl_locator": "prot-a-1",
+                                      "sentinel": SENTINEL.model_copy(update={"source": "interval", "assay_id": "S.1",
+                                                                              "build": "GRCh37", "chrom": "7"})})])
+def test_every_unit_reads_the_rsid_map_of_its_chromosome_for_ld_and_its_fingerprint_covers_the_map(make):
+    u = make()                                                   # no GWAS Catalog outcome: the map is read for LD alone
+    assert ("ukbppp_rsid_map", u.sentinel.chrom) in [(t.source, t.key) for t in collect_tasks([u])]
+    records = {(t.source, t.key): collected(t.source, t.key, t.name or f"{t.source}_{t.key}.gz", "1" * 64)
+               for t in collect_tasks([u])}
+    other_map = {**records, ("ukbppp_rsid_map", u.sentinel.chrom): records[("ukbppp_rsid_map", u.sentinel.chrom)].model_copy(
+        update={"sha256": "2" * 64})}
+    assert digest(u, records) != digest(u, other_map) and fp(u, collect=digest(u, records)) != fp(u, collect=digest(u, other_map))
+    with pytest.raises(KeyError):                                # a unit without the map's record has no digest
+        digest(u, {k: r for k, r in records.items() if k[0] != "ukbppp_rsid_map"})
+
+
+# ---- a window the registered LD panel holds no record in, and sentinels given as several rsIDs ------------
+
+class NoPanel(FakeFetcher):
+    """The panel has no record in the window (chrX outside the pseudoautosomal regions)."""
+    def ld_panel(self, chrom, center, half_width):
+        self._count("ld")
+        raise LDUnavailable(f"chrX:{center} (GRCh38) lies outside the pseudoautosomal regions")
+
+
+class Recorded(FakeFetcher):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.vep_rsids: list[list[str]] = []
+
+    def vep(self, rsids, build):
+        self.vep_rsids.append(list(rsids))
+        return super().vep(rsids, build)
+
+
+class NoPanelRecorded(NoPanel, Recorded):
+    pass
+
+
+def test_a_unit_without_panel_records_completes_with_proxy_quantities_missing_and_s15g_from_the_primary_coloc(tmp_path):
+    absent = unit(("F_ok",)).model_copy(update={"sentinel": SENTINEL.model_copy(update={"rsid": "rs9999"})})  # in no table
+    fetcher, backend = NoPanelRecorded(), StubBackend(H4)
+    res = run(absent, fetcher, backend, DirStore(tmp_path / "u"))
+    o = res["outcomes"]["F_ok"]
+    assert res["ld_unavailable"].startswith("chrX:") and res["sentinel_proxies"] is None
+    assert not (tmp_path / "u" / "ld.npz").exists() and json.loads((tmp_path / "u" / "ld_unavailable.json").read_text())["reason"]
+    assert o["coloc_run"] is True and o["pp"][4] == H4["primary"] and o["s15a_pp_h4"] == H4["s15a"] and o["s15c_pp_h4"] == H4["s15c"]
+    assert o["coverage"]["sentinel_or_proxy_retained"] is None and o["coverage"]["low_coverage"] is None
+    assert o["s15g_pp_h4"] == o["pp"][4] and o["s15g_method"].startswith("coloc.abf") and o["susie"] is None   # 2026-10-05 amendment
+    assert o["susie_note"].startswith("susie not run: chrX")
+    assert not any(t.method == "susie" for t in backend.tasks) and res["s16"]["F_ok"]["coloc_run"] is True
+    assert fetcher.vep_rsids == [["rs60"]]                                          # the lead alone: no proxies
+    row = build_evidence([hyp("h1", "decrease", "F_ok")], {"h1": absent.unit_key},
+                         {absent.unit_key: ("decode", "1_1", "ENSG1")}, {absent.unit_key: res}, {})[0]
+    assert (row.evidence_state, row.sentinel_or_proxy_retained, row.low_coverage, row.s15f_low_coverage_excluded,
+            row.s15g_pp_h4, row.s15a_pp_h4) == ("supportive", "", "", "", H4["primary"], H4["s15a"])
+    # the sentinel itself shared: retained without proxies; a resumed unit does not ask the panel again
+    shared = run(unit(("F_ok",)), NoPanel(), StubBackend(H4), DirStore(tmp_path / "s"))["outcomes"]["F_ok"]["coverage"]
+    assert (shared["sentinel_or_proxy_retained"], shared["low_coverage"]) == (True, False)
+    again = NoPanel()
+    assert run(unit(("F_ok",)), again, StubBackend(H4), DirStore(tmp_path / "s"))["ld_unavailable"] and "ld" not in again.calls
+
+
+def test_a_window_with_panel_records_but_too_few_rsids_still_stops_the_unit(tmp_path):
+    class FewRsids(FakeFetcher):
+        def ld_panel(self, chrom, center, half_width):
+            raise LDReferenceError("only 0.20 of the EUR-polymorphic panel records carry an rsID; rsID matching is impossible")
+    with pytest.raises(LDReferenceError, match="only 0.20"):
+        run(unit(("F_ok",)), FewRsids(), StubBackend(H4), DirStore(tmp_path / "u"))
+    assert not (tmp_path / "u" / "result.json").exists() and not (tmp_path / "u" / "ld_unavailable.json").exists()
+
+
+def test_coverage_without_proxies_is_missing_only_where_the_proxy_check_decides_it():
+    assert coverage(100, 100, ["rs1"] * 1 + [f"r{i}" for i in range(59)], "rs1", None)["sentinel_or_proxy_retained"] is True
+    got = coverage(100, 100, [f"r{i}" for i in range(60)], "rs1", None)
+    assert (got["sentinel_or_proxy_retained"], got["low_coverage"]) == (None, None)
+    got = coverage(100, 100, [f"r{i}" for i in range(40)], "rs1", None)               # under 50% retained: low either way
+    assert (got["sentinel_or_proxy_retained"], got["low_coverage"]) == (None, True)
+    assert coverage(100, 100, [f"r{i}" for i in range(60)], "rs1", set())["low_coverage"] is True
+
+
+class Resolving(FakeFetcher):
+    def __init__(self, resolved: dict | None = None, unresolved: str = "", **kw):
+        super().__init__(**kw)
+        self.resolved, self.unresolved = resolved, unresolved
+
+    def positions(self, sentinel):
+        if self.unresolved:
+            raise SentinelUnresolved(self.unresolved)
+        return {"GRCh37": None, "GRCh38": self.resolved["pos"], "sentinel": self.resolved}
+
+    def outcome_region(self, spec, chrom, center, half_width):
+        t = super().outcome_region(spec, chrom, center, half_width)
+        t.loc[t["rsid"] == "rs60", "rsid"] = "rs6060"                               # the outcome file lists a merged id
+        return t
+
+    def pqtl_region(self, unit, chrom, center, half_width, smp=False):
+        t = super().pqtl_region(unit, chrom, center, half_width, smp)
+        extra = t[t["rsid"] == "rs60"].assign(rsid="rs6061")                           # a deCODE row listing two ids
+        return pd.concat([t, extra], ignore_index=True)
+
+
+def test_a_sentinel_given_as_several_rsids_runs_on_ensembls_variant_and_matches_its_aliases(tmp_path):
+    multi = unit(("F_ok",)).model_copy(update={"sentinel": SENTINEL.model_copy(update={"rsid": "rs6060,rs6061"})})
+    resolved = {"rsid": "rs60", "pos": POS[60], "listed": ["rs6060", "rs6061"], "aliases": ["rs60", "rs6060", "rs6061"]}
+    res = run(multi, Resolving(resolved), StubBackend(H4), DirStore(tmp_path / "m"))
+    plain = run(unit(("F_ok",)), FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "p"))
+    o, ref = res["outcomes"]["F_ok"], plain["outcomes"]["F_ok"]
+    assert res["positions"]["sentinel"] == resolved and o["coverage"] == ref["coverage"] and o["nsnps"] == ref["nsnps"]
+    assert o["s17_sentinel_p"] == ref["s17_sentinel_p"] is not None and o["harmonization"]["duplicate_rsid"] == 0
+    assert "rs60" in res["sentinel_proxies"]
+
+
+def test_a_sentinel_ensembl_does_not_resolve_takes_the_unavailable_regional_file_consequence_and_does_not_raise(tmp_path):
+    multi = unit(("F_ok",)).model_copy(update={"sentinel": SENTINEL.model_copy(update={"rsid": "rs1,rs2"})})
+    fetcher = Resolving(unresolved="sentinel rs1,rs2 (decode 1_1): Ensembl GRCh38 knows none of the listed rsIDs")
+    res = run(multi, fetcher, StubBackend(H4), DirStore(tmp_path / "m"))
+    assert (res["pqtl_available"], res["sentinel_unresolved"]) == (False, fetcher.unresolved) and "pqtl" not in fetcher.calls
+    assert res["pqtl_detail"] == f"no resolvable sentinel: {fetcher.unresolved}"
+    assert run(multi, fetcher, StubBackend(H4), DirStore(tmp_path / "m")) == res                 # finished, not retried
+    row = build_evidence([hyp("h1", "decrease", "F_ok")], {"h1": multi.unit_key}, {multi.unit_key: ("decode", "1_1", "ENSG1")},
+                         {multi.unit_key: res}, {})[0]
+    assert (row.not_run_reason, row.evidence_state) == ("regional_file_unavailable", "inconclusive")
+
+
+def test_sentinel_aliases_are_renamed_and_a_variant_listed_under_two_of_them_is_kept_once():
+    t = table([{"rsid": "rs1", "pos": 5}, {"rsid": "rs2", "pos": 5}, {"rsid": "rs3", "pos": 6}, {"rsid": "rs2", "pos": 7}])
+    got = with_sentinel_name(t, {"rs1", "rs2"}, "rs9")
+    assert list(zip(got["rsid"], got["pos"])) == [("rs9", 5), ("rs3", 6), ("rs9", 7)]   # another variant keeps its row
+    assert with_sentinel_name(t, set(), "rs9").equals(t)
+
+
+# ---- superseding the stale directories of unfinished units ------------------------------------------------
+
+def stale_unit(root: Path, key: str, fingerprint: str, result: bool = False, marker: bool = True) -> dict[str, bytes]:
+    """A unit directory bound to `fingerprint` with a step written (and result.json when `result`), and an
+    error marker; returns its files."""
+    d = root / "units" / key
+    d.mkdir(parents=True)
+    (d / FINGERPRINT_NAME).write_text(json.dumps({"fingerprint": fingerprint, "tools": TOOLS, "collect_sha256": COLLECT}))
+    (d / "pqtl.tsv.gz").write_bytes(b"\x1f\x8b extract of " + key.encode())
+    if result:
+        (d / "result.json").write_text(json.dumps({"unit_key": key}))
+    if marker:
+        (root / "errors" / "units").mkdir(parents=True, exist_ok=True)
+        (root / "errors" / "units" / f"{key}.json").write_text(json.dumps({"name": key, "error_class": "LDReferenceError"}))
+    return files(d)
+
+
+def test_supersede_moves_stale_unit_directories_and_their_markers_and_deletes_nothing(tmp_path):
+    held = {k: stale_unit(tmp_path, k, "old" + k) for k in ("u1", "u2")}
+    current = stale_unit(tmp_path, "u3", "new-u3")              # already under this run's fingerprint: resumed, kept
+    (tmp_path / "errors" / "units" / "u4.json").write_text("{}")  # a marker without a directory
+    commits = []
+    out = supersede_units(tmp_path, {"u1": "new-u1", "u2": "new-u2", "u3": "new-u3", "u4": "new-u4", "u5": "new-u5"},
+                          "20261006T120000Z", lambda: commits.append(1))
+    assert out == {"moved": ["u1", "u2"], "kept_current": ["u3"], "markers_archived": ["u1", "u2", "u4"], "untouched": ["u5"]}
+    archive = tmp_path / "superseded" / "units" / "20261006T120000Z"
+    assert {k: files(archive / k) for k in ("u1", "u2")} == held and not (tmp_path / "units" / "u1").exists()
+    assert sorted(p.name for p in (tmp_path / "superseded" / "errors" / "units" / "20261006T120000Z").iterdir()) == [
+        "u1.json", "u2.json", "u4.json"]
+    assert files(tmp_path / "units" / "u3") == current and (tmp_path / "errors" / "units" / "u3.json").is_file()
+    assert commits
+    with pytest.raises(StaleCheckpointError, match="never overwritten"):
+        supersede_units(tmp_path, {"u3": "newer"}, "20261006T120000Z")
+    assert files(tmp_path / "units" / "u3") == current
+
+
+def test_supersede_refuses_a_unit_with_a_result_and_moves_nothing(tmp_path):
+    stale = stale_unit(tmp_path, "u1", "old")
+    done = stale_unit(tmp_path, "u2", "old", result=True)
+    with pytest.raises(StaleCheckpointError, match="1 units hold result.json .first: u2.; a finished unit is never superseded"):
+        supersede_units(tmp_path, {"u1": "new", "u2": "new"}, "20261006T120000Z")
+    assert files(tmp_path / "units" / "u1") == stale and files(tmp_path / "units" / "u2") == done
+    assert not (tmp_path / "superseded").exists() and len(list((tmp_path / "errors" / "units").iterdir())) == 2
+
+
+def test_the_superseded_unit_starts_afresh_under_the_new_fingerprint(tmp_path):
+    u = unit(("F_ok",))
+    with pytest.raises(RuntimeError, match="container killed"):
+        process_unit(u, FakeFetcher(qtl_error=RuntimeError("container killed")), StubBackend(H4), DirStore(tmp_path / "units" / u.unit_key),
+                     fp(u, code="d" * 64), TOOLS, COLLECT)
+    with pytest.raises(StaleCheckpointError):
+        run(u, FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "units" / u.unit_key))
+    assert supersede_units(tmp_path, {u.unit_key: fp(u)}, "20261006T120000Z")["moved"] == [u.unit_key]
+    assert run(u, FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "units" / u.unit_key))["fingerprint"] == fp(u)
+    assert (tmp_path / "superseded" / "units" / "20261006T120000Z" / u.unit_key / "coloc__F_ok.json").is_file()
+
+
+def test_supersede_selection_takes_unfinished_started_or_failed_units_or_the_named_planned_ones():
+    lines = [unit(("F_ok",)).model_copy(update={"unit_key": k}).model_dump_json() for k in ("a", "b", "c", "d", "e")]
+    volume = {"units_started": ["a", "b", "c"], "units_done": ["c"], "errors": {"units": {"d": {}, "c": {}}}}
+    keys = lambda chosen: [InstrumentUnit.model_validate_json(x).unit_key for x in chosen]
+    assert keys(supersede_selection(lines, volume, None)) == ["a", "b", "d"]
+    assert keys(supersede_selection(lines, volume, ["c", "a", "a"])) == ["a", "c"]          # a finished unit is refused on Modal
+    with pytest.raises(InputContractError, match="1 units are not planned .first: z."):
+        supersede_selection(lines, volume, ["a", "z"])
 
 
 # ---- S16 without a pinned SMP-normalized listing: nothing fetched, the column empty ---------------------

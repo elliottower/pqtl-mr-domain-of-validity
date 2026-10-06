@@ -4,8 +4,10 @@ data and no real source: every file is generated here and served by fake_remote.
 stage_b/fetch.py, tabix, bcftools, the R backend) runs unchanged and only the addresses differ.
 
 The region: 240 biallelic variants 5 kb apart on chromosome 1, 503 EUR samples (and 20 others, so
-the sample subset is exercised) whose haplotypes are a thresholded AR(1) Gaussian sequence (allele
-frequency 0.3), so LD decays with distance. Every z-score vector is a combination of columns of the
+the sample subset is exercised). The 1000 Genomes panel carries "." in its ID column, as the registered
+GRCh38 release does, and three more records the rsID map names no single rsID for (`unmapped_records`),
+so every LD rsID comes from the map and those three are dropped. The haplotypes are a thresholded
+AR(1) Gaussian sequence (allele frequency 0.3), so LD decays with distance. Every z-score vector is a combination of columns of the
 EUR panel's own correlation matrix, so summary statistics and LD reference agree.
 
 Three units, one per instrument source, with the same pQTL signals (z 12 at the sentinel, z 7
@@ -119,6 +121,8 @@ EXPECTED_STATE = {SHARED: "supportive", GRCH37: "supportive", DISTINCT: "inconcl
                   NO_DIR: "inconclusive", NO_FILE: "inconclusive"}
 EXPECTED_NOT_RUN = {SHARED: "", GRCH37: "", DISTINCT: "", FEW: "fewer_than_50_shared", NO_DIR: "outcome_file_unavailable",
                     NO_FILE: "outcome_file_unavailable"}
+MERGED_ID, UNKNOWN_IDS = "rs8999998", ("rs8999997", "rs8999999")   # a merged synonym of the sentinel; ids Ensembl does not know
+FAR_POS = 10_000_000          # the only record of the panel without records in the units' window (`no_panel_record`)
 TOKENS = {"decode": "folder-token-one", "decode_smp": "smp-folder-token-one", "opengwas": "opengwas-token-one"}
 
 
@@ -210,9 +214,20 @@ def ukbppp_tar(t: pd.DataFrame) -> bytes:
     return buf.getvalue()
 
 
+def unmapped_records(meta: pd.DataFrame) -> list[tuple[int, str, str]]:
+    """(GRCh38 position, REF, ALT) of three 1000 Genomes panel records the rsID map names no single
+    rsID for, so the LD panel drops them (stage_b/ld.py): a pair the map has no row for, the strand
+    complement (T/C) of the map's A/G pair at a mapped position, and a pair the map gives two rsIDs."""
+    base = int(meta["pos"][SENTINEL_INDEX + 3])
+    return [(base + 1_000, "C", "T"), (int(meta["pos"][SENTINEL_INDEX + 5]), "T", "C"), (base + 2_000, "A", "C")]
+
+
 def rsid_map_text(meta: pd.DataFrame) -> str:
+    ambiguous_pos = unmapped_records(meta)[2][0]
+    ambiguous = [[f"{CHROM}:{ambiguous_pos}:A:C:imp:v{k}", "A", "C", rs, ambiguous_pos + GRCH37_SHIFT, ambiguous_pos]
+                 for k, rs in ((1, "rs8000001"), (2, "rs8000002"))]
     return _lines(["ID", "REF", "ALT", "rsid", "POS19", "POS38"],
-                  [[ukbppp_id(r.pos), r.ref, r.alt, r.rsid, r.pos + GRCH37_SHIFT, r.pos] for r in meta.itertuples()])
+                  [[ukbppp_id(r.pos), r.ref, r.alt, r.rsid, r.pos + GRCH37_SHIFT, r.pos] for r in meta.itertuples()] + ambiguous)
 
 
 def gwas_catalog_text(t: pd.DataFrame) -> str:
@@ -263,11 +278,16 @@ def eqtl_catalogue_text(traits: list[tuple[str, str, pd.DataFrame]]) -> str:
                   sorted(rows, key=lambda r: (r[2], r[0])))
 
 
-def vcf_text(meta: pd.DataFrame, alleles: np.ndarray, samples: list[str]) -> str:
+def vcf_text(meta: pd.DataFrame, alleles: np.ndarray, samples: list[str], unmapped: bool = True) -> str:
+    """The panel as the registered 1000 Genomes GRCh38 release gives it: "." in the ID column, so every
+    rsID comes from the UKB-PPP map; with the `unmapped_records`, which carry the sentinel's haplotypes."""
     head = ("##fileformat=VCFv4.2\n" f"##contig=<ID={CHROM}>\n"
             '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
-    rows = [[CHROM, r.pos, r.rsid, r.ref, r.alt, ".", "PASS", ".", "GT",
-             *(f"{a}|{b}" for a, b in zip(alleles[i, 0::2], alleles[i, 1::2]))] for i, r in enumerate(meta.itertuples())]
+    records = [(r.pos, r.ref, r.alt, alleles[i]) for i, r in enumerate(meta.itertuples())]
+    if unmapped:
+        records += [(pos, ref, alt, alleles[SENTINEL_INDEX]) for pos, ref, alt in unmapped_records(meta)]
+    rows = [[CHROM, pos, ".", ref, alt, ".", "PASS", ".", "GT", *(f"{a}|{b}" for a, b in zip(h[0::2], h[1::2]))]
+            for pos, ref, alt, h in sorted(records, key=lambda x: x[0])]
     return head + _lines(["#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", *samples], rows)
 
 
@@ -300,8 +320,12 @@ class World:
         syn = synapse or FakeSynapse(self.remote, self.folders)
         return RemoteSources(cache, decode_token, lambda: syn, self.endpoints, decode_smp_token=TOKENS["decode_smp"])
 
-    def fetcher(self, root: Path, opengwas_token: str = TOKENS["opengwas"]) -> VolumeFetcher:
-        return VolumeFetcher(root, opengwas_token, self.annotation, self.excluded, self.endpoints)
+    def fetcher(self, root: Path, opengwas_token: str = TOKENS["opengwas"], no_panel_record: bool = False) -> VolumeFetcher:
+        """With `no_panel_record`, the 1000 Genomes panel served holds no record in the units' window."""
+        endpoints = self.endpoints
+        if no_panel_record:
+            endpoints = endpoints.model_copy(update={"kg_vcf": endpoints.kg_vcf.replace("/kg/", "/kg_far/")})
+        return VolumeFetcher(root, opengwas_token, self.annotation, self.excluded, endpoints)
 
 
 def _outcomes(names: tuple[str, ...]) -> tuple[OutcomeSpec, ...]:
@@ -360,10 +384,13 @@ def build_world(remote: FakeRemote, work: Path, indexed: bool = True) -> World:
     index = {rs: i for i, rs in enumerate(meta["rsid"])}
     for build, shift in (("GRCh38", 0), ("GRCh37", GRCH37_SHIFT)):
         def variation(rest: str, q, b, h, build=build, shift=shift) -> tuple[int, object]:
-            if rest not in index:
+            name = rsid(SENTINEL_INDEX) if rest == MERGED_ID else rest       # a merged id answers with the current name
+            if name not in index:
                 return 400, {"error": f"{rest} not found for human"}
-            return 200, {"mappings": [{"seq_region_name": CHROM, "assembly_name": build,
-                                       "start": int(meta["pos"][index[rest]]) + shift}]}
+            i = index[name]
+            return 200, {"name": name, "synonyms": [MERGED_ID] if i == SENTINEL_INDEX else [],
+                         "mappings": [{"seq_region_name": CHROM, "assembly_name": build, "start": int(meta["pos"][i]) + shift,
+                                       "allele_string": f"{meta['ref'][i]}/{meta['alt'][i]}"}]}
         remote.json_prefixes.append(("GET", f"/ensembl/{build}/variation/human/", variation))
         remote.json_routes[("POST", f"/ensembl/{build}/vep/human/id")] = lambda q, b, h: (200, [
             {"id": json.loads(b)["ids"][0], "transcript_consequences": [{"gene_id": GENE, "consequence_terms": ["missense_variant"]}]}])
@@ -414,6 +441,10 @@ def build_world(remote: FakeRemote, work: Path, indexed: bool = True) -> World:
         samples = [f"EUR{i:04d}" for i in range(N_EUR)] + [f"AFR{i:04d}" for i in range(N_OTHER)]
         for n, d in bgzip_tabix(vcf_text(meta, alleles, samples), tbx, f"chr{CHROM}.vcf.gz", ["-p", "vcf"]).items():
             remote.files[f"/kg/{n}"] = d
+        far = pd.DataFrame({"rsid": [rsid(0)], "ref": ["A"], "alt": ["G"], "pos": [FAR_POS]})
+        for n, d in bgzip_tabix(vcf_text(far, alleles[:1], samples, unmapped=False), tbx / "far", f"chr{CHROM}.vcf.gz",
+                                ["-p", "vcf"]).items():
+            remote.files[f"/kg_far/{n}"] = d
         remote.files["/kg/panel"] = _lines(["sample", "pop", "super_pop", "gender"],
                                            [[s, "SYN", s[:3], "female"] for s in samples]).encode()
 
@@ -470,6 +501,11 @@ def _ld_shape(unit_dir: Path) -> tuple[int, ...]:
         return tuple(z["dosage"].shape)
 
 
+def _ld_rsids(unit_dir: Path) -> list[str]:
+    with np.load(unit_dir / "ld.npz", allow_pickle=False) as z:
+        return [str(r) for r in z["rsid"]]
+
+
 def check_unit(unit: InstrumentUnit, unit_dir: Path, result: dict, collect_sha256: str) -> dict:
     """The dry-run record of one finished unit directory: what colocalization returned for each
     outcome, the evidence rows assembly forms from it, and `checks`, each True when the known
@@ -499,6 +535,7 @@ def check_unit(unit: InstrumentUnit, unit_dir: Path, result: dict, collect_sha25
         "susie_found_two_pqtl_credible_sets": (shared.get("susie") or {}).get("n_cs1", 0) >= 2 and shared.get("susie_note") == "",
         "s15g_from_coloc_susie": shared.get("s15g_method") == "coloc.susie",
         "ld_panel_is_the_503_eur_samples": _ld_shape(unit_dir) == (N_VARIANTS, N_EUR),
+        "ld_panel_rsids_come_from_the_map_and_its_unmapped_records_are_dropped": _ld_rsids(unit_dir) == list(panel()[0]["rsid"]),
         "vep_hit_for_the_lead": result["vep"].get(shared.get("lead_variant", ""), {}).get("hit") is True,
         "splicing_candidate": result["splicing"].get("splicing_candidate") is True,
         "regional_manifest_rows_validate": len(regional_rows({unit.unit_key: metas})) == len(metas),
@@ -795,6 +832,42 @@ def scenario(world: World, root: Path, analyze: Callable[[InstrumentUnit, Volume
             and all(abs(a - b) < 1e-6 for a, b in zip(orci["pp"], pval["pp"])) and orci["nsnps"] == pval["nsnps"])
         checks["both_outcomes_keep_every_variant_of_the_window"] = (
             orci["coverage"]["n_shared"] == pval["coverage"]["n_shared"] == first_shared["coverage"]["n_shared"])
+        # 7e. the panel holds no record in the window (as chrX outside the pseudoautosomal regions): the unit runs
+        #     without LD, its proxy quantities missing, S15g the primary coloc.abf value, the primary colocalization as with LD
+        no_ld = analyze(decode_unit, world.fetcher(root, opengwas_token="opengwas-token-two", no_panel_record=True),
+                        root / "no_panel_record_units")
+        no_ld_shared = no_ld["outcomes"][SHARED]
+        events["ld_unavailable"] = no_ld["ld_unavailable"]
+        checks["no_panel_record_runs_the_unit_without_ld_and_the_primary_coloc_as_with_it"] = (
+            no_ld["ld_unavailable"].startswith("the registered 1000 Genomes GRCh38 panel has no record")
+            and not (root / "no_panel_record_units" / decode_unit.unit_key / "ld.npz").exists()
+            and no_ld["sentinel_proxies"] is None and no_ld_shared["pp"] == first_shared["pp"]
+            and no_ld_shared["s15a_pp_h4"] == first_shared["s15a_pp_h4"]
+            and no_ld_shared["s17_sentinel_p"] == first_shared["s17_sentinel_p"]
+            and no_ld_shared["s15g_pp_h4"] == no_ld_shared["pp"][4] and no_ld_shared["s15g_method"].startswith("coloc.abf")
+            and no_ld_shared["susie"] is None
+            and no_ld_shared["susie_note"].startswith("susie not run: the registered")
+            and no_ld_shared["coverage"]["sentinel_or_proxy_retained"] is True          # the sentinel itself is shared
+            and no_ld["vep"][no_ld_shared["lead_variant"]]["rsids"] == [no_ld_shared["lead_variant"]]
+            and no_ld["s16"][SHARED]["pp_h4"] == results["decode"]["s16"][SHARED]["pp_h4"])
+        # 7f. a sentinel given as several rsIDs: a merged synonym and an id Ensembl does not know resolve to the
+        #     sentinel; two unknown ids leave it unresolved, the unit finished with the unavailable-file consequence
+        def listed(*ids: str) -> InstrumentUnit:
+            return decode_unit.model_copy(update={"sentinel": decode_unit.sentinel.model_copy(update={"rsid": ",".join(ids)})})
+        merged = analyze(listed(MERGED_ID, UNKNOWN_IDS[1]), world.fetcher(root, opengwas_token="opengwas-token-two"),
+                         root / "listed_rsid_units")
+        unresolved = analyze(listed(*UNKNOWN_IDS), world.fetcher(root, opengwas_token="opengwas-token-two"),
+                             root / "unresolved_rsid_units")
+        events["listed_rsids"] = {"resolved": merged["positions"].get("sentinel"), "unresolved": unresolved.get("pqtl_detail")}
+        checks["listed_rsids_resolve_to_the_sentinel_and_colocalize_as_it"] = (
+            merged["positions"]["sentinel"]["rsid"] == rsid(SENTINEL_INDEX)
+            and merged["positions"]["GRCh37"] == results["decode"]["positions"]["GRCh37"]
+            and merged["outcomes"][SHARED]["pp"] == first_shared["pp"]
+            and merged["outcomes"][SHARED]["s17_sentinel_p"] == first_shared["s17_sentinel_p"]
+            and merged["sentinel_proxies"] == results["decode"]["sentinel_proxies"])
+        checks["listed_rsids_ensembl_does_not_know_leave_the_unit_without_a_sentinel_and_finished"] = (
+            unresolved["pqtl_available"] is False and "knows none of the listed rsIDs" in unresolved["sentinel_unresolved"]
+            and (root / "unresolved_rsid_units" / decode_unit.unit_key / "result.json").is_file())
         # 8. every unit is finished: the whole files are deleted, the records and the extracts stay
         events["purge_before_units_finish"] = _raised(lambda: purge_raw(root / "empty", units, commit))
         extracts = {p: p.read_bytes() for p in sorted((root / "units").rglob("*.tsv.gz"))}

@@ -99,7 +99,9 @@ def test_plan_locates_each_instrument_by_identity_and_records_every_file_it_read
     assert plan["a_outputs"] == {"hypotheses.csv": sha256_file(stage_a[0]), "outcome_trait_coding.tsv": sha256_file(stage_a[1])}
     assert plan["units_sha256"] == hashlib.sha256(units_text.encode()).hexdigest()
     assert (plan["units"], plan["units_by_source"]) == (3, {"decode": 1, "interval": 1, "ukbppp": 1})
-    assert plan["collect_tasks_by_source"] == {"decode": 1, "gwas_catalog": 2, "ukbppp": 1, "ukbppp_rsid_map": 1}
+    # every unit reads the rsID map of its sentinel's chromosome: the three sentinels sit on two chromosomes
+    assert len({u.sentinel.chrom for u in units.values()}) == 2
+    assert plan["collect_tasks_by_source"] == {"decode": 1, "gwas_catalog": 2, "ukbppp": 1, "ukbppp_rsid_map": 2}
     assert [(t.source, t.key, t.name) for t in collect_tasks(units.values())][0] == ("decode", "1_1", "1_1_G1_Protein_one.txt.gz")
     assert make_plan(*stage_a, tables)[0] == units_text               # the same inputs give the same units
 
@@ -133,10 +135,10 @@ def test_plan_gives_an_assay_that_serves_two_genes_one_unit_per_gene_and_an_assa
     assert plan["hypothesis_source_units"] == {"d1": {"decode": "decode__1_1__ENSG_D"}, "e1": {"decode": "decode__1_1__ENSG_E"}}
     assert plan["unit_ids"]["interval__G5.5.5.3__ENSG_C"] == ["interval", "G5.5.5.3", "ENSG_C"]
     assert (plan["units"], plan["units_by_source"]) == (4, {"decode": 2, "interval": 2})
-    # the two deCODE units read one file: one task, and one task per GWAS Catalog accession; a unit with a GWAS
-    # Catalog outcome also reads the UKB-PPP rsID map of its sentinel's chromosome
+    # the two deCODE units read one file: one task, and one task per GWAS Catalog accession; every unit also
+    # reads the UKB-PPP rsID map of its sentinel's chromosome (the LD panel's rsIDs), one task per chromosome
     assert plan["collect_tasks_by_source"] == {"decode": 1, "gwas_catalog": 2, "ukbppp_rsid_map": 2}
-    maps = sorted({("ukbppp_rsid_map", u.sentinel.chrom) for u in (c, d, e)})
+    maps = sorted({("ukbppp_rsid_map", u.sentinel.chrom) for u in (a, c, d, e)})
     assert len(maps) == 2 and [(t.source, t.key) for t in collect_tasks(units.values())] == [
         ("decode", "1_1"), ("gwas_catalog", "GCST1"), ("gwas_catalog", "GCST2"), *maps]
     # the EpiGraphDB placeholder names no assay: no sentinel, no unit, whatever the number of genes carrying it

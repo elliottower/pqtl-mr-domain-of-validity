@@ -109,10 +109,11 @@ def evidence_row(h: HypothesisInput, source: str, assay_id: str, result: Mapping
     cov = o["coverage"]
     base = _blank_row(h, o["not_run_reason"], protein_altering(None, pav), pc, spl, s16_state(h, source, result))
     p17 = o.get("s17_sentinel_p")
+    low = "" if cov["low_coverage"] is None else cov["low_coverage"]          # None: missing without LD (pipeline.py)
     base.update({"s17_sentinel_p": "" if p17 is None else p17, "n_shared": cov["n_shared"], "frac_pqtl_retained": cov["frac_pqtl_retained"],
                  "frac_outcome_retained": cov["frac_outcome_retained"],
-                 "sentinel_or_proxy_retained": cov["sentinel_or_proxy_retained"], "low_coverage": cov["low_coverage"],
-                 "s15f_low_coverage_excluded": cov["low_coverage"]})
+                 "sentinel_or_proxy_retained": "" if cov["sentinel_or_proxy_retained"] is None else cov["sentinel_or_proxy_retained"],
+                 "low_coverage": low, "s15f_low_coverage_excluded": low})
     if not o["coloc_run"]:
         return EvidenceRow(**base)
     pp = o["pp"]

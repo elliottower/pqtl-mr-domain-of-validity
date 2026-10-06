@@ -24,7 +24,7 @@ source files and are never committed, so the copy lies outside the repository or
 gitignored inputs directory.
 """
 import json
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from pathlib import Path
 
 from v8_manifest import MANIFEST_NAME, sha256_file, verify_listed
@@ -108,6 +108,21 @@ def spawn_collect(prereg: Path, run_token: str, units: Path, unit_plan: Path, a_
         tasks = [t for t in tasks if t.source == "gwas_catalog" and t.key in set(accessions)]
     return [{"source": t.source, "key": t.key, "call_id": spawn(t.model_dump_json(), run_token)}
             for t in tasks if not sources or t.source in sources]
+
+
+def supersede_selection(lines: Sequence[str], volume: Mapping, keys: Collection[str] | None) -> list[str]:
+    """The lines of units.jsonl `supersede-units` hands to the Modal function (pipeline.supersede_units).
+    `volume` is status.volume_state. With `keys` (--units-file), the units named, each of which must be
+    planned; a finished one among them makes the Modal call refuse. Without (--all-failed), every
+    planned unit that has no result.json and has a directory or an error marker on the volume."""
+    by_key = {InstrumentUnit.model_validate_json(line).unit_key: line for line in lines}
+    if keys is not None:
+        unknown = sorted(set(keys) - set(by_key))
+        if unknown:
+            raise InputContractError(f"{len(unknown)} units are not planned (first: {unknown[0]})")
+        return [by_key[k] for k in sorted(set(keys))]
+    touched = (set(volume["units_started"]) | set(volume["errors"]["units"])) - set(volume["units_done"])
+    return [by_key[k] for k in sorted(touched & set(by_key))]
 
 
 def spawn_units(prereg: Path, run_token: str, units: Path, unit_plan: Path, a_output: Path,

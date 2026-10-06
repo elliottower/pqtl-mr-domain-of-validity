@@ -26,6 +26,11 @@ after it (the image bakes PREREG.md and the sealed stage A files).
     #    validation report is missing or does not cover the current GWAS Catalog collect records
     $B spawn --run-token <token>
     $B status                            # until every unit is done
+    #    after a code fix that changes the unit fingerprint (commit, deploy): the unfinished units' directories,
+    #    now stale, and their error markers are moved to /stage_b/superseded/units/<utc>/ and
+    #    /stage_b/superseded/errors/units/<utc>/ (never deleted; refused if a unit given holds result.json), then
+    #    `spawn` again; finished units return their result
+    $B supersede-units --run-token <token> --all-failed      # or --units-file <file of unit keys>
     # 4. after `modal volume get pqtl-v8-stage-b /stage_b/units inputs/stage_b/units` and
     #    `modal volume get pqtl-v8-stage-b /stage_b/collect inputs/stage_b/collect` (the gitignored
     #    inputs directory: the unit directories hold regional extracts, which are never committed)
@@ -85,8 +90,8 @@ from v8_run_guard import PLAN_SHA256, clean_commit
 from stage_b.assemble import (build_evidence, collect_unit_dir, load_collect_records, load_st29, regional_rows,
                               write_outputs)
 from stage_b.checkpoint import collect_digest, common_tools, package_sha256, source_pins, unit_fingerprint, unit_tools
-from stage_b.launch import (authorize, check_plan_inputs, planned_tasks, private_copy, sealed_stage_b, spawn_collect,
-                            spawn_units)
+from stage_b.launch import (authorize, check_plan_inputs, planned_tasks, planned_units, private_copy, sealed_stage_b,
+                            spawn_collect, spawn_units, supersede_selection)
 from stage_b.schemas import CollectRecord, InputContractError, InstrumentUnit
 from stage_b.status import error_of, status_report
 from stage_b.units import load_hypotheses
@@ -106,7 +111,7 @@ APP = "pqtl-v8-stage-b"
 VOLUME = "pqtl-v8-stage-b"
 STAGE_ROOT = "stage_b"     # the stage B root on the volume (modal_stage_b.ROOT without the mount point)
 FUNCTIONS = ("plan_remote", "collect_file", "validate_outcomes", "validate_outcome_file", "restore_validated_records",
-             "run_unit", "stage_state", "purge_raw_files")
+             "run_unit", "supersede_stale_units", "stage_state", "purge_raw_files")
 
 
 def utc_now() -> str:
@@ -217,6 +222,23 @@ def cmd_spawn(a: argparse.Namespace) -> None:
                                     [CollectRecord.model_validate(r) for r in state["gwas_catalog_records"]]))
     log_entry({"what": "spawn", "repo_commit": commit, "calls": calls, "utc": utc_now()})
     print(f"{len(calls)} units spawned at {utc_now()}")
+
+
+# After a code fix changed the unit fingerprint: archive the stale directories and error markers of unfinished
+# units (stage_b.pipeline.supersede_units; nothing deleted; refused if a unit given holds result.json), then
+# `spawn` again. The guard is the first statement (tests/test_launch_guard.py).
+def cmd_supersede_units(a: argparse.Namespace) -> None:
+    commit = clean_commit(REPO)
+    lines = planned_units(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT)
+    state = modal.Function.from_name(APP, "stage_state").remote()
+    keys = None if a.all_failed else [line.split("\t")[0].strip() for line in a.units_file.read_text().splitlines() if line.strip()]
+    chosen = supersede_selection(lines, state, keys)
+    out = modal.Function.from_name(APP, "supersede_stale_units").remote(chosen, a.run_token)
+    log_entry({"what": "supersede_units", "repo_commit": commit, "selection": "all_failed" if a.all_failed else str(a.units_file),
+               **out, "utc": utc_now()})
+    print(f"{len(chosen)} units given: {len(out['moved'])} directories moved to /{STAGE_ROOT}/superseded/units/{out['stamp']}/, "
+          f"{len(out['markers_archived'])} error markers archived, {len(out['kept_current'])} kept (current fingerprint), "
+          f"{len(out['untouched'])} with nothing on the volume; run `spawn` next")
 
 
 def app_state() -> dict:
@@ -348,8 +370,12 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     token_help = "token of the PREREG.md entry 'RUN_START stage=B token=<token>'"
-    for name in ("plan", "collect", "validate", "restore-validated", "spawn", "assemble"):
+    for name in ("plan", "collect", "validate", "restore-validated", "spawn", "supersede-units", "assemble"):
         sub.add_parser(name).add_argument("--run-token", required=True, help=token_help)
+    which = sub.choices["supersede-units"].add_mutually_exclusive_group(required=True)
+    which.add_argument("--all-failed", action="store_true",
+                       help="every planned unit without result.json that has a directory or an error marker on the volume")
+    which.add_argument("--units-file", type=Path, help="a file of unit keys, one per line (first tab-separated field)")
     sub.choices["collect"].add_argument("--source", nargs="*", help="collect only these sources (e.g. decode)")
     sub.choices["collect"].add_argument("--accessions", nargs="*",
                                         help="collect only these GWAS Catalog accessions again, superseding an `absent` record")
@@ -367,8 +393,8 @@ def main() -> None:
     sub.add_parser("purge")
     a = ap.parse_args()
     {"plan": cmd_plan, "collect": cmd_collect, "validate": cmd_validate, "restore-validated": cmd_restore_validated,
-     "check-validation": cmd_check_validation, "spawn": cmd_spawn, "status": cmd_status, "assemble": cmd_assemble,
-     "purge": cmd_purge}[a.cmd](a)
+     "check-validation": cmd_check_validation, "spawn": cmd_spawn, "supersede-units": cmd_supersede_units,
+     "status": cmd_status, "assemble": cmd_assemble, "purge": cmd_purge}[a.cmd](a)
 
 
 if __name__ == "__main__":

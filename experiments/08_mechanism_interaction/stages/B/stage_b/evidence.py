@@ -95,17 +95,25 @@ def n_variants(df: pd.DataFrame) -> int:
 
 
 def coverage(n_pqtl_window: int, n_outcome_window: int, shared_rsids: Iterable[str], sentinel_rsid: str,
-             sentinel_proxies: set[str]) -> dict:
+             sentinel_proxies: set[str] | None) -> dict:
     """PREREG §Coverage. Low coverage: under 50% of pQTL-window variants retained, or the
-    sentinel and its r^2 >= 0.8 proxies all absent from the shared set."""
+    sentinel and its r^2 >= 0.8 proxies all absent from the shared set. `sentinel_proxies` is None
+    where the LD panel has no record in the window (pipeline.py, LDUnavailable): the sentinel itself
+    retained is still retained, but its absence leaves `sentinel_or_proxy_retained` missing (None),
+    and so `low_coverage` wherever the retained fraction alone does not already make it true."""
     shared = set(shared_rsids)
     n_shared = len(shared)
     frac_p = n_shared / n_pqtl_window if n_pqtl_window else 0.0
     frac_o = n_shared / n_outcome_window if n_outcome_window else 0.0
-    retained = sentinel_rsid in shared or bool(shared & sentinel_proxies)
+    if sentinel_rsid in shared:
+        retained: bool | None = True
+    elif sentinel_proxies is None:
+        retained = None
+    else:
+        retained = bool(shared & sentinel_proxies)
+    low = True if frac_p < LOW_COVERAGE_FRACTION else (None if retained is None else not retained)
     return {"n_shared": n_shared, "frac_pqtl_retained": frac_p, "frac_outcome_retained": frac_o,
-            "sentinel_or_proxy_retained": retained,
-            "low_coverage": frac_p < LOW_COVERAGE_FRACTION or not retained}
+            "sentinel_or_proxy_retained": retained, "low_coverage": low}
 
 
 # ---- flags --------------------------------------------------------------------------------------

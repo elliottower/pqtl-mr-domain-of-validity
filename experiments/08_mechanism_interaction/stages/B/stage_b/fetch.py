@@ -11,7 +11,8 @@ a missing record raises CollectError, a record of `absent` raises SourceAbsent a
 `unreadable` SourceUnreadable. A GWAS Catalog file without a harmonised copy is read by the layout
 its record names (stage_b/outcome_files.py), on the build its record names (`outcome_build`). It queries by
 region what is served by region: OpenGWAS associations, tabix on FinnGen, on GWAS Catalog files that
-have an index and on the eQTL Catalogue, bcftools on 1000 Genomes, Ensembl and GTEx. Each of those
+have an index and on the eQTL Catalogue, bcftools on 1000 Genomes (its records take their rsIDs from
+the collected UKB-PPP rsID map, stage_b/ld.py), Ensembl and GTEx. Each of those
 raises SourceAbsent only on a definitive absence and RetryableSourceError on anything else. For
 Ensembl the only definitive absence is its HTTP 400 whose JSON error names a requested rsID as
 unknown (`ensembl_json`, `ensembl_unknown_id`); every other Ensembl status, 404 included, raises.
@@ -67,8 +68,8 @@ from stage_b.parsers import (decode_to_canonical, filter_decode, filter_decode_a
                              ukbppp_to_canonical)
 from stage_b.remote import ABSENT_STATUS, CORRUPT, attempt, http, http_json, status_kind
 from stage_b.schemas import (OUTCOME_BUILD, Build, CollectError, CollectRecord, CollectTask, InstrumentUnit,
-                             LDReferenceError, OutcomeSpec, RetryableSourceError, Sentinel, SourceAbsent, SourceUnreadable,
-                             UncertaintyMode)
+                             LDReferenceError, LDUnavailable, OutcomeSpec, RetryableSourceError, Sentinel,
+                             SentinelUnresolved, SourceAbsent, SourceUnreadable, UncertaintyMode)
 
 EQTL_CATALOGUE_ENABLED = True
 
@@ -81,6 +82,10 @@ FINNGEN_R12 = "https://storage.googleapis.com/finngen-public-data-r12/summary_st
 KG_VCF = ("http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/"
           "20190312_biallelic_SNV_and_INDEL/ALL.chr{chrom}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz")
 KG_PANEL = "http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502/integrated_call_samples_v3.20130502.ALL.panel"
+# The registered panel's chrX file (ALL.chrX...GRCh38.phased.vcf.gz, 24,046,766 bytes in the release's MANIFEST; one
+# contig, `X`) holds records in the pseudoautosomal regions only: on 2026-10-06, 2 kb slices every 5 Mb along chrX
+# returned records at 0.1 Mb and from 155.70 Mb on, and none between. The GRCh38 PAR1 and PAR2 bounds:
+KG_CHRX_PAR_GRCH38 = ((10_001, 2_781_479), (155_701_383, 156_030_895))
 EQTLCAT_PATHS = ("https://raw.githubusercontent.com/eQTL-Catalogue/eQTL-Catalogue-resources/master/"
                  "tabix/tabix_ftp_paths.tsv")
 GTEX_API = "https://gtexportal.org/api/v2"
@@ -457,6 +462,46 @@ class RemoteSources:
 
 # ---- analyze phase ---------------------------------------------------------------------------------
 
+RSID_RE = re.compile(r"rs[0-9]+")
+
+
+def _locus(doc: dict, sentinel: Sentinel) -> tuple | None:
+    """(chromosome, start, allele string) of the record's one mapping on the sentinel's build and
+    chromosome; None when it has no such mapping or more than one."""
+    maps = [m for m in doc.get("mappings", []) if m.get("assembly_name") == sentinel.build
+            and normalize_chrom(m.get("seq_region_name", "")) == sentinel.chrom]
+    return (sentinel.chrom, int(maps[0]["start"]), str(maps[0].get("allele_string", ""))) if len(maps) == 1 else None
+
+
+def resolve_sentinel(sentinel: Sentinel, variation: Callable[[Build, str], dict | None]) -> dict:
+    """A sentinel given as several rsIDs (deCODE lists merged or synonym ids of one variant, e.g.
+    `rs34989279,rs397699744`). Each listed id is asked of Ensembl's variation endpoint on the
+    sentinel's build separately, the unknown-identifier rule applying per id (`variation` returns
+    None for an unknown id). When at least one id is known and every known id resolves to the same
+    variant, the same Ensembl `name` or the same position and allele string on the sentinel's build
+    and chromosome, the sentinel is that variant: {"rsid": Ensembl's name (of the first listed known
+    id where names differ), "pos": its start, "listed": the ids, "aliases": the listed ids, the names
+    and Ensembl's rs synonyms, each matched as the sentinel in the regional files}. Otherwise raises
+    SentinelUnresolved with the reason: the unit has no resolvable sentinel."""
+    listed = list(dict.fromkeys(x.strip() for x in sentinel.rsid.split(",") if RSID_RE.fullmatch(x.strip())))
+    docs = {rs: doc for rs in listed if (doc := variation(sentinel.build, rs)) is not None}
+    what = f"sentinel {sentinel.rsid} ({sentinel.source} {sentinel.assay_id})"
+    if not docs:
+        raise SentinelUnresolved(f"{what}: Ensembl {sentinel.build} knows none of the listed rsIDs")
+    names = {d.get("name") for d in docs.values()}
+    loci = {_locus(d, sentinel) for d in docs.values()}
+    if len(names) != 1 and (len(loci) != 1 or None in loci):
+        seen = ", ".join(f"{rs} -> {d.get('name')} at {_locus(d, sentinel)}" for rs, d in docs.items())
+        raise SentinelUnresolved(f"{what}: the listed rsIDs resolve to different variants in Ensembl {sentinel.build} ({seen})")
+    first = docs[next(rs for rs in listed if rs in docs)]
+    locus = _locus(first, sentinel)
+    if locus is None:
+        raise SentinelUnresolved(f"{what}: Ensembl {sentinel.build} gives {first.get('name')} no single mapping on "
+                                 f"chromosome {sentinel.chrom}")
+    aliases = set(listed) | {n for n in names if n} | {x for d in docs.values() for x in d.get("synonyms") or []}
+    return {"rsid": str(first.get("name")), "pos": locus[1], "listed": listed,
+            "aliases": sorted(a for a in aliases if RSID_RE.fullmatch(str(a)))}
+
 class VolumeFetcher:
     """pipeline.Fetcher: whole files from the stage B volume, regional queries from the network."""
 
@@ -478,20 +523,33 @@ class VolumeFetcher:
         return collected_file(self.root, record)
 
     # ---- positions -------------------------------------------------------------------------
-    def positions(self, sentinel: Sentinel) -> dict[str, int | None]:
-        out: dict[str, int | None] = {"GRCh37": None, "GRCh38": None, sentinel.build: sentinel.pos}
+    def _variation(self, build: Build, rsid: str) -> dict | None:
+        """Ensembl's variation record of `rsid` on `build`; None when Ensembl reports the id as unknown
+        (its HTTP 400 unknown-identifier reply, `ensembl_json`). Any other reply raises."""
+        try:
+            return ensembl_json("GET", f"{self.endpoints.ensembl_rest[build]}/variation/human/{rsid}",
+                                f"Ensembl {build} {rsid}", ENSEMBL_UNKNOWN_VARIATION, {rsid},
+                                headers={"Content-Type": "application/json"}, timeout=60)
+        except SourceAbsent:
+            return None
+
+    def positions(self, sentinel: Sentinel) -> dict:
+        """{GRCh37, GRCh38}: the sentinel's position on its own build and, from Ensembl's variation
+        record, on the other one (None where Ensembl does not know the rsID there or gives no single
+        mapping on the sentinel's chromosome). A sentinel given as several rsIDs is resolved first
+        (`resolve_sentinel`) and the result carries it under "sentinel"."""
+        resolved = resolve_sentinel(sentinel, self._variation) if "," in sentinel.rsid else None
+        rsid, pos = (resolved["rsid"], resolved["pos"]) if resolved else (sentinel.rsid, sentinel.pos)
+        out: dict = {"GRCh37": None, "GRCh38": None, sentinel.build: pos}
         other: Build = "GRCh37" if sentinel.build == "GRCh38" else "GRCh38"
-        if sentinel.rsid.startswith("rs"):
-            try:
-                doc = ensembl_json("GET", f"{self.endpoints.ensembl_rest[other]}/variation/human/{sentinel.rsid}",
-                                   f"Ensembl {other} {sentinel.rsid}", ENSEMBL_UNKNOWN_VARIATION, {sentinel.rsid},
-                                   headers={"Content-Type": "application/json"}, timeout=60)
-            except SourceAbsent:       # Ensembl reports the rsID as unknown on this build: no position there
-                doc = {}
+        if rsid.startswith("rs"):
+            doc = self._variation(other, rsid) or {}
             maps = [m for m in doc.get("mappings", [])
                     if normalize_chrom(m.get("seq_region_name", "")) == sentinel.chrom
                     and m.get("assembly_name") == other]
             out[other] = int(maps[0]["start"]) if len(maps) == 1 else None
+        if resolved:
+            out["sentinel"] = resolved
         return out
 
     # ---- pQTL --------------------------------------------------------------------------------
@@ -586,15 +644,20 @@ class VolumeFetcher:
         df = _local(read, what)
         return self._map_rsids(df, chrom, record) if record.rsid_rule == "ukbppp_map" else df
 
-    def _map_rsids(self, df: pd.DataFrame, chrom: str, record: CollectRecord) -> pd.DataFrame:
-        """rsIDs from the UKB-PPP map of the chromosome, on the record's build (outcome_files.map_rsids)."""
+    def rsid_map(self, chrom: str, build: Build, positions: set[int]) -> dict[tuple[int, frozenset], set[str]]:
+        """The rows of the chromosome's collected UKB-PPP rsID map at `positions` on `build`
+        (outcome_files.map_rsids)."""
         what = f"UKB-PPP rsID map chr{chrom}"
 
         def read() -> dict:
             with gzip.open(self._collected("ukbppp_rsid_map", chrom), "rt") as fh:
                 header, rows = _header_and_rows(fh, "\t", what)
-                return map_rsids(rows, header, record.build, {int(p) for p in df["pos"]})
-        return attach_map_rsids(df, _local(read, what))
+                return map_rsids(rows, header, build, positions)
+        return _local(read, what)
+
+    def _map_rsids(self, df: pd.DataFrame, chrom: str, record: CollectRecord) -> pd.DataFrame:
+        """rsIDs from the UKB-PPP map of the chromosome, on the record's build (outcome_files.map_rsids)."""
+        return attach_map_rsids(df, self.rsid_map(chrom, record.build, {int(p) for p in df["pos"]}))
 
     def outcome_build(self, spec: OutcomeSpec) -> Build:
         """The build an outcome file's positions are on: OUTCOME_BUILD of its source, except a
@@ -631,6 +694,15 @@ class VolumeFetcher:
         return path
 
     def ld_panel(self, chrom: str, center_grch38: int, half_width: int) -> tuple[pd.DataFrame, np.ndarray]:
+        """The EUR genotypes of the region, each record's rsID from the chromosome's collected UKB-PPP
+        rsID map by GRCh38 position and allele pair (stage_b/ld.py); the panel's ID column is not read.
+        The registered panel having no record in the window is LDUnavailable, not a failure: a chrX
+        sentinel outside the pseudoautosomal regions, decided before anything is read (the panel holds no
+        chrX record there, KG_CHRX_PAR_GRCH38), and a region query that returns no record. A window that
+        has records but too few rsIDs still raises LDReferenceError (stage_b/ld.py)."""
+        if chrom == "X" and not any(lo <= center_grch38 <= hi for lo, hi in KG_CHRX_PAR_GRCH38):
+            raise LDUnavailable(f"chrX:{center_grch38} (GRCh38) lies outside the pseudoautosomal regions, and the registered "
+                                "1000 Genomes GRCh38 panel (20190312 release) holds chrX records only inside them")
         samples = self._eur_samples()
         url = self.endpoints.kg_vcf.format(chrom=chrom)
         fmt = "%CHROM\t%POS\t%ID\t%REF\t%ALT[\t%GT]\n"
@@ -643,8 +715,11 @@ class VolumeFetcher:
                                                             capture_output=True, text=True, timeout=3600, check=True),
                                f"1000G {region}")
                 if proc.stdout:
-                    return parse_genotypes(proc.stdout.splitlines())
-        raise LDReferenceError(f"1000G EUR returned no records for chr{chrom}:{center_grch38}")
+                    lines = proc.stdout.splitlines()
+                    positions = {int(line.split("\t", 2)[1]) for line in lines}
+                    return parse_genotypes(lines, self.rsid_map(chrom, "GRCh38", positions))
+        raise LDUnavailable(f"the registered 1000 Genomes GRCh38 panel has no record in chr{chrom}:"
+                            f"{max(center_grch38 - half_width, 1)}-{center_grch38 + half_width}")
 
     # ---- VEP ---------------------------------------------------------------------------------------
     def vep(self, rsids: list[str], build: Build) -> list[dict]:

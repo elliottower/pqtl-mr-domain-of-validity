@@ -3,9 +3,11 @@
 Whole files are the deCODE per-SeqId files (and their SMP-normalized release for S16), the UKB-PPP
 per-protein tars, the UKB-PPP per-chromosome rsID maps, the GWAS Catalog harmonised files that have
 no tabix index and, for an accession without a harmonised file, the summary-statistics file of its
-study directory (a GWAS-SSF file or a reviewed author format, stage_b/outcome_files.py). A unit
-with a GWAS Catalog outcome also reads the UKB-PPP rsID map of its sentinel's chromosome: a GWAS-SSF
-file without an rsid column takes its rsIDs from it. `collect_tasks` lists them from the units, one task per file whatever the
+study directory (a GWAS-SSF file or a reviewed author format, stage_b/outcome_files.py). Every unit
+reads the UKB-PPP rsID map of its sentinel's chromosome: the records of the 1000 Genomes EUR LD panel
+take their rsIDs from it (stage_b/ld.py), as do a UKB-PPP pQTL file and a GWAS-SSF file without an
+rsid column, so the map enters every unit's collect digest and fingerprint (stage_b/checkpoint.py).
+`collect_tasks` lists them from the units, one task per file whatever the
 number of units that read it. `collect_one` runs one task (one Modal call per file) and leaves:
 
     <root>/raw/<source>/<name>             the file
@@ -101,12 +103,9 @@ def collect_tasks(units: Iterable[InstrumentUnit]) -> list[CollectTask]:
                 add(CollectTask(source="decode_smp", key=u.assay_id, **u.smp_listing.model_dump()))
         elif u.source == "ukbppp":
             add(CollectTask(source="ukbppp", key=u.assay_id))
-            add(CollectTask(source="ukbppp_rsid_map", key=u.sentinel.chrom))
-        catalog = [o.accession for o in u.outcomes if o.source == "gwas_catalog"]
-        for accession in catalog:
+        for accession in (o.accession for o in u.outcomes if o.source == "gwas_catalog"):
             add(CollectTask(source="gwas_catalog", key=accession))
-        if catalog:
-            add(CollectTask(source="ukbppp_rsid_map", key=u.sentinel.chrom))
+        add(CollectTask(source="ukbppp_rsid_map", key=u.sentinel.chrom))   # the 1000 Genomes LD panel's rsIDs, every unit
     return [tasks[k] for k in sorted(tasks)]
 
 

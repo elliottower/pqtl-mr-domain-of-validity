@@ -9,12 +9,14 @@ import pytest
 from test_pipeline import fp
 
 from stage_b.collect import collect_tasks
-from stage_b.ld import aligned_ld, parse_genotypes, proxies
+from stage_b.fetch import KG_CHRX_PAR_GRCH38, Endpoints, VolumeFetcher, resolve_sentinel
+from stage_b.ld import aligned_ld, eur_polymorphic, parse_genotypes, proxies
+from stage_b.outcome_files import map_rsids
 from stage_b.parsers import (decode_to_canonical, filter_decode, filter_decode_annotation, filter_decode_excluded,
                              filter_finngen, filter_gwas_catalog, filter_ukbppp, normalize_chrom,
                              parse_ukbppp_rsid_map, split_lines, ukbppp_to_canonical)
 from stage_b.schemas import (HYPOTHESIS_INPUT_COLUMNS, AmbiguousInstrumentError, HypothesisInput,
-                             InputContractError, LDReferenceError, Sentinel, SourceFile)
+                             InputContractError, LDReferenceError, LDUnavailable, Sentinel, SentinelUnresolved, SourceFile)
 from stage_b.schemas import InputContractError as _InputContractError
 from stage_b.units import load_hypotheses as _load_hypotheses
 from stage_b.sentinels import (decode_sentinels, interval_opengwas_id, interval_sentinels, select_assay,
@@ -170,9 +172,11 @@ def test_an_assay_serving_two_genes_gives_one_unit_per_gene_sharing_the_sentinel
     # each hypothesis goes to the unit of its own gene
     assert hyp_unit == {"h1": "decode__a__ENSG1", "h2": "decode__a__ENSG2", "h3": "decode__a__ENSG2", "h4": "decode__a__ENSG1"}
     assert source_units == {h: {"decode": k} for h, k in hyp_unit.items()} and unresolved == {}
-    # the shared file is one collect task (and one for its SMP-normalized release), whatever the number of genes
+    # the shared file is one collect task (and one for its SMP-normalized release, and one for the rsID map of the
+    # sentinel's chromosome), whatever the number of genes
     assert [(t.source, t.key, t.name, t.size) for t in collect_tasks(units)] == [("decode", "a", "1_1_G_G.txt.gz", 10),
-                                                                              ("decode_smp", "a", "1_1_G_G.txt.gz", 9)]
+                                                                              ("decode_smp", "a", "1_1_G_G.txt.gz", 9),
+                                                                              ("ukbppp_rsid_map", "1", "", None)]
     assert collect_tasks(units) == collect_tasks([one]) == collect_tasks([two])
     assert fp(one) != fp(two)                                        # two checkpoints, never resumed as each other
 
@@ -230,8 +234,25 @@ def test_build_units_pairs_the_outcome_with_the_other_sources_instrument():
 
 # ---- LD ---------------------------------------------------------------------------------------
 
-def vcf_lines(genos: dict[tuple[str, str, str], list[str]]) -> list[str]:
-    return [f"1\t{i}\t{rs}\t{ref}\t{alt}\t" + "\t".join(g) for i, ((rs, ref, alt), g) in enumerate(genos.items())]
+MAP_HEADER = ["ID", "REF", "ALT", "rsid", "POS19", "POS38"]
+
+
+def rsid_map(rows: list[tuple[int, str, str, str]], positions: set[int], pos19_shift: int = 0) -> dict:
+    """The UKB-PPP map (outcome_files.map_rsids, on GRCh38) of rows (POS38, REF, ALT, rsid)."""
+    text = [[f"1:{p}:{a}:{b}:imp:v1", a, b, rs, str(p + pos19_shift), str(p)] for p, a, b, rs in rows]
+    return map_rsids(text, MAP_HEADER, "GRCh38", positions)
+
+
+def panel(records: list[tuple[int, str, str, list[str]]]) -> list[str]:
+    """`bcftools query` lines of the registered panel: "." in the ID column."""
+    return [f"1\t{p}\t.\t{ref}\t{alt}\t" + "\t".join(g) for p, ref, alt, g in records]
+
+
+def vcf_lines(genos: dict[tuple[str, str, str], list[str]]) -> tuple[list[str], dict]:
+    """A panel of one record per key (rsID, REF, ALT) at positions 0, 1, ..., and the map naming each rsID."""
+    records = [(i, ref, alt, g) for i, ((_rs, ref, alt), g) in enumerate(genos.items())]
+    rows = [(i, ref, alt, rs) for i, (rs, ref, alt) in enumerate(genos) if rs]
+    return panel(records), rsid_map(rows, set(range(len(genos))))
 
 
 def test_proxies_and_signed_ld():
@@ -239,9 +260,9 @@ def test_proxies_and_signed_ld():
     same = list(lead)
     flipped = [{"0|0": "1|1", "1|1": "0|0"}.get(g, g) for g in lead]     # perfectly anti-correlated
     other = ["0|1", "0|0", "0|1", "1|1", "0|1", "0|0"]
-    meta, dos = parse_genotypes(vcf_lines({("rs1", "A", "G"): lead, ("rs2", "C", "T"): same,
-                                           ("rs3", "A", "C"): flipped, ("rs4", "G", "T"): other,
-                                           ("rs5", "A", "G,T"): lead}))
+    meta, dos = parse_genotypes(*vcf_lines({("rs1", "A", "G"): lead, ("rs2", "C", "T"): same,
+                                            ("rs3", "A", "C"): flipped, ("rs4", "G", "T"): other,
+                                            ("rs5", "A", "G,T"): lead}))
     assert list(meta["rsid"]) == ["rs1", "rs2", "rs3", "rs4"]           # multiallelic record dropped
     assert proxies(meta, dos, "rs1") == {"rs1", "rs2", "rs3"}
     assert proxies(meta, dos, "rs404") == set()
@@ -251,10 +272,61 @@ def test_proxies_and_signed_ld():
     assert ld[0, 1] == pytest.approx(1.0)      # rs3 effect allele A is REF, so its sign flips back
 
 
-def test_ld_panel_without_rsids_cannot_be_matched():
-    with pytest.raises(LDReferenceError):
-        parse_genotypes(vcf_lines({(".", "A", "G"): ["0|1", "1|1"], (".", "C", "T"): ["0|1", "0|0"]}))
-    assert np.isfinite(parse_genotypes(vcf_lines({("rs1", "A", "G"): ["0|1", ".|."]}))[1]).all()
+G1, G2, G3, G4 = ["0|1", "1|1", "0|0"], ["1|1", "0|1", "0|0"], ["0|0", "0|1", "1|1"], ["0|1", "0|0", "1|0"]
+
+
+def test_panel_records_take_the_map_rsid_of_their_grch38_position_and_unordered_allele_pair():
+    records = [(100, "G", "A", G1),            # the map's A/G with REF and ALT the other way round: rs1
+               (200, "A", "G", G2),            # a site dbSNP splits by allele: the panel's two biallelic records
+               (200, "A", "T", G3),            #   each take the rsID of their own pair, rs2 and rs3
+               (300, "T", "C", G4),            # the strand complement of the map's A/G: no rsID, no flip
+               (400, "C", "T", G1),            # no map row at 400 on GRCh38 (one has POS19 400, POS38 900): no rsID
+               (500, "A", "C,G", G2),          # a multiallelic record: not read
+               (600, "A", "C", G3),            # no map row at 600; the panel's ID column is never read
+               (700, "G", "T", G4)]            # rs7
+    lines = panel(records)
+    lines[6] = lines[6].replace("\t.\t", "\trs6\t")
+    mapping = rsid_map([(100, "A", "G", "rs1"), (200, "A", "G", "rs2"), (200, "A", "T", "rs3"), (300, "A", "G", "rs4"),
+                        (700, "G", "T", "rs7")], {p for p, *_ in records})
+    assert rsid_map([(900, "C", "T", "rs5")], {400}, pos19_shift=-500) == {}         # its POS19 is 400, not read on GRCh38
+    meta, dos = parse_genotypes(lines, mapping)
+    assert list(zip(meta["rsid"], meta["pos"], meta["ref"], meta["alt"])) == [
+        ("rs1", 100, "G", "A"), ("rs2", 200, "A", "G"), ("rs3", 200, "A", "T"), ("rs7", 700, "G", "T")]
+    assert dos.tolist() == [[1, 2, 0], [2, 1, 0], [0, 1, 2], [1, 0, 1]]         # each row keeps its own record's genotypes
+
+
+def test_a_record_the_map_gives_two_rsids_and_an_rsid_the_map_gives_two_records_are_both_dropped():
+    records = [(100, "A", "G", G1), (200, "A", "G", G2), (300, "C", "T", G3), (400, "A", "G", G4), (500, "A", "C", G1)]
+    mapping = rsid_map([(100, "A", "G", "rs1"), (100, "G", "A", "rs8"),          # two rsIDs for one position and pair
+                        (200, "A", "G", "rs9"), (300, "C", "T", "rs9"),          # one rsID for two records
+                        (400, "A", "G", "rs4"), (500, "A", "C", "rs5")], {p for p, *_ in records})
+    meta, _ = parse_genotypes(panel(records), mapping)
+    assert list(meta["rsid"]) == ["rs4", "rs5"]
+
+
+def test_the_rsid_threshold_is_applied_after_annotation():
+    records = [(100, "A", "G", G1), (200, "C", "T", G2), (300, "A", "C", G3)]
+    positions = {p for p, *_ in records}
+    one_of_three = rsid_map([(100, "A", "G", "rs1")], positions)
+    with pytest.raises(LDReferenceError, match="only 0.33 of the EUR-polymorphic panel records carry an rsID"):
+        parse_genotypes(panel(records), one_of_three)
+    two_of_three = rsid_map([(100, "A", "G", "rs1"), (300, "C", "A", "rs3")], positions)
+    assert list(parse_genotypes(panel(records), two_of_three)[0]["rsid"]) == ["rs1", "rs3"]      # every ID "." in the panel
+    with_ids = [line.replace("\t.\t", f"\trs{i}\t") for i, line in enumerate(panel(records))]
+    with pytest.raises(LDReferenceError, match="only 0.00 of the EUR-polymorphic panel records"):   # rsIDs in the ID column only
+        parse_genotypes(with_ids, {})
+    # the share is taken over EUR-polymorphic records: three monomorphic records without an rsID (all 0, all 1, all
+    # missing) leave one of two polymorphic records matched, 0.5, which passes; one more unmatched polymorphic one fails
+    mono = [(400, "A", "G", ["0|0", "0|0", "0|0"]), (500, "C", "T", ["1|1", "1", "1|1"]), (600, "A", "C", [".|.", ".|.", ".|."])]
+    half = rsid_map([(100, "A", "G", "rs1")], {100, 200, 400, 500, 600})
+    assert list(parse_genotypes(panel(records[:2] + mono), half)[0]["rsid"]) == ["rs1"]
+    with pytest.raises(LDReferenceError, match="only 0.33 of the EUR-polymorphic"):
+        parse_genotypes(panel(records + mono), half)
+    with pytest.raises(LDReferenceError, match="no record of the region is polymorphic among the EUR samples"):
+        parse_genotypes(panel(mono), half)
+    assert [eur_polymorphic(g) for g in (["0|1"], ["0", "1"], ["1|1", "0/."], ["0|0", "."], ["1", "1|1"], [".|."])] == [
+        True, True, True, False, False, False]
+    assert np.isfinite(parse_genotypes(*vcf_lines({("rs1", "A", "G"): ["0|1", ".|."]}))[1]).all()
 
 
 # ---- the seam with stage A (INTERFACES.md is the contract both stages are written against) -----
@@ -310,3 +382,62 @@ def test_sentinel_refuses_an_unnamed_chromosome_and_a_nan_score():
             Sentinel(chrom=bad, neg_log10_p=1.0, **ok)
     with pytest.raises(ValueError, match="NaN"):
         Sentinel(chrom="5", neg_log10_p=math.nan, **ok)
+
+
+@pytest.mark.parametrize("center", [101_401_752, 155_013_426, 2_781_480, 155_701_382])
+def test_a_chrx_sentinel_outside_the_pseudoautosomal_regions_has_no_ld_and_nothing_is_read(tmp_path, center):
+    fetcher = VolumeFetcher(tmp_path, "", tmp_path / "a.gz", tmp_path / "e.gz",
+                            Endpoints(kg_panel="http://127.0.0.1:9/none", kg_vcf="http://127.0.0.1:9/{chrom}"))
+    with pytest.raises(LDUnavailable, match=f"chrX:{center} .GRCh38. lies outside the pseudoautosomal regions"):
+        fetcher.ld_panel("X", center, 1_000_000)
+    assert not (tmp_path / "cache" / "1000g_eur_samples.txt").exists()
+    assert KG_CHRX_PAR_GRCH38 == ((10_001, 2_781_479), (155_701_383, 156_030_895))
+    assert not issubclass(LDUnavailable, LDReferenceError)        # a window with records but few rsIDs still raises
+
+
+# ---- a sentinel given as several rsIDs -----------------------------------------------------------------
+
+MULTI = Sentinel(source="decode", assay_id="1_1", rsid="rs34989279,rs397699744", chrom="5", pos=1000, build="GRCh38",
+                 neg_log10_p=40)
+
+
+def ensembl_doc(name: str, start: int, alleles: str = "C/T", synonyms=(), chrom: str = "5") -> dict:
+    return {"name": name, "synonyms": list(synonyms),
+            "mappings": [{"assembly_name": "GRCh38", "seq_region_name": chrom, "start": start, "allele_string": alleles},
+                         {"assembly_name": "GRCh38", "seq_region_name": "CHR_HSCHR5_1_CTG1", "start": 7, "allele_string": alleles}]}
+
+
+def asked(docs: dict[str, dict | None]):
+    calls = []
+
+    def variation(build, rsid):
+        calls.append((build, rsid))
+        return docs.get(rsid)
+    return variation, calls
+
+
+def test_listed_rsids_that_ensembl_resolves_to_one_variant_give_its_name_position_and_aliases():
+    variation, calls = asked({"rs34989279": ensembl_doc("rs34989279", 1002, synonyms=["rs397699744", "rs555", "COSV1"]),
+                              "rs397699744": ensembl_doc("rs34989279", 1002, synonyms=["rs397699744"])})
+    got = resolve_sentinel(MULTI, variation)
+    assert calls == [("GRCh38", "rs34989279"), ("GRCh38", "rs397699744")]         # each id asked on its own
+    assert got == {"rsid": "rs34989279", "pos": 1002, "listed": ["rs34989279", "rs397699744"],
+                   "aliases": ["rs34989279", "rs397699744", "rs555"]}
+    # names differ but position and alleles agree; one id unknown to Ensembl: the known ones decide
+    variation, _ = asked({"rs34989279": None, "rs397699744": ensembl_doc("rs999", 1002)})
+    assert resolve_sentinel(MULTI, variation)["rsid"] == "rs999"
+    variation, _ = asked({"rs34989279": ensembl_doc("rs111", 1002), "rs397699744": ensembl_doc("rs222", 1002)})
+    assert resolve_sentinel(MULTI, variation)["rsid"] == "rs111"                     # the first listed id's name
+
+
+@pytest.mark.parametrize("docs, reason", [
+    ({"rs34989279": ensembl_doc("rs34989279", 1002), "rs397699744": ensembl_doc("rs397699744", 1003)}, "different variants"),
+    ({"rs34989279": ensembl_doc("rs34989279", 1002, "C/T"), "rs397699744": ensembl_doc("rs397699744", 1002, "C/G")},
+     "different variants"),
+    ({"rs34989279": None, "rs397699744": None}, "knows none of the listed rsIDs"),
+])
+def test_listed_rsids_that_name_different_variants_or_none_leave_the_sentinel_unresolved(docs, reason):
+    variation, calls = asked(docs)
+    with pytest.raises(SentinelUnresolved, match=reason):
+        resolve_sentinel(MULTI, variation)
+    assert len(calls) == 2

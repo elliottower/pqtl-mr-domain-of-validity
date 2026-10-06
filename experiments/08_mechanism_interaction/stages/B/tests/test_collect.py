@@ -500,8 +500,10 @@ def test_only_a_definitive_absence_is_caught_and_recorded_and_modal_retries_only
         return sorted(ast.unparse(n.type) for n in ast.walk(ast.parse(path.read_text())) if isinstance(n, ast.ExceptHandler))
 
     package = HERE / "stage_b"
-    # every handler of the unit pipeline: three record a definitive absence, one notes that susie was not run
-    assert caught(package / "pipeline.py") == ["LDReferenceError", "SourceAbsent", "SourceAbsent", "SourceAbsent"]
+    # every handler of the unit pipeline: three record a definitive absence, one notes that susie was not run, one
+    # records a window the LD panel holds no record in, one a sentinel Ensembl does not resolve (both ruled conditions)
+    assert caught(package / "pipeline.py") == ["LDReferenceError", "LDUnavailable", "SentinelUnresolved", "SourceAbsent",
+                                               "SourceAbsent", "SourceAbsent"]
     # collect: two record a definitive absence; a 416 restarts the download; a corrupt gzip is reported as corrupt
     assert caught(package / "collect.py") == ["CORRUPT", "RetryableSourceError", "SourceAbsent", "SourceAbsent"]
     wrapper = ast.parse((HERE / "modal_stage_b.py").read_text())
@@ -520,7 +522,7 @@ def test_a_file_served_with_one_other_byte_under_the_same_name_size_and_etag_mak
     root, path = tmp_path / "vol", f"/decode/{DECODE_KEY}"
     unit = decode_unit(world).model_copy(update={"sentinel": SENTINEL, "outcomes": (
         OutcomeSpec(accession="F_ok", source="finngen", n_case=1000, n_control=9000, risk_coded=True),)})
-    assert [(t.source, t.key) for t in collect_tasks([unit])] == [("decode", "0_0"), ("decode_smp", "0_0")]
+    assert [(t.source, t.key) for t in collect_tasks([unit])] == [("decode", "0_0"), ("decode_smp", "0_0"), ("ukbppp_rsid_map", "1")]
     for t in collect_tasks([unit]):
         collect_one(t, world.sources(root / "cache"), root, checkpoint_bytes=2048)
     first, old = read_record(root, "decode", "0_0"), volume_collect_digest(root, unit)
