@@ -74,9 +74,10 @@ file that fails a rule fixed in stage_b/validate.py is made `unreadable`; a file
 its record bound to the uncertainty mode the validation chose for it (native_se, or_ci_derived_se,
 pvalue_coloc):
     ... launch_stage_b.py validate --run-token <token>
-A file made `unreadable` for its standard error alone has its `collected` record moved back
-(`restore_validated_records`; refused unless its bytes match the recorded sha256 and its result
-failed for that reason only; nothing deleted), and is validated again:
+A file made `unreadable` for its standard error alone, or by a validation under earlier rules whose
+current-rules result passed, has its `collected` record moved back (`restore_validated_records`;
+refused unless its bytes match the recorded sha256 and one of those holds; nothing deleted; in the
+second case bound to the current result), and is validated again:
     ... launch_stage_b.py restore-validated --run-token <token> --accessions-file <file> ;  validate --run-token <token>
 
 Wiring probe and dry run (no study data; allowed before the run is logged). Both run in the run

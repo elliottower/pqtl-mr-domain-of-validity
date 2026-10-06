@@ -50,12 +50,18 @@ the result was made under RULES; the shard is then deleted. A file recorded `unr
 earlier validation is read again, its bytes checked against the record, when its result is stale.
 The report of a run is <root>/validation/outcome_validation.json (REPORT_NAME).
 
-`restorable` and `restore_validated` undo `apply_validation` for a file whose validation failed for
-its standard error alone (`failed_only_for_standard_error`: one reason, too few rows read, which
-would not have held had the rows rejected for their standard error been read; launch_stage_b.py
-`restore-validated`): refused unless the file's bytes still have the recorded sha256; the result and
-the `unreadable` record are moved to superseded/, the `collected` record moved back, nothing
-deleted. The next `validate` reads the file again under the rules in force.
+`restorable` and `restore_validated` undo `apply_validation` (launch_stage_b.py `restore-validated`),
+refused unless the file's bytes still have the recorded sha256, in two cases:
+- a file whose validation failed for its standard error alone (`failed_only_for_standard_error`: one
+  reason, too few rows read, which would not have held had the rows rejected for their standard
+  error been read): the result and the `unreadable` record are moved to superseded/, the `collected`
+  record moved back, nothing deleted. The next `validate` reads the file again under the rules in force.
+- a file made `unreadable` by a validation under other rules than RULES whose result under RULES,
+  for the same sha256, passed and is the one in the current report: `apply_validation` applies a
+  failure but never a pass to such a record, so the record would disagree with its result. The
+  `unreadable` record is moved to superseded/ (the earlier result is already there, archived by
+  `validate_file`), the `collected` record moved back and bound to the current result. The next
+  `validate` reuses that result. An `unreadable` record written at collect is never restored.
 
 `require_validation` is the guard of `spawn` (stage_b/launch.py): no unit is started unless the
 report exists, was made under the rules in force (RULES), and covers every GWAS Catalog whole file
@@ -435,15 +441,58 @@ def _failed_result(root: Path, key: str, sha256: str) -> dict:
     return results[-1]
 
 
+def _current_pass(root: Path, key: str, sha256: str) -> dict | None:
+    """The validation result of `key` when it passed under RULES (None otherwise); CollectError when
+    it names other bytes than `sha256` or is not the result the current report holds for `key`."""
+    path = result_path(root, key)
+    result = json.loads(path.read_text()) if path.is_file() else None
+    if result is None or result.get("rules") != RULES or result.get("passed") is not True:
+        return None
+    if result.get("sha256") != sha256:
+        raise CollectError(f"{key}: its current-rules result passed for sha256 {result.get('sha256')}, its record names "
+                           f"{sha256}; nothing is restored")
+    report_file = root / VALIDATION_DIR / REPORT_NAME
+    report = json.loads(report_file.read_text()) if report_file.is_file() else {}
+    if report.get("rules") != RULES or report.get("files", {}).get(key) != result:
+        raise CollectError(f"{key}: its current-rules result is not the one the current validation report holds; "
+                           "nothing is restored")
+    return result
+
+
+def _other_rules_failure(root: Path, key: str, sha256: str, unreadable: CollectRecord, collected: CollectRecord) -> Path:
+    """The archived validation result, made under other rules than RULES, for the same sha256, that
+    failed and wrote the `unreadable` record (its detail is the one apply_validation writes from that
+    result's reasons); CollectError when there is none."""
+    for p in sorted((root / VALIDATION_DIR / SUPERSEDED_DIR).glob(f"{key}__*.json"), reverse=True):
+        old = json.loads(p.read_text())
+        detail = VALIDATION_DETAIL + "; ".join(old.get("reasons", [])) + (f" ({collected.detail})" if collected.detail else "")
+        if (old.get("sha256") == sha256 and old.get("rules") != RULES and old.get("passed") is False
+                and unreadable.detail == detail):
+            return p
+    raise CollectError(f"{key}: no archived result under other rules for its sha256 wrote its unreadable record; "
+                       "nothing is restored")
+
+
 def restorable(root: Path, key: str) -> dict:
     """What `restore_validated` would move for GWAS Catalog `key`, after every check, moving nothing.
     Refused (CollectError) unless: the current record is `unreadable` by this validation, or is gone
     after an interrupted restore; exactly one superseded `collected` record of `key` names the same
-    name, path, size and sha256; the file on the volume still has that size and sha256; and the
-    validation result that made it unreadable failed for its standard error alone
-    (`failed_only_for_standard_error`)."""
+    name, path, size and sha256; the file on the volume still has that size and sha256; and either
+    (a) the validation result that made it unreadable failed for its standard error alone
+    (`failed_only_for_standard_error`), or (b) the record was made unreadable by a validation under
+    other rules than RULES (`_other_rules_failure`) and the result under RULES for the same sha256
+    passed and is the one in the current report (`_current_pass`). Under (b) the current result is
+    kept and the restored record is bound to it (`bind`). A record already `collected` with a result
+    under (b) is only bound, which is a no-op once it is bound: the step is idempotent."""
     path = record_path(root, "gwas_catalog", key)
     current = read_record(root, "gwas_catalog", key) if path.is_file() else None
+    if current is not None and current.status == "collected":
+        passing = _current_pass(root, key, current.sha256)
+        if passing is None:
+            raise CollectError(f"{key}: the record is collected, not made unreadable by the pre-analysis validation")
+        collected_file(root, current)
+        return {"key": key, "sha256": current.sha256, "current": current, "superseded": None, "result": None,
+                "bind": passing, "old_result": None}
     if current is not None and not (current.status == "unreadable" and current.detail.startswith(VALIDATION_DETAIL)):
         raise CollectError(f"{key}: the record is {current.status}, not made unreadable by the pre-analysis validation")
     found = []
@@ -457,18 +506,37 @@ def restorable(root: Path, key: str) -> dict:
         raise CollectError(f"{key}: {len(found)} superseded collected records of the same file, not exactly one")
     superseded, collected = found[0]
     collected_file(root, collected)          # CollectError unless the bytes on the volume are the recorded ones
+    passing = _current_pass(root, key, collected.sha256)
+    if passing is not None:
+        unreadable = current if current is not None else _last_archived_unreadable(root, key, collected.sha256)
+        old = _other_rules_failure(root, key, collected.sha256, unreadable, collected)
+        return {"key": key, "sha256": collected.sha256, "current": current, "superseded": superseded, "result": None,
+                "bind": passing, "old_result": str(old.relative_to(root))}
     if not failed_only_for_standard_error(_failed_result(root, key, collected.sha256)):
         raise CollectError(f"{key}: its validation did not fail for the standard error alone; it is not restored")
     result = result_path(root, key)
     return {"key": key, "sha256": collected.sha256, "current": current, "superseded": superseded,
-            "result": result if result.is_file() else None}
+            "result": result if result.is_file() else None, "bind": None, "old_result": None}
+
+
+def _last_archived_unreadable(root: Path, key: str, sha256: str) -> CollectRecord:
+    """After a restore stopped once it had archived the `unreadable` record: the newest archived
+    `unreadable` record of `key` for `sha256`; CollectError when there is none."""
+    for p in sorted((root / SUPERSEDED_DIR / "collect" / "gwas_catalog").glob(f"{key}__*__unreadable.json"), reverse=True):
+        r = CollectRecord.model_validate_json(p.read_text())
+        if r.key == key and r.sha256 == sha256 and r.status == "unreadable":
+            return r
+    raise CollectError(f"{key}: no record, and no archived unreadable record for its sha256; nothing is restored")
 
 
 def restore_validated(root: Path, plan: dict, commit: Callable[[], None] = lambda: None) -> dict:
-    """Undo `apply_validation` for a file whose failure was a reader defect (plan from `restorable`):
-    its validation result is moved to <root>/validation/superseded/ (so the next validation reads the
-    file again), the `unreadable` record to <root>/superseded/collect/gwas_catalog/, and the superseded
-    `collected` record back where read_record finds it. Nothing is deleted."""
+    """Undo `apply_validation` for a file whose failure was a reader defect or a superseded rule (plan
+    from `restorable`): its failing validation result, where it is still current, is moved to
+    <root>/validation/superseded/ (so the next validation reads the file again), the `unreadable`
+    record to <root>/superseded/collect/gwas_catalog/, and the superseded `collected` record back
+    where read_record finds it. Where the plan carries a passing result under RULES (`bind`), that
+    result is kept and the record is bound to it by `apply_validation`, as `validate` would bind it.
+    Nothing is deleted."""
     key, stamp = plan["key"], f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}"
     moved = {}
 
@@ -480,16 +548,23 @@ def restore_validated(root: Path, plan: dict, commit: Callable[[], None] = lambd
         commit()
         moved[what] = str(dest.relative_to(root))
 
-    if plan["result"] is not None:
-        archive(plan["result"], root / VALIDATION_DIR / SUPERSEDED_DIR / f"{key}__{stamp}__restored.json",
-                "validation_result")
-    if plan["current"] is not None:
-        archive(record_path(root, "gwas_catalog", key),
-                root / SUPERSEDED_DIR / "collect" / "gwas_catalog" / f"{key}__{stamp}__unreadable.json", "unreadable_record")
-    os.replace(plan["superseded"], record_path(root, "gwas_catalog", key))
-    commit()
-    moved["collected_record"] = str(plan["superseded"].relative_to(root))
-    return {"key": key, "sha256": plan["sha256"], "moved": moved}
+    if plan["superseded"] is not None:
+        if plan["result"] is not None:
+            archive(plan["result"], root / VALIDATION_DIR / SUPERSEDED_DIR / f"{key}__{stamp}__restored.json",
+                    "validation_result")
+        if plan["current"] is not None:
+            archive(record_path(root, "gwas_catalog", key),
+                    root / SUPERSEDED_DIR / "collect" / "gwas_catalog" / f"{key}__{stamp}__unreadable.json",
+                    "unreadable_record")
+        os.replace(plan["superseded"], record_path(root, "gwas_catalog", key))
+        commit()
+        moved["collected_record"] = str(plan["superseded"].relative_to(root))
+    out = {"key": key, "sha256": plan["sha256"], "moved": moved}
+    if plan.get("bind") is not None:
+        bound = apply_validation(root, read_record(root, "gwas_catalog", key), plan["bind"], commit)
+        out.update({"old_result": plan["old_result"], "uncertainty_mode": bound.uncertainty_mode,
+                    "validation_sha256": bound.validation_sha256})
+    return out
 
 
 def validation_report(records: Iterable[CollectRecord], results: dict[str, dict | str]) -> dict:

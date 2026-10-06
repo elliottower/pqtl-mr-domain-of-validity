@@ -622,3 +622,131 @@ def test_the_frozen_rule_verdict_of_each_checked_file_is_read_from_a_report_unde
     under_aware = {r.key: validate_file(tmp_path, r) for r in (frozen_fail, native, frozen_pass)}
     assert under_aware["GCST1"]["passed"] is True and under_aware["GCST1"]["ci_p_check"]["frozen_rule"]["passed"] is False
     assert frozen_ci_p_verdicts({"files": {**under_aware, "GCST4": "RuntimeError: x"}}) == {"GCST1": False, "GCST3": True}
+
+
+# ---- a pass under the amended rules applied to a record a validation under the frozen rule made unreadable ----------
+
+def unreadable_under_the_frozen_rule(root, monkeypatch, key: str, data: bytes) -> tuple[CollectRecord, CollectRecord, dict]:
+    """A file made unreadable by a validation under the frozen CI-versus-p rule, then validated again
+    under the rules in force, the record left unreadable (apply_validation applies no pass to it)."""
+    record = put(root, key, data)
+    select_rule(monkeypatch, CI_P_RULE_FROZEN)
+    old = validate_file(root, record)
+    unreadable = apply_validation(root, record, old)
+    monkeypatch.undo()
+    assert old["passed"] is False and unreadable.status == "unreadable" and old["rules"] != RULES
+    current = validate_file(root, unreadable)
+    assert current["rules"] == RULES and apply_validation(root, unreadable, current) == unreadable
+    return record, unreadable, current
+
+
+def write_current_report(root) -> dict:
+    """The report of a validation run over the records on `root`, every result reused."""
+    records = gwas_catalog_records(root)
+    results = {r.key: validate_file(root, r) for r in records if in_scope(r)}
+    report = json.loads(json.dumps(validation_report(records, results)))
+    (root / VALIDATION_DIR / REPORT_NAME).write_text(json.dumps(report))
+    return report
+
+
+RESCUED = ("GCST90476039", "GCST90476123", "GCST90476165", "GCST90476238")
+
+
+def test_four_files_unreadable_under_the_frozen_rule_that_pass_under_the_amended_rule_are_restored_and_bound(
+        tmp_path, monkeypatch):
+    before_restore = {k: unreadable_under_the_frozen_rule(tmp_path, monkeypatch, k, or_ci_rows_file(small_effect_rows(300)))
+                      for k in RESCUED}
+    at_collect = CollectRecord(status="unreadable", source="gwas_catalog", key="GCST010514", detail="no other_allele column")
+    record_path(tmp_path, "gwas_catalog", "GCST010514").write_text(at_collect.model_dump_json())
+    report = write_current_report(tmp_path)
+    assert report["passed"] == 4 and report["unreadable_at_collect"] == ["GCST010514"]
+    with pytest.raises(InputContractError, match="the record is unreadable and the report says the file passed"):
+        require_validation(report, gwas_catalog_records(tmp_path))
+    before = all_files(tmp_path)
+    out = [restore_validated(tmp_path, restorable(tmp_path, k)) for k in RESCUED]
+    after = all_files(tmp_path)
+    assert set(before.values()) <= set(after.values())                         # every byte kept: moved, none deleted
+    require_validation(report, gwas_catalog_records(tmp_path))                  # the spawn guard passes
+    for k, got in zip(RESCUED, out, strict=True):
+        record, unreadable, current = before_restore[k]
+        bound = read_record(tmp_path, "gwas_catalog", k)
+        assert bound == record.model_copy(update={"uncertainty_mode": "or_ci_derived_se", "header_sha256": current["header_sha256"],
+                                                  "validation_sha256": result_sha256(current)})
+        assert json.loads(result_path(tmp_path, k).read_text()) == current      # the current result is kept
+        assert CollectRecord.model_validate_json(after[got["moved"]["unreadable_record"]]) == unreadable
+        old = json.loads(after[got["old_result"]])
+        assert (old["sha256"], old["passed"], old["rules"]["ci_p_check"]) == (record.sha256, False, ci_p_rules(CI_P_RULE_FROZEN))
+        assert "validation_result" not in got["moved"]
+    assert read_record(tmp_path, "gwas_catalog", "GCST010514") == at_collect
+    with pytest.raises(CollectError, match="not made unreadable by the pre-analysis validation"):
+        restorable(tmp_path, "GCST010514")
+    for k in RESCUED:                                                           # idempotent: a second run changes nothing
+        restore_validated(tmp_path, restorable(tmp_path, k))
+    assert all_files(tmp_path) == after
+    for r in gwas_catalog_records(tmp_path):                                    # the next `validate` reuses every result
+        if in_scope(r):
+            assert apply_validation(tmp_path, r, validate_file(tmp_path, r)) == r
+    assert write_current_report(tmp_path)["files"] == report["files"]
+
+
+def test_an_interrupted_restore_of_a_frozen_rule_unreadable_is_finished_by_the_next_one(tmp_path, monkeypatch):
+    record, _, current = unreadable_under_the_frozen_rule(tmp_path, monkeypatch, "GCST1", or_ci_rows_file(small_effect_rows(300)))
+    write_current_report(tmp_path)
+    os.replace(record_path(tmp_path, "gwas_catalog", "GCST1"),                  # stopped after archiving the unreadable record
+               tmp_path / "superseded" / "collect" / "gwas_catalog" / "GCST1__20990101T000000Z__unreadable.json")
+    restore_validated(tmp_path, restorable(tmp_path, "GCST1"))
+    bound = read_record(tmp_path, "gwas_catalog", "GCST1")
+    assert (bound.status, bound.sha256, bound.validation_sha256) == ("collected", record.sha256, result_sha256(current))
+
+
+def test_a_restore_of_a_frozen_rule_unreadable_stopped_before_binding_is_bound_by_the_next_one(tmp_path, monkeypatch):
+    record, _, current = unreadable_under_the_frozen_rule(tmp_path, monkeypatch, "GCST1", or_ci_rows_file(small_effect_rows(300)))
+    report = write_current_report(tmp_path)
+
+    def stopped(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    plan = restorable(tmp_path, "GCST1")
+    monkeypatch.setattr(validate_module, "apply_validation", stopped)
+    with pytest.raises(KeyboardInterrupt):
+        restore_validated(tmp_path, plan)
+    monkeypatch.undo()
+    assert read_record(tmp_path, "gwas_catalog", "GCST1") == record                 # moved back, not yet bound
+    restore_validated(tmp_path, restorable(tmp_path, "GCST1"))
+    assert read_record(tmp_path, "gwas_catalog", "GCST1").validation_sha256 == result_sha256(current)
+    require_validation(report, gwas_catalog_records(tmp_path))
+
+
+@pytest.mark.parametrize("damage", ["bytes", "result_sha256", "no_report", "report_holds_another_result"])
+def test_a_frozen_rule_unreadable_is_not_restored_unless_the_sha256_matches_and_the_current_report_holds_the_result(
+        tmp_path, monkeypatch, damage):
+    record, unreadable, current = unreadable_under_the_frozen_rule(tmp_path, monkeypatch, "GCST1",
+                                                                   or_ci_rows_file(small_effect_rows(300)))
+    report = write_current_report(tmp_path)
+    if damage == "bytes":                                                       # same size, one byte other
+        data = bytearray((tmp_path / record.path).read_bytes())
+        data[-2] = ord("1") if data[-2] != ord("1") else ord("2")
+        (tmp_path / record.path).write_bytes(bytes(data))
+    elif damage == "result_sha256":
+        result_path(tmp_path, "GCST1").write_text(json.dumps({**current, "sha256": "0" * 64}))
+    elif damage == "no_report":
+        (tmp_path / VALIDATION_DIR / REPORT_NAME).unlink()
+    else:
+        files = {"GCST1": {**current, "utc": "2026-01-01T00:00:00+00:00"}}
+        (tmp_path / VALIDATION_DIR / REPORT_NAME).write_text(json.dumps({**report, "files": files}))
+    before = all_files(tmp_path)
+    with pytest.raises(CollectError, match="sha256|validation report"):
+        restorable(tmp_path, "GCST1")
+    assert all_files(tmp_path) == before and read_record(tmp_path, "gwas_catalog", "GCST1") == unreadable
+
+
+def test_a_file_that_fails_under_the_amended_rule_stays_unreadable(tmp_path, monkeypatch):
+    rows = [printed_row(0.03 * (5 + i % 4), 0.03, decimals=4, z=Z99) for i in range(40)]
+    _, unreadable, current = unreadable_under_the_frozen_rule(tmp_path, monkeypatch, "GCST1", or_ci_rows_file(rows))
+    assert current["passed"] is False
+    report = write_current_report(tmp_path)
+    before = all_files(tmp_path)
+    with pytest.raises(CollectError, match="did not fail for the standard error alone"):
+        restorable(tmp_path, "GCST1")
+    assert all_files(tmp_path) == before and read_record(tmp_path, "gwas_catalog", "GCST1") == unreadable
+    require_validation(report, gwas_catalog_records(tmp_path))
