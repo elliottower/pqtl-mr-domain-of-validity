@@ -51,14 +51,14 @@ Uncertainty mode. A file gives the uncertainty of its effect in one of three way
 the `standard_error` field over the rows with a position and a valid pair of alleles
 (`RowReader.se_state`): `native_se` where it is present on every such row; where it is missing on
 every such row, `or_ci_derived_se` for an odds-ratio file with `ci_lower` and `ci_upper`, and
-`pvalue_coloc` for a beta file with a p-value and an effect-allele frequency and no confidence
-limits; no mode, and the file unreadable, where it is present on some rows and missing on others
+`pvalue_coloc` for a beta file, or (2026-10-07 amendment) an odds-ratio file, with a p-value and an
+effect-allele frequency and no confidence limits; no mode, and the file unreadable, where it is present on some rows and missing on others
 (the file fails closed) or where no route fits. An author format is read in `native_se` only.
 `or_ci_derived_se`: SE of ln(OR) = (ln U - ln L) / (2 z), z the normal quantile of the interval's
 level (`ci_z_for_level`; 1.96 at 95%, the level read for these files: the GWAS-SSF metadata schema
 has no key stating another). `pvalue_coloc`: no standard error is read or formed; coloc.abf takes the
 p-value, the MAF of the file's own effect-allele frequency, N and the case fraction
-(coloc_backend.outcome_dataset), and beta gives the effect direction only.
+(coloc_backend.outcome_dataset), and beta (ln OR for an odds-ratio file) gives the effect direction only.
 
 Rows (`SsfReader`, `AuthorReader`). A data row is read, or not read for the first of these reasons
 (REJECT_REASONS, in this order), and the pre-analysis validation counts each reason over the whole
@@ -340,10 +340,11 @@ def choose_uncertainty_mode(cols: SsfColumns | None, missing: int, present: int)
                       "chosen for the whole file, never row by row")
     if cols is not None and cols.effect == "odds_ratio" and cols.ci_lower and cols.ci_upper:
         return "or_ci_derived_se", ""
-    if cols is not None and cols.effect == "beta" and cols.p and cols.eaf and not (cols.ci_lower or cols.ci_upper):
-        return "pvalue_coloc", ""
+    if cols is not None and cols.p and cols.eaf and not (cols.ci_lower or cols.ci_upper):
+        return "pvalue_coloc", ""          # a beta, or (2026-10-07 amendment) an odds ratio, for the direction only
     return None, ("standard_error is missing in every row and the header gives no other route (an odds ratio with "
-                  "ci_lower and ci_upper, or a beta with a p-value and an effect-allele frequency and no confidence limits)")
+                  "ci_lower and ci_upper, or a beta or an odds ratio with a p-value and an effect-allele frequency and no "
+                  "confidence limits)")
 
 
 def resolve_ssf(accession: str, name: str, meta_bytes: bytes, md5sum_text: str, header: list[str]) -> SsfFile:
@@ -481,8 +482,8 @@ class SsfReader(RowReader):
         self.cols = cols = ssf_columns(header, what)
         if mode == "or_ci_derived_se" and not (cols.effect == "odds_ratio" and cols.ci_lower and cols.ci_upper):
             raise SourceUnreadable(f"{what}: or_ci_derived_se needs an odds_ratio effect with ci_lower and ci_upper")
-        if mode == "pvalue_coloc" and not (cols.effect == "beta" and cols.p):
-            raise SourceUnreadable(f"{what}: pvalue_coloc needs a beta effect and a p-value column")
+        if mode == "pvalue_coloc" and not cols.p:
+            raise SourceUnreadable(f"{what}: pvalue_coloc needs a p-value column")
         idx = {h: i for i, h in enumerate(header)}
         self.mode, self.ci_z = mode, ci_z_for_level(ci_level)
         self.width, self.position_offset = len(header), position_offset

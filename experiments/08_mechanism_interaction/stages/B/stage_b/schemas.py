@@ -34,6 +34,10 @@ EvidenceState = Literal["supportive", "contradictory", "inconclusive"]
 NotRunReason = Literal["regional_file_unavailable", "outcome_file_unavailable",
                        "fewer_than_50_shared", "direction_ambiguous", ""]
 PlatformConcordance = Literal["concordant", "discordant", "untested"]
+# S15g: coloc.susie's maximum PP.H4, or the primary coloc.abf PP.H4 where susie's result did not meet the
+# plan's criterion (two or more credible sets in either trait, and a credible-set pair), was not run (no LD;
+# p-value form), or did not complete (stopped in R; timed out).
+S15gBasis = Literal["coloc.susie", "abf_susie_criterion_not_met", "abf_susie_not_run", "abf_susie_did_not_complete"]
 Build = Literal["GRCh37", "GRCh38"]
 # The build of each outcome source's positions. A GWAS Catalog file without a harmonised copy
 # (stage_b/outcome_files.py) is on the build its collect record names (VolumeFetcher.outcome_build).
@@ -117,6 +121,10 @@ class StaleCheckpointError(StageBError):
 
 class ColocBackendError(StageBError):
     """The R coloc backend failed or returned a malformed result."""
+
+
+class ColocTimeout(ColocBackendError):
+    """An Rscript call of the coloc backend ran past its time limit; the message names its tasks."""
 
 
 SENTINEL_CHROMS = frozenset([*map(str, range(1, 23)), "X", "Y"])
@@ -325,6 +333,8 @@ class EvidenceRow(_Row):
     # Whether the hypothesis's outcome file passed the frozen CI-versus-p rule (validate.frozen_ci_p_verdicts),
     # for the frozen-rule sensitivity set of stage D; "" where that check did not run on the outcome file.
     outcome_file_frozen_ci_p_pass: bool | Literal[""] = ""
+    # What s15g_pp_h4 is (pipeline.S15G_BASES); "" where colocalization did not run.
+    s15g_basis: S15gBasis | Literal[""] = ""
 
 
 EVIDENCE_COLUMNS = list(EvidenceRow.model_fields)

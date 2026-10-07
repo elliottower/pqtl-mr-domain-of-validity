@@ -61,11 +61,11 @@ from stage_b.author_formats import AUTHOR_FORMATS, check_header
 from stage_b.collect import collected_file, read_record
 from stage_b.ld import parse_genotypes
 from stage_b.outcome_files import (MD5SUM_NAME, META_SUFFIX, attach_map_rsids, filter_author, filter_gwas_ssf, map_rsids,
-                                   parse_md5sum, resolve_ssf, ssf_data_files)
-from stage_b.parsers import (decode_to_canonical, filter_decode, filter_decode_annotation, filter_decode_excluded,
-                             filter_eqtl_catalogue, filter_finngen, filter_gwas_catalog, filter_ukbppp,
-                             normalize_chrom, opengwas_to_canonical, parse_ukbppp_rsid_map, split_lines,
-                             ukbppp_to_canonical)
+                                   parse_md5sum, resolve_ssf, ssf_columns, ssf_data_files)
+from stage_b.parsers import (HARMONISED_CARRYOVER, MISSING, CarryOverReader, decode_to_canonical, filter_decode,
+                             filter_decode_annotation, filter_decode_excluded, filter_eqtl_catalogue, filter_finngen,
+                             filter_gwas_catalog, filter_ukbppp, normalize_chrom, opengwas_to_canonical,
+                             parse_ukbppp_rsid_map, split_lines, ukbppp_to_canonical)
 from stage_b.remote import ABSENT_STATUS, CORRUPT, attempt, http, http_json, status_kind
 from stage_b.schemas import (OUTCOME_BUILD, Build, CollectError, CollectRecord, CollectTask, InstrumentUnit,
                              LDReferenceError, LDUnavailable, OutcomeSpec, RetryableSourceError, Sentinel,
@@ -346,6 +346,33 @@ def remote_header(url: str, gz: bool, what: str) -> list[str]:
     return head.decode("utf-8", "replace").rstrip("\r").split("\t")
 
 
+SE_PEEK_ROWS = 2000
+
+
+def harmonised_se_census(url: str, what: str) -> tuple[list[str], int]:
+    """(header, data rows of the first SE_PEEK_ROWS whose standard_error is missing) of a remote harmonised
+    file, streamed and decompressed up to that row only; 0 where the header has no standard_error column. A
+    file with fewer data rows counts them all as present, so it is never moved off its index by this."""
+    rows = SE_PEEK_ROWS
+
+    def get() -> tuple[list[str], int]:
+        with http("GET", url, what, stream=True, timeout=120) as r:
+            lines = (line.rstrip("\n").split("\t") for line in _text_lines(r.raw) if not line.startswith("##"))
+            header = next(lines, None)
+            if header is None:
+                raise RetryableSourceError("corrupt", f"{what}: the file has no header line")
+            if "standard_error" not in header:
+                return header, 0
+            i, n, missing = header.index("standard_error"), 0, 0
+            for row in lines:
+                n += 1
+                missing += i >= len(row) or row[i].strip() in MISSING
+                if n == rows:
+                    return header, missing
+            return header, 0
+    return attempt(get, f"standard_error census of {what}")
+
+
 class RemoteSources:
     """collect.Sources over the registered sources. `synapse` is called once, on the first UKB-PPP
     task, so a deCODE or GWAS Catalog call needs no Synapse login."""
@@ -418,8 +445,29 @@ class RemoteSources:
             raise SourceAbsent(f"{what}: {len(files)} harmonised files")
         if files:
             url = base + files[0]
-            return RemoteFile(name=files[0], source_url=url, what=what, url=lambda: url, indexed=f"{files[0]}.tbi" in names)
+            indexed = f"{files[0]}.tbi" in names
+            if indexed and accession not in HARMONISED_CARRYOVER:
+                header, missing = harmonised_se_census(url, what)
+                if missing == SE_PEEK_ROWS:
+                    return self._harmonised_whole(accession, base, names, files[0], header)
+            return RemoteFile(name=files[0], source_url=url, what=what, url=lambda: url, indexed=indexed)
         return self._unharmonised(accession)
+
+    def _harmonised_whole(self, accession: str, base: str, names: set[str], name: str, header: list[str]) -> RemoteFile:
+        """A harmonised file whose standard_error is missing on its first SE_PEEK_ROWS data rows (2026-10-07
+        amendment): collected whole and read as the GWAS-SSF file it is (layout gwas_ssf, GRCh38, 1-based),
+        so the pre-analysis validation chooses its uncertainty mode from the census of every row and runs
+        the CI-versus-p check, as for a GWAS-SSF file without a harmonised copy. SourceUnreadable where
+        its header has no GWAS-SSF column map (outcome_files.ssf_columns: no beta and no odds_ratio, ...)."""
+        what = f"GWAS Catalog {accession}"
+        cols = ssf_columns(header, what)
+        md5s = parse_md5sum(_small_file(base + MD5SUM_NAME, what).decode("utf-8", "replace")) if MD5SUM_NAME in names else {}
+        url = base + name
+        return RemoteFile(name=name, source_url=url, what=what, url=lambda: url, md5=md5s.get(name, ""),
+                          record_fields={"layout": "gwas_ssf", "build": "GRCh38", "position_offset": 0,
+                                         "rsid_rule": "column" if cols.rsid else "ukbppp_map",
+                                         "detail": f"harmonised file collected whole: standard_error missing on its first "
+                                                   f"{SE_PEEK_ROWS} data rows"})
 
     def _unharmonised(self, accession: str) -> RemoteFile:
         """An accession without a harmonised file (stage_b/outcome_files.py): its reviewed author
@@ -627,9 +675,12 @@ class VolumeFetcher:
             raise SourceAbsent(record.detail or f"{what}: absent at the source")
         if record.status == "remote_indexed":
             header = url_header(record.source_url, what)
+            carry = HARMONISED_CARRYOVER.get(spec.accession)
             with tempfile.TemporaryDirectory() as tmp:
-                return filter_gwas_catalog(tabix_rows(record.source_url, chrom, lo, hi, Path(tmp), what), header, chrom,
-                                           center, half_width)
+                rows = tabix_rows(record.source_url, chrom, lo, hi, Path(tmp), what)
+                if carry is not None:
+                    return CarryOverReader(header, carry).window(rows, chrom, center, half_width)
+                return filter_gwas_catalog(rows, header, chrom, center, half_width)
         path = collected_file(self.root, record)
         mode = record.uncertainty_mode or "native_se"
 
@@ -672,11 +723,14 @@ class VolumeFetcher:
         """The uncertainty mode an outcome is colocalized in: the mode the pre-analysis validation
         wrote to a collected GWAS Catalog file's record, native_se for every other outcome (FinnGen,
         OpenGWAS, a file queried by region) and for a record the validation has not reached, which
-        `spawn` refuses (validate.require_validation)."""
+        `spawn` refuses (validate.require_validation). A file queried by region under a reviewed
+        parsers.HARMONISED_CARRYOVER map is read in pvalue_coloc."""
         if spec.source == "gwas_catalog":
             record = read_record(self.root, "gwas_catalog", spec.accession)
             if record.status == "collected" and record.uncertainty_mode:
                 return record.uncertainty_mode
+            if record.status == "remote_indexed" and spec.accession in HARMONISED_CARRYOVER:
+                return "pvalue_coloc"
         return "native_se"
 
     # ---- 1000 Genomes EUR ------------------------------------------------------------------------

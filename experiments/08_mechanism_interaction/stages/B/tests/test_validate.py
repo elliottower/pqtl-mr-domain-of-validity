@@ -485,10 +485,12 @@ def test_the_classification_check_compares_the_files_by_mode_failed_and_error(tm
 
 # ---- the CI-versus-p rule version: frozen in force, rounding-aware selectable ----------------------------------
 
-# The rules hash the frozen CI-versus-p rule was validated under (a historical constant), and the hash of the
-# amended rules now in force.
-FROZEN_RULES_SHA256 = "7025ad583009ee4bb4dd827771a897a5416d397b30bd2cd3d67409080fd19846"
-AMENDED_RULES_SHA256 = "3a1bcdc26baba5c30d350f7b14ad2fac8a07bb40343c001845efc3aecda4fda7"
+# The rules hash under the frozen CI-versus-p rule, and the hash of the rules now in force. The validation of
+# 2026-10-04 ran under 7025ad58... (frozen rule) and that of 2026-10-05 under 3a1bcdc2... (rounding-aware); the
+# 2026-10-07 amendment (the p-value form for an odds-ratio file, harmonised files without a standard error collected
+# whole) changed RULES, so every whole file is validated again under these.
+FROZEN_RULES_SHA256 = "8ef4b21496f6bd2813b66ec9679bc212f82de2cdcaf8e27d1b5b98ef5075129e"
+AMENDED_RULES_SHA256 = "682bc75613185635593db9828c5fb38f0e3075747a32e83f8f64c9d0b358042a"
 
 
 def rules_sha256(rules: dict) -> str:

@@ -126,7 +126,8 @@ def evidence_row(h: HypothesisInput, source: str, assay_id: str, result: Mapping
                  "protein_altering": protein_altering(vep.get("hit"), pav),
                  "s15a_pp_h4": o["s15a_pp_h4"], "s15b_pp_h4": o["s15b_pp_h4"],
                  "s15c_pp_h4": "" if o["s15c_pp_h4"] is None else o["s15c_pp_h4"],
-                 "s15d_pp_h4": pp[4], "s15e_pp_h4": pp[4], "s15f_pp_h4": pp[4], "s15g_pp_h4": o["s15g_pp_h4"]})
+                 "s15d_pp_h4": pp[4], "s15e_pp_h4": pp[4], "s15f_pp_h4": pp[4], "s15g_pp_h4": o["s15g_pp_h4"],
+                 "s15g_basis": o["s15g_basis"]})
     return EvidenceRow(**base)
 
 

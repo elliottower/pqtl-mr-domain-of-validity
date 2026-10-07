@@ -21,12 +21,13 @@ from stage_b.assemble import build_evidence, collect_unit_dir, regional_rows, sh
 from stage_b.checkpoint import (FINGERPRINT_NAME, PINNED_SOURCES, PY_PACKAGES, R_VERSIONS, REMOTE_RELEASE, collect_digest,
                                 collect_entry, common_tools, package_files, package_sha256, source_pins, tool_versions,
                                 unit_fingerprint, unit_tools, verified_source_pins)
-from stage_b.coloc_backend import AbfResult, ColocTask, SusieResult
+from stage_b.coloc_backend import AbfResult, ColocTask, SusieFailed, SusieResult
 from stage_b.collect import collect_tasks
 from stage_b.launch import supersede_selection
 from stage_b.evidence import coverage
 from stage_b.pipeline import DirStore, process_unit, reset_unavailable, supersede_units, with_sentinel_name
-from stage_b.schemas import (EVIDENCE_COLUMNS, OUTCOME_BUILD, PRIMARY_P1, PRIMARY_P2, PRIMARY_P12, WINDOW_PRIMARY, CollectError,
+from stage_b.schemas import (EVIDENCE_COLUMNS, OUTCOME_BUILD, PRIMARY_P1, PRIMARY_P2, PRIMARY_P12, WINDOW_PRIMARY, ColocBackendError,
+                             ColocTimeout, CollectError,
                              CollectRecord, CollectTask, HypothesisInput, InputContractError, InstrumentUnit, OutcomeSpec,
                              LDReferenceError, LDUnavailable, RetryableSourceError, Sentinel, SentinelUnresolved, SourceAbsent,
                              SourceFile, StaleCheckpointError)
@@ -64,16 +65,21 @@ def outcome_table(k: int):
 
 
 class StubBackend:
-    def __init__(self, h4: dict[str, float], lead: str = "rs60", susie_cs: int = 2):
-        self.h4, self.lead, self.susie_cs = h4, lead, susie_cs
+    def __init__(self, h4: dict[str, float], lead: str = "rs60", susie_cs: int = 2, susie: str = "ok"):
+        self.h4, self.lead, self.susie_cs, self.susie = h4, lead, susie_cs, susie
         self.tasks: list[ColocTask] = []
+        self.calls: list[list[str]] = []
 
     def run(self, tasks):
         self.tasks += tasks
+        self.calls.append([t.id for t in tasks])
         out = {}
         for t in tasks:
             if t.method == "susie":
-                out[t.id] = SusieResult(n_cs1=self.susie_cs, n_cs2=1, n_pairs=2, max_pp_h4=0.97)
+                if self.susie == "timeout":
+                    raise ColocTimeout(f"Rscript ran past 3600 s on tasks {[t.id for t in tasks]}")
+                out[t.id] = (SusieFailed(error="The estimated prior variance is unreasonably large.") if self.susie == "failed"
+                             else SusieResult(n_cs1=self.susie_cs, n_cs2=1, n_pairs=2, max_pp_h4=0.97))
                 continue
             h4 = next(v for k, v in self.h4.items() if t.id.startswith(k))
             lead = self.lead if self.lead in t.d1.snp else t.d1.snp[0]
@@ -238,6 +244,33 @@ def test_s15g_falls_back_to_abf_without_two_credible_sets(tmp_path):
     res = run(unit(("F_ok",)), FakeFetcher(), StubBackend(H4, susie_cs=1), DirStore(tmp_path / "u"))
     rec = res["outcomes"]["F_ok"]
     assert rec["s15g_pp_h4"] == 0.9 and rec["s15g_method"].startswith("coloc.abf")
+    assert rec["s15g_basis"] == "abf_susie_criterion_not_met" and rec["susie"]["n_cs1"] == 1
+
+
+@pytest.mark.parametrize("susie", ["failed", "timeout"])
+def test_a_susie_task_that_does_not_complete_leaves_s15g_on_the_primary_pp_h4_and_the_pair_runs(tmp_path, susie):
+    backend = StubBackend(H4, susie=susie)
+    res = run(unit(("F_ok",)), FakeFetcher(), backend, DirStore(tmp_path / "u"))
+    rec = res["outcomes"]["F_ok"]
+    assert rec["coloc_run"] is True and rec["pp"][4] == 0.9 and rec["s15a_pp_h4"] == H4["s15a"]
+    assert (rec["s15g_pp_h4"], rec["s15g_basis"], rec["susie"]) == (0.9, "abf_susie_did_not_complete", None)
+    assert rec["susie_note"].startswith("susie did not complete: ")
+    assert ("unreasonably large" if susie == "failed" else "ran past 3600 s") in rec["susie_note"]
+    assert ["s15g"] in backend.calls and all("s15g" not in c for c in backend.calls if c != ["s15g"])   # its own call
+
+
+def test_s15g_takes_coloc_susie_with_two_credible_sets_and_a_failed_abf_task_still_stops_the_unit(tmp_path):
+    rec = run(unit(("F_ok",)), FakeFetcher(), StubBackend(H4), DirStore(tmp_path / "u"))["outcomes"]["F_ok"]
+    assert (rec["s15g_pp_h4"], rec["s15g_basis"], rec["s15g_method"]) == (0.97, "coloc.susie", "coloc.susie")
+
+    class AbfFails(StubBackend):
+        def run(self, tasks):
+            if any(t.id == "primary" for t in tasks):
+                raise ColocBackendError("coloc task primary failed in R: boom")
+            return super().run(tasks)
+
+    with pytest.raises(ColocBackendError, match="primary failed"):
+        run(unit(("F_ok",)), FakeFetcher(), AbfFails(H4), DirStore(tmp_path / "v"))
 
 
 def test_checkpoints_resume_without_refetching(tmp_path):
@@ -309,6 +342,7 @@ def test_outputs_and_manifest(tmp_path):
                              script_root=tmp_path, run_token="stageb-token-0001", repo_commit=COMMIT, tools=TOOLS)
     ev = pd.read_csv(tmp_path / "out" / "evidence.csv", dtype=str, keep_default_na=False)
     assert list(ev.columns) == EVIDENCE_COLUMNS and ev.loc[0, "evidence_state"] == "supportive"
+    assert (ev.loc[0, "s15g_pp_h4"], ev.loc[0, "s15g_basis"]) == ("0.97", "coloc.susie")
     m = pd.read_csv(manifest, sep="\t", dtype=str)
     assert m.set_index("path").loc["evidence.csv", "sha256"] == sha256_file(tmp_path / "out" / "evidence.csv")
     assert m.set_index("path").loc["evidence.csv", "rows"] == "1"
@@ -1119,6 +1153,15 @@ def test_supersede_refuses_a_unit_with_a_result_and_moves_nothing(tmp_path):
         supersede_units(tmp_path, {"u1": "new", "u2": "new"}, "20261006T120000Z")
     assert files(tmp_path / "units" / "u1") == stale and files(tmp_path / "units" / "u2") == done
     assert not (tmp_path / "superseded").exists() and len(list((tmp_path / "errors" / "units").iterdir())) == 2
+
+
+def test_supersede_with_include_finished_archives_a_stale_finished_unit_and_keeps_a_current_one(tmp_path):
+    stale = stale_unit(tmp_path, "u1", "old", result=True)
+    current = stale_unit(tmp_path, "u2", "new-u2", result=True)
+    out = supersede_units(tmp_path, {"u1": "new-u1", "u2": "new-u2"}, "20261007T120000Z", include_finished=True)
+    assert (out["moved"], out["kept_current"]) == (["u1"], ["u2"])
+    assert files(tmp_path / "superseded" / "units" / "20261007T120000Z" / "u1") == stale
+    assert files(tmp_path / "units" / "u2") == current and not (tmp_path / "units" / "u1").exists()
 
 
 def test_the_superseded_unit_starts_afresh_under_the_new_fingerprint(tmp_path):

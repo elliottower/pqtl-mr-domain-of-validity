@@ -501,9 +501,10 @@ def test_only_a_definitive_absence_is_caught_and_recorded_and_modal_retries_only
 
     package = HERE / "stage_b"
     # every handler of the unit pipeline: three record a definitive absence, one notes that susie was not run, one
-    # records a window the LD panel holds no record in, one a sentinel Ensembl does not resolve (both ruled conditions)
-    assert caught(package / "pipeline.py") == ["LDReferenceError", "LDUnavailable", "SentinelUnresolved", "SourceAbsent",
-                                               "SourceAbsent", "SourceAbsent"]
+    # records a window the LD panel holds no record in, one a sentinel Ensembl does not resolve (both ruled conditions),
+    # one notes that a susie call ran past its time limit (S15g, 2026-10-07 amendment)
+    assert caught(package / "pipeline.py") == ["ColocTimeout", "LDReferenceError", "LDUnavailable", "SentinelUnresolved",
+                                               "SourceAbsent", "SourceAbsent", "SourceAbsent"]
     # collect: two record a definitive absence; a 416 restarts the download; a corrupt gzip is reported as corrupt
     assert caught(package / "collect.py") == ["CORRUPT", "RetryableSourceError", "SourceAbsent", "SourceAbsent"]
     wrapper = ast.parse((HERE / "modal_stage_b.py").read_text())

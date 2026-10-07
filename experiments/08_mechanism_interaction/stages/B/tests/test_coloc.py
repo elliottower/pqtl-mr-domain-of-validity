@@ -23,9 +23,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from stage_b.coloc_backend import (R_SCRIPT, AbfResult, ColocDataset, ColocTask, RscriptColoc, SusieResult, outcome_dataset,
-                                   parse_response, pqtl_dataset, qtl_dataset)
-from stage_b.schemas import ColocBackendError
+from stage_b.coloc_backend import (R_SCRIPT, AbfResult, ColocDataset, ColocTask, RscriptColoc, SusieFailed, SusieResult,
+                                   outcome_dataset, parse_response, pqtl_dataset, qtl_dataset)
+from stage_b.schemas import ColocBackendError, ColocTimeout
 
 R_LIBS = os.environ.get("STAGE_B_R_LIBS")
 
@@ -85,6 +85,24 @@ def test_parse_response_reads_abf_and_susie_and_rejects_failures():
         parse_response({"tasks": [{"id": "a", "ok": False, "method": "abf", "error": "boom"}]}, {"a"})
     with pytest.raises(ColocBackendError):
         parse_response(payload, {"a", "s", "missing"})
+
+
+def test_a_susie_task_r_stopped_is_returned_with_its_message_and_a_failed_abf_task_still_raises():
+    stopped = {"id": "s15g", "ok": False, "method": "susie", "error": "The estimated prior variance is unreasonably large."}
+    out = parse_response({"tasks": [stopped]}, {"s15g"})
+    assert out["s15g"] == SusieFailed(error="The estimated prior variance is unreasonably large.")
+    with pytest.raises(ColocBackendError, match="coloc task p failed in R: boom"):
+        parse_response({"tasks": [stopped, {"id": "p", "ok": False, "method": "abf", "error": "boom"}]}, {"s15g", "p"})
+
+
+def test_an_rscript_call_past_its_time_limit_raises_coloc_timeout_naming_its_tasks(tmp_path):
+    sleeper = tmp_path / "Rscript"
+    sleeper.write_text("#!/bin/sh\nsleep 30\n")
+    sleeper.chmod(0o755)
+    d1, d2 = datasets(np.ones(3), np.ones(3), 0.1, 0.1)
+    task = ColocTask(id="s15g", method="susie", p1=1e-4, p2=1e-4, p12=5e-6, d1=d1, d2=d2, LD=np.eye(3).tolist())
+    with pytest.raises(ColocTimeout, match=r"Rscript ran past 1 s on tasks \['s15g'\]"):
+        RscriptColoc(rscript=str(sleeper), timeout_s=1).run([task])
 
 
 def test_datasets_from_a_harmonized_table():

@@ -104,7 +104,10 @@ RULES = {"min_kept_fraction_percent": MIN_KEPT_FRACTION_PERCENT,
          "reject_reasons": list(REJECT_REASONS),
          "uncertainty_mode": ("chosen once per file from the header and the standard_error census of the rows with a "
                               "position and a valid pair of alleles (outcome_files.choose_uncertainty_mode); a file with "
-                              "standard_error present on some rows and missing on others fails"),
+                              "standard_error present on some rows and missing on others fails; pvalue_coloc for a beta or "
+                              "an odds-ratio file with a p-value and an effect-allele frequency and no confidence limits"),
+         "harmonised_without_se": ("an indexed harmonised file whose standard_error is missing on its first 2000 data rows "
+                                   "is collected whole and validated as a GWAS-SSF file (fetch.RemoteSources._harmonised_whole)"),
          "or_ci_derived_se": {"ci_level": CI_LEVEL, "z": CI_Z, "se": "(ln U - ln L) / (2 z)",
                               "or_inside_ci": "within half a unit in the last printed decimal of OR plus of the limit"},
          "ci_p_check": None}

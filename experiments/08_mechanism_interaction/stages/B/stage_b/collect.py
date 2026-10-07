@@ -300,14 +300,20 @@ def collect_one(task: CollectTask, sources: Sources, root: Path, commit: Callabl
 SUPERSEDED_DIR = "superseded"
 
 
+RESOLVED_AGAIN = ("absent", "remote_indexed")
+
+
 def supersede_absent(root: Path, task: CollectTask, commit: Callable[[], None] = lambda: None) -> Path | None:
-    """Move the `absent` record of a GWAS Catalog task to <root>/superseded/collect/gwas_catalog/
-    <key>__<utc>.json, so `collect_one` runs the task again under the current rules. Used once,
-    for the accessions recorded absent only because they had no harmonised file. A record of any
-    other status, or of another source, is left in place and nothing is moved (None returned);
-    the moved record is never deleted."""
+    """Move the `absent` or `remote_indexed` record of a GWAS Catalog task (RESOLVED_AGAIN) to
+    <root>/superseded/collect/gwas_catalog/<key>__<utc>.json, so `collect_one` resolves the task again
+    under the current rules. Used for the accessions recorded absent only because they had no
+    harmonised file, and for the files queried by region before a harmonised file without a standard
+    error was collected whole (fetch.RemoteSources._harmonised_whole; 2026-10-07 amendment). Neither
+    record has a file. A record of any other status, or of another source, is left in place and
+    nothing is moved (None returned); the moved record is never deleted."""
     path = record_path(root, task.source, task.key)
-    if task.source != "gwas_catalog" or not path.is_file() or read_record(root, task.source, task.key).status != "absent":
+    if (task.source != "gwas_catalog" or not path.is_file()
+            or read_record(root, task.source, task.key).status not in RESOLVED_AGAIN):
         return None
     return supersede_record(root, task.source, task.key, commit)
 

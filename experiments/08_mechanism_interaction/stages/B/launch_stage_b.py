@@ -9,8 +9,8 @@ after it (the image bakes PREREG.md and the sealed stage A files).
     # 2. collect: one call per whole file (deCODE files, UKB-PPP tars and rsID maps, GWAS Catalog
     #    files without an index), each downloaded once to the stage B volume
     $B collect --run-token <token> [--source decode ...]
-    #    re-collect GWAS Catalog accessions recorded absent under an earlier rule: their `absent` record
-    #    is moved to /stage_b/superseded/collect/ and the task runs again (stage_b.collect.supersede_absent)
+    #    re-collect GWAS Catalog accessions recorded absent or remote_indexed under an earlier rule: that
+    #    record is moved to /stage_b/superseded/collect/ and the task runs again (stage_b.collect.supersede_absent)
     $B collect --run-token <token> --accessions-file <file>   # or --accessions GCST... GCST...
     $B status                            # until every file has a record
     #    pre-analysis validation of the GWAS Catalog files read without a harmonised copy (stage_b/validate.py):
@@ -31,6 +31,9 @@ after it (the image bakes PREREG.md and the sealed stage A files).
     #    /stage_b/superseded/errors/units/<utc>/ (never deleted; refused if a unit given holds result.json), then
     #    `spawn` again; finished units return their result
     $B supersede-units --run-token <token> --all-failed      # or --units-file <file of unit keys>
+    #    every planned unit, finished ones included, rerun under one code version: a finished unit bound to
+    #    another fingerprint is archived too (one bound to the current fingerprint is kept)
+    $B supersede-units --run-token <token> --units-file <all unit keys> --include-finished
     # 4. after `modal volume get pqtl-v8-stage-b /stage_b/units inputs/stage_b/units` and
     #    `modal volume get pqtl-v8-stage-b /stage_b/collect inputs/stage_b/collect` (the gitignored
     #    inputs directory: the unit directories hold regional extracts, which are never committed)
@@ -156,7 +159,7 @@ def cmd_collect(a: argparse.Namespace) -> None:
     commit = clean_commit(REPO)
     fn = modal.Function.from_name(APP, "collect_file")
     accessions = accession_list(a)
-    supersede = bool(accessions)          # only an `absent` GWAS Catalog record is ever superseded
+    supersede = bool(accessions)          # only an `absent` or `remote_indexed` GWAS Catalog record is ever superseded
     calls = spawn_collect(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT,
                           lambda task, token: fn.spawn(task, token, supersede).object_id, a.source or (), accessions)
     log_entry({"what": "collect", "repo_commit": commit, "calls": calls, "supersede_absent": supersede,
@@ -233,7 +236,7 @@ def cmd_supersede_units(a: argparse.Namespace) -> None:
     state = modal.Function.from_name(APP, "stage_state").remote()
     keys = None if a.all_failed else [line.split("\t")[0].strip() for line in a.units_file.read_text().splitlines() if line.strip()]
     chosen = supersede_selection(lines, state, keys)
-    out = modal.Function.from_name(APP, "supersede_stale_units").remote(chosen, a.run_token)
+    out = modal.Function.from_name(APP, "supersede_stale_units").remote(chosen, a.run_token, a.include_finished)
     log_entry({"what": "supersede_units", "repo_commit": commit, "selection": "all_failed" if a.all_failed else str(a.units_file),
                **out, "utc": utc_now()})
     print(f"{len(chosen)} units given: {len(out['moved'])} directories moved to /{STAGE_ROOT}/superseded/units/{out['stamp']}/, "
@@ -376,9 +379,13 @@ def main() -> None:
     which.add_argument("--all-failed", action="store_true",
                        help="every planned unit without result.json that has a directory or an error marker on the volume")
     which.add_argument("--units-file", type=Path, help="a file of unit keys, one per line (first tab-separated field)")
+    sub.choices["supersede-units"].add_argument(
+        "--include-finished", action="store_true",
+        help="also archive units holding result.json under another fingerprint (with --units-file naming them)")
     sub.choices["collect"].add_argument("--source", nargs="*", help="collect only these sources (e.g. decode)")
     sub.choices["collect"].add_argument("--accessions", nargs="*",
-                                        help="collect only these GWAS Catalog accessions again, superseding an `absent` record")
+                                        help="collect only these GWAS Catalog accessions again, superseding an `absent` or "
+                                             "`remote_indexed` record")
     sub.choices["restore-validated"].add_argument("--accessions", nargs="*",
                                                   help="GWAS Catalog accessions made unreadable by a reader defect")
     for name in ("collect", "restore-validated"):

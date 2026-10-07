@@ -11,6 +11,7 @@ import pytest
 from fake_remote import FakeRemote
 from test_pipeline import COLLECT, COMMIT, H4, TOOLS, FakeFetcher, StubBackend, fp, unit
 
+from stage_b import fetch as fetch_module
 from stage_b import remote as remote_module
 from stage_b.assemble import build_evidence, write_outputs
 from stage_b.author_formats import AUTHOR_FORMATS, LASKAR_HEADER, SPARK_HEADER, header_sha256
@@ -793,14 +794,19 @@ def test_a_pvalue_coloc_row_keeps_beta_for_the_direction_reads_no_se_and_ignores
     assert pvalue().row(ssf_row(effect="NA", se="NA")) == "beta_nonfinite"
 
 
+def test_an_odds_ratio_file_in_the_pvalue_form_gives_ln_or_for_the_direction_and_no_se():
+    got = pvalue(SSF_OR_ONLY_HEADER).row(ssf_row(effect="0.5", se="NA", p="0.0014"))
+    assert (got["beta"], got["p"], got["eaf"]) == (pytest.approx(math.log(0.5)), 0.0014, 0.3) and math.isnan(got["se"])
+    assert pvalue(SSF_OR_ONLY_HEADER).row(ssf_row(effect="0", se="NA")) == "or_nonpositive_or_nonfinite"
+    assert pvalue(SSF_OR_ONLY_HEADER).row(ssf_row(effect="0.5", se="NA", p="0")) == "p_zero_pvalue_coloc"
+
+
 def test_a_reader_refuses_a_mode_its_header_or_format_cannot_give():
     with pytest.raises(SourceUnreadable, match="or_ci_derived_se needs an odds_ratio effect with ci_lower and ci_upper"):
         or_ci(SSF_BETA_HEADER)
     with pytest.raises(SourceUnreadable, match="or_ci_derived_se needs"):
         or_ci([c for c in SSF_OR_CI_HEADER if c != "ci_lower"])
-    with pytest.raises(SourceUnreadable, match="pvalue_coloc needs a beta effect and a p-value column"):
-        pvalue(SSF_OR_CI_HEADER)
-    with pytest.raises(SourceUnreadable, match="pvalue_coloc needs"):
+    with pytest.raises(SourceUnreadable, match="pvalue_coloc needs a p-value column"):
         pvalue([c for c in SSF_BETA_HEADER if c != "p_value"])
     for mode in ("or_ci_derived_se", "pvalue_coloc"):
         with pytest.raises(SourceUnreadable, match="read in native_se only"):
@@ -825,7 +831,8 @@ BETA_COLS = ssf_columns(SSF_BETA_HEADER, "X")
     (OR_CI_COLS, 10, 0, "or_ci_derived_se", ""), (BETA_COLS, 10, 0, "pvalue_coloc", ""),
     (OR_CI_COLS, 9, 1, None, "missing in 9 and present in 1 rows"), (BETA_COLS, 1, 9, None, "missing in 1 and present in 9 rows"),
     (None, 10, 0, None, "missing in every row and the header gives no other route"),
-    (ssf_columns(SSF_OR_ONLY_HEADER, "X"), 10, 0, None, "no other route"),                      # an odds ratio without limits
+    (ssf_columns(SSF_OR_ONLY_HEADER, "X"), 10, 0, "pvalue_coloc", ""),        # an odds ratio without limits (2026-10-07)
+    (ssf_columns([c for c in SSF_OR_ONLY_HEADER if c != "p_value"], "X"), 10, 0, None, "no other route"),
     (ssf_columns(SSF_BETA_HEADER + ["ci_lower", "ci_upper"], "X"), 10, 0, None, "no other route"),   # a beta with limits
     (ssf_columns([c for c in SSF_BETA_HEADER if c != "effect_allele_frequency"], "X"), 10, 0, None, "no other route"),
     (BETA_COLS, 0, 0, None, "no data row with a position and a valid pair of alleles"),
@@ -888,3 +895,80 @@ def test_log10_of_the_two_sided_p_is_exact_where_erfc_is_a_double_and_its_asympt
     assert [log10_two_sided_p(z) for z in zs[2:]] == pytest.approx(exact[2:], abs=1e-6)
     beyond = [log10_two_sided_p(z) for z in (40.0, 60.0, 200.0)]
     assert all(math.isfinite(v) for v in beyond) and beyond == sorted(beyond, reverse=True)
+
+
+# ---- an indexed harmonised file without a standard error: collected whole and validated (2026-10-07 amendment) ----
+
+HM_HEADER = ["chromosome", "base_pair_location", "effect_allele", "other_allele", "odds_ratio", "standard_error",
+             "effect_allele_frequency", "p_value", "rsid", "ci_upper", "ci_lower", "hm_coordinate_conversion", "hm_code",
+             "variant_id"]
+
+
+def harmonised(remote: FakeRemote, accession: str, data: bytes, indexed: bool = True) -> str:
+    """A study directory whose harmonised/ holds `data` as <accession>.h.tsv.gz, with its index and md5sum.txt."""
+    study(remote, accession, {})
+    base = gwas_catalog_study_dir("/gwascat", accession) + "harmonised/"
+    name = f"{accession}.h.tsv.gz"
+    body = gzip.compress(data, mtime=0)
+    listed = [name, "md5sum.txt"] + ([f"{name}.tbi"] if indexed else [])
+    remote.files[base] = "".join(f'<a href="{n}">{n}</a>\n' for n in listed).encode()
+    remote.files[base + name] = body
+    remote.files[base + "md5sum.txt"] = f"{md5(body)}  {name}\n".encode()
+    return name
+
+
+def hm_rows(n: int, se: str) -> list[list]:
+    return [[1, 1_000_000 + 10 * i, "G", "A", "1.05", se, 0.3, "0.04", f"rs{i}", "1.1", "1.002", "lo", 10, f"1_{i}_A_G"]
+            for i in range(n)]
+
+
+def test_an_indexed_harmonised_file_without_a_standard_error_is_collected_whole_as_gwas_ssf(remote, tmp_path, monkeypatch):
+    monkeypatch.setattr(fetch_module, "SE_PEEK_ROWS", 5)
+    name = harmonised(remote, "GCST90475170", tsv(HM_HEADER, hm_rows(8, "NA"), eol="\r\n"))
+    record = collect(remote, tmp_path, "GCST90475170")
+    assert (record.status, record.name, record.layout, record.build, record.position_offset, record.rsid_rule) == (
+        "collected", name, "gwas_ssf", "GRCh38", 0, "column")
+    assert record.md5 and "standard_error missing on its first 5 data rows" in record.detail
+    assert record.uncertainty_mode == ""                                  # the pre-analysis validation chooses it
+    assert choose_uncertainty_mode(ssf_columns(HM_HEADER, "x"), 8, 0) == ("or_ci_derived_se", "")
+
+
+def test_an_indexed_harmonised_file_with_a_standard_error_stays_queried_by_region(remote, tmp_path, monkeypatch):
+    monkeypatch.setattr(fetch_module, "SE_PEEK_ROWS", 5)
+    harmonised(remote, "GCST1", tsv(HM_HEADER, hm_rows(8, "0.02")))
+    assert collect(remote, tmp_path, "GCST1").status == "remote_indexed"
+    harmonised(remote, "GCST2", tsv(HM_HEADER, hm_rows(5, "0.02")[:2] + hm_rows(5, "NA")[2:]))    # some rows carry it
+    assert collect(remote, tmp_path, "GCST2").status == "remote_indexed"
+    harmonised(remote, "GCST3", tsv(HM_HEADER, hm_rows(3, "NA")))         # fewer data rows than the census reads
+    assert collect(remote, tmp_path, "GCST3").status == "remote_indexed"
+
+
+def test_an_indexed_harmonised_file_without_an_effect_or_a_standard_error_is_unreadable_at_collect(remote, tmp_path, monkeypatch):
+    monkeypatch.setattr(fetch_module, "SE_PEEK_ROWS", 5)
+    header = [h for h in HM_HEADER if h not in ("odds_ratio", "ci_upper", "ci_lower")]
+    harmonised(remote, "GCST90246358", tsv(header, [[r[c] for c in range(len(r)) if c not in (4, 9, 10)] for r in hm_rows(8, "NA")]))
+    record = collect(remote, tmp_path, "GCST90246358")
+    assert record.status == "unreadable" and "neither a beta nor an odds_ratio" in record.detail
+
+
+def test_the_carried_over_accession_stays_queried_by_region_in_the_pvalue_form(remote, tmp_path, monkeypatch):
+    monkeypatch.setattr(fetch_module, "SE_PEEK_ROWS", 5)
+    header = ["chromosome", "base_pair_location", "effect_allele", "other_allele", "standard_error", "effect_allele_frequency",
+              "p_value", "variant_id", "eaf", "OR", "OR_se", "p.value", "hm_code", "rsid"]
+    harmonised(remote, "GCST007228", tsv(header, [[1, 100 + i, "G", "A", "NA", "NA", 0.1, "v", 0.2, 1.1, 0.1, 0.1, 10, f"rs{i}"]
+                                                  for i in range(8)]))
+    record = collect(remote, tmp_path, "GCST007228")
+    assert record.status == "remote_indexed"
+    assert fetcher(remote, tmp_path / "vol").outcome_mode(spec("GCST007228")) == "pvalue_coloc"
+
+
+def test_a_remote_indexed_record_is_superseded_for_a_new_resolution_and_kept_in_the_archive(remote, tmp_path, monkeypatch):
+    monkeypatch.setattr(fetch_module, "SE_PEEK_ROWS", 5)
+    root = tmp_path / "vol"
+    old = CollectRecord(status="remote_indexed", source="gwas_catalog", key="GCST90475170", name="GCST90475170.h.tsv.gz")
+    record_path(root, "gwas_catalog", "GCST90475170").parent.mkdir(parents=True)
+    record_path(root, "gwas_catalog", "GCST90475170").write_text(old.model_dump_json())
+    harmonised(remote, "GCST90475170", tsv(HM_HEADER, hm_rows(8, "NA")))
+    moved = supersede_absent(root, CollectTask(source="gwas_catalog", key="GCST90475170"))
+    assert moved is not None and CollectRecord.model_validate_json(moved.read_text()) == old
+    assert collect(remote, tmp_path, "GCST90475170").status == "collected"

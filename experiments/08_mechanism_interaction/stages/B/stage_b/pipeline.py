@@ -38,6 +38,12 @@ primary coloc.abf PP.H4 with the reason in `susie_note`, as for a pvalue_coloc o
 amendment and the plan's S15g); the VEP step asks for the lead variant alone. The primary coloc.abf, S15a-f,
 S16 and S17 do not use LD and run as usual. The result carries the reason as `ld_unavailable`.
 
+coloc.susie (S15g) runs in its own Rscript call after the coloc.abf tasks of a pair. Where R stops the
+susie task with an error (susieR's check that the summary statistics agree with the LD matrix is the
+case seen) or the call runs past its time limit, the pair is not failed: S15g takes the primary coloc.abf
+PP.H4, `s15g_basis` is abf_susie_did_not_complete and `susie_note` carries the message (the 2026-10-07
+amendment). A failed coloc.abf task still stops the unit.
+
 A sentinel given as several rsIDs is resolved through Ensembl (fetch.resolve_sentinel): the unit
 then runs on Ensembl's name and position for it, and a regional row whose rsID is any of its aliases
 (the listed ids and Ensembl's names and synonyms) is read as the sentinel (`with_sentinel_name`). A
@@ -57,7 +63,7 @@ import numpy as np
 import pandas as pd
 
 from stage_b.checkpoint import FINGERPRINT_NAME
-from stage_b.coloc_backend import (AbfResult, ColocBackend, ColocTask, SusieResult, outcome_dataset,
+from stage_b.coloc_backend import (AbfResult, ColocBackend, ColocTask, SusieFailed, SusieResult, outcome_dataset,
                                    pqtl_dataset, qtl_dataset)
 from stage_b.evidence import (coverage, genetic_direction, lead_sqtl_event, n_variants, not_run_reason,
                               sentinel_outcome_p, splicing_candidate, vep_protein_altering)
@@ -65,9 +71,9 @@ from stage_b.harmonize import harmonize
 from stage_b.ld import aligned_ld, proxies
 from stage_b.parsers import restrict_window
 from stage_b.schemas import (PRIMARY_P1, PRIMARY_P2, PRIMARY_P12, S15A_P12, S15B_P12, VARIANT_COLUMNS,
-                             WINDOW_PRIMARY, WINDOW_WIDE, Build, ColocBackendError, InstrumentUnit, LDReferenceError,
-                             LDUnavailable, OutcomeSpec, Sentinel, SentinelUnresolved, SourceAbsent, StaleCheckpointError,
-                             UncertaintyMode)
+                             WINDOW_PRIMARY, WINDOW_WIDE, Build, ColocBackendError, ColocTimeout, InstrumentUnit,
+                             LDReferenceError, LDUnavailable, OutcomeSpec, S15gBasis, Sentinel, SentinelUnresolved,
+                             SourceAbsent, StaleCheckpointError, UncertaintyMode)
 
 SOURCE_BUILD: dict[str, Build] = {"ukbppp": "GRCh38", "decode": "GRCh38", "interval": "GRCh37"}
 
@@ -233,12 +239,13 @@ def colocalize_pair(pqtl_wide: pd.DataFrame, outcome_wide: pd.DataFrame, sentine
     if s15c_run:
         tasks.append(_abf("s15c", h1m, outcome_dataset(h1m, spec.n_case, spec.n_control, mode), PRIMARY_P12))
     susie_note = f"susie not run: {ld_unavailable}" if ld_unavailable else "" if outcome_se else PVALUE_COLOC_SUSIE_NOTE
+    susie_task = None
     if outcome_se and not ld_unavailable:
         try:
             hs, ld = aligned_ld(h, ld_meta, dosage)
-            tasks.append(ColocTask(id="s15g", method="susie", p1=PRIMARY_P1, p2=PRIMARY_P2, p12=PRIMARY_P12,
+            susie_task = ColocTask(id="s15g", method="susie", p1=PRIMARY_P1, p2=PRIMARY_P2, p12=PRIMARY_P12,
                                    d1=pqtl_dataset(hs), d2=outcome_dataset(hs, spec.n_case, spec.n_control, mode),
-                                   LD=ld.tolist()))
+                                   LD=ld.tolist())
         except LDReferenceError as e:
             susie_note = f"susie not run: {e}"
     res = backend.run(tasks)
@@ -246,17 +253,37 @@ def colocalize_pair(pqtl_wide: pd.DataFrame, outcome_wide: pd.DataFrame, sentine
     if not isinstance(prim, AbfResult):
         raise ColocBackendError("primary task did not return a coloc.abf result")
     lead, gd = genetic_direction(prim, h, spec.risk_coded)
-    susie = res.get("s15g")
-    if isinstance(susie, SusieResult) and max(susie.n_cs1, susie.n_cs2) >= 2 and susie.max_pp_h4 is not None:
-        s15g, s15g_method = susie.max_pp_h4, "coloc.susie"
-    else:
-        s15g, s15g_method = prim.pp[4], "coloc.abf (fewer than two credible sets in both traits, or susie not run)"
+    # coloc.susie runs in its own Rscript call, after the coloc.abf tasks: a susie task that R stops, or a
+    # call past the time limit, leaves S15g on the primary PP.H4 with the reason (2026-10-07 amendment)
+    susie, susie_incomplete = None, False
+    if susie_task is not None:
+        try:
+            got = backend.run([susie_task])["s15g"]
+        except ColocTimeout as e:
+            susie_note, susie_incomplete = f"susie did not complete: {e}", True
+        else:
+            if isinstance(got, SusieFailed):
+                susie_note, susie_incomplete = f"susie did not complete: stopped in R: {got.error}", True
+            else:
+                susie = got
+    s15g, basis = s15g_value(prim, susie, susie_task is not None, susie_incomplete)
     return {**rec, "coloc_run": True, "not_run_reason": "", "pp": list(prim.pp), "nsnps": prim.nsnps,
             "lead_variant": lead, "lead_snp_pp_h4": prim.snp_pp_h4[lead], "genetic_direction": gd,
             "s15a_pp_h4": res["s15a"].pp[4], "s15b_pp_h4": res["s15b"].pp[4],
             "s15c_pp_h4": res["s15c"].pp[4] if s15c_run else None, "s15c_n_shared": int(len(h1m)),
-            "s15g_pp_h4": s15g, "s15g_method": s15g_method, "susie_note": susie_note,
+            "s15g_pp_h4": s15g, "s15g_method": "coloc.susie" if basis == "coloc.susie" else f"coloc.abf ({basis})",
+            "s15g_basis": basis, "susie_note": susie_note,
             "susie": susie.model_dump() if isinstance(susie, SusieResult) else None}
+
+
+def s15g_value(prim: AbfResult, susie: SusieResult | None, susie_run: bool, susie_incomplete: bool) -> tuple[float, S15gBasis]:
+    """S15g's PP.H4 and its basis: coloc.susie's maximum PP.H4 where susie gave two or more credible sets
+    in either trait, else the primary coloc.abf PP.H4, labelled by why."""
+    if susie is not None and max(susie.n_cs1, susie.n_cs2) >= 2 and susie.max_pp_h4 is not None:
+        return susie.max_pp_h4, "coloc.susie"
+    if susie_incomplete:
+        return prim.pp[4], "abf_susie_did_not_complete"
+    return prim.pp[4], "abf_susie_criterion_not_met" if susie_run else "abf_susie_not_run"
 
 
 def splicing_step(unit: InstrumentUnit, p500: pd.DataFrame, qtl: dict[str, dict[str, pd.DataFrame]],
@@ -449,19 +476,23 @@ def bound_fingerprint(unit_dir: Path) -> str | None:
     return json.loads(path.read_text()).get("fingerprint") if path.is_file() else None
 
 
-def supersede_units(root: Path, current: Mapping[str, str], stamp: str, commit: Callable[[], None] = lambda: None) -> dict:
+def supersede_units(root: Path, current: Mapping[str, str], stamp: str, commit: Callable[[], None] = lambda: None,
+                    include_finished: bool = False) -> dict:
     """Archive the unit directories of `current` (unit key -> the fingerprint this run computes for the
     unit) that `run_unit` would refuse as stale, so a new call starts them afresh. Nothing is deleted.
 
-    Refused, with nothing moved, when any of the units holds result.json: a finished unit is never
-    superseded. A directory bound to its current fingerprint is kept (a new call resumes it), and so is
+    Refused, with nothing moved, when any of the units holds result.json, unless `include_finished`: a
+    finished unit is superseded only by that explicit choice (launcher `--include-finished`), and only
+    when it is stale, i.e. bound to another fingerprint, so that `assemble` would refuse it (after a code
+    fix every unit is rerun under one code version; 2026-10-07 amendment). A directory bound to its current
+    fingerprint is kept whether finished or not (a new call resumes it or returns its result), and so is
     its error marker. A directory bound to another fingerprint, or holding files and no FINGERPRINT.json,
     is moved to <root>/superseded/units/<stamp>/<unit key>/, and the unit's error marker
     (status.error_marker) to <root>/superseded/errors/units/<stamp>/<unit key>.json; the marker of a
     unit without a directory is archived the same way. Returns the unit keys by what was done."""
     units = root / "units"
     finished = sorted(k for k in current if (units / k / "result.json").exists())
-    if finished:
+    if finished and not include_finished:
         raise StaleCheckpointError(f"{len(finished)} units hold result.json (first: {finished[0]}); a finished unit is "
                                    "never superseded, and nothing was moved")
     dest_units, dest_errors = root / SUPERSEDED_UNITS / stamp, root / SUPERSEDED_UNIT_ERRORS / stamp

@@ -4,8 +4,10 @@ Why an Rscript subprocess and not rpy2: the plan names the R package, so R must 
 arithmetic; a subprocess exchanging JSON couples Python and R only through a file format, so
 the Python wheel set and the R build can be pinned independently (rpy2 compiles against the R
 headers present at install time and breaks when either side moves). An R failure surfaces as a
-non-zero exit or a per-task `ok: false` with R's message, never as a crashed interpreter. One
-Rscript call per instrument batches every task of that unit, so start-up cost is paid once.
+non-zero exit or a per-task `ok: false` with R's message, never as a crashed interpreter. A failed
+coloc.abf task raises ColocBackendError; a failed coloc.susie task is returned as SusieFailed with R's
+message, and pipeline.colocalize_pair records it (S15g, the 2026-10-07 amendment). A call that runs
+past `timeout_s` raises ColocTimeout naming its tasks.
 
 Tests substitute any object with the same `run` method (the ColocBackend protocol).
 
@@ -26,7 +28,7 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from stage_b.schemas import ColocBackendError, UncertaintyMode
+from stage_b.schemas import ColocBackendError, ColocTimeout, UncertaintyMode
 
 R_SCRIPT = Path(__file__).resolve().parent / "coloc_run.R"
 
@@ -88,8 +90,17 @@ class SusieResult(BaseModel):
     max_pp_h4: float | None
 
 
+class SusieFailed(BaseModel):
+    """A coloc.susie task that R stopped with an error (e.g. susieR's "estimated prior variance is
+    unreasonably large", its check for summary statistics that disagree with the LD matrix); `error` is
+    R's message. A failed coloc.abf task is never read this way: it raises."""
+    model_config = ConfigDict(frozen=True)
+
+    error: str
+
+
 class ColocBackend(Protocol):
-    def run(self, tasks: list[ColocTask]) -> dict[str, AbfResult | SusieResult]: ...
+    def run(self, tasks: list[ColocTask]) -> dict[str, AbfResult | SusieResult | SusieFailed]: ...
 
 
 def _maf(eaf: pd.Series) -> list[float] | None:
@@ -159,7 +170,7 @@ class RscriptColoc:
         self.timeout_s = timeout_s
         self.session: dict = {}
 
-    def run(self, tasks: list[ColocTask]) -> dict[str, AbfResult | SusieResult]:
+    def run(self, tasks: list[ColocTask]) -> dict[str, AbfResult | SusieResult | SusieFailed]:
         if not tasks:
             return {}
         env = dict(os.environ)
@@ -168,8 +179,11 @@ class RscriptColoc:
         with tempfile.TemporaryDirectory() as tmp:
             req, resp = Path(tmp) / "request.json", Path(tmp) / "response.json"
             req.write_text(json.dumps({"tasks": [t.model_dump(exclude_none=True) for t in tasks]}))
-            proc = subprocess.run([self.rscript, str(R_SCRIPT), str(req), str(resp)], env=env,
-                                  capture_output=True, text=True, timeout=self.timeout_s)
+            try:
+                proc = subprocess.run([self.rscript, str(R_SCRIPT), str(req), str(resp)], env=env,
+                                      capture_output=True, text=True, timeout=self.timeout_s)
+            except subprocess.TimeoutExpired as err:
+                raise ColocTimeout(f"Rscript ran past {self.timeout_s} s on tasks {[t.id for t in tasks]}") from err
             if proc.returncode != 0 or not resp.exists():
                 raise ColocBackendError(f"Rscript exited {proc.returncode}: {proc.stderr[-2000:]}")
             payload = json.loads(resp.read_text())
@@ -177,9 +191,12 @@ class RscriptColoc:
         return parse_response(payload, {t.id for t in tasks})
 
 
-def parse_response(payload: dict, expected_ids: set[str]) -> dict[str, AbfResult | SusieResult]:
-    out: dict[str, AbfResult | SusieResult] = {}
+def parse_response(payload: dict, expected_ids: set[str]) -> dict[str, AbfResult | SusieResult | SusieFailed]:
+    out: dict[str, AbfResult | SusieResult | SusieFailed] = {}
     for t in payload.get("tasks", []):
+        if not t.get("ok") and t.get("method") == "susie":
+            out[t["id"]] = SusieFailed(error=str(t.get("error")))
+            continue
         if not t.get("ok"):
             raise ColocBackendError(f"coloc task {t.get('id')} failed in R: {t.get('error')}")
         if t["method"] == "abf":

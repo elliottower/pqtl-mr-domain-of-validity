@@ -12,11 +12,12 @@ from stage_b.collect import collect_tasks
 from stage_b.fetch import KG_CHRX_PAR_GRCH38, Endpoints, VolumeFetcher, resolve_sentinel
 from stage_b.ld import aligned_ld, eur_polymorphic, parse_genotypes, proxies
 from stage_b.outcome_files import map_rsids
-from stage_b.parsers import (decode_to_canonical, filter_decode, filter_decode_annotation, filter_decode_excluded,
+from stage_b.parsers import (HARMONISED_CARRYOVER, CarryOverReader, decode_to_canonical, filter_decode, filter_decode_annotation, filter_decode_excluded,
                              filter_finngen, filter_gwas_catalog, filter_ukbppp, normalize_chrom,
                              parse_ukbppp_rsid_map, split_lines, ukbppp_to_canonical)
 from stage_b.schemas import (HYPOTHESIS_INPUT_COLUMNS, AmbiguousInstrumentError, HypothesisInput,
-                             InputContractError, LDReferenceError, LDUnavailable, Sentinel, SentinelUnresolved, SourceFile)
+                             InputContractError, LDReferenceError, LDUnavailable, Sentinel, SentinelUnresolved, SourceFile,
+                             SourceUnreadable)
 from stage_b.schemas import InputContractError as _InputContractError
 from stage_b.units import load_hypotheses as _load_hypotheses
 from stage_b.sentinels import (decode_sentinels, interval_opengwas_id, interval_sentinels, select_assay,
@@ -96,9 +97,32 @@ x\trs2\t1\t200\tA\tG\t0.5\tNA\t0.2\t1e-4\t0.1
 """)
     df = filter_gwas_catalog(it, header, "1", 100, 1000)
     assert df["beta"].tolist() == pytest.approx([math.log(2.0), 0.5])
-    with pytest.raises(InputContractError):
+    with pytest.raises(SourceUnreadable, match="neither beta nor odds ratio"):      # no effect: no direction, unreadable
         filter_gwas_catalog(iter([]), ["hm_chrom", "hm_pos", "hm_effect_allele", "hm_other_allele", "standard_error",
                                        "hm_rsid"], "1", 1, 1)
+    with pytest.raises(InputContractError):
+        filter_gwas_catalog(iter([]), ["hm_chrom", "hm_pos", "hm_effect_allele", "hm_other_allele", "hm_beta"], "1", 1, 1)
+
+
+def test_a_carried_over_odds_ratio_is_read_in_the_pvalue_form_and_flipped_where_the_harmoniser_flipped_the_alleles():
+    # GCST007228's harmonised layout: the standard effect and frequency columns empty, the author's OR, eaf and p.value carried
+    header, it = rows("""
+chromosome\tbase_pair_location\teffect_allele\tother_allele\tstandard_error\teffect_allele_frequency\tp_value\tvariant_id\teaf\tOR\tOR_se\tp.value\thm_code\trsid
+1\t100\tG\tA\tNA\tNA\t0.01\tv1\t0.2\t2.0\t0.1\t0.02\t10\trs1
+1\t200\tG\tA\tNA\tNA\t0.01\tv2\t0.2\t2.0\t0.1\t0.02\t11\trs2
+1\t300\tC\tG\tNA\tNA\t0.01\tv3\t0.3\t0.5\t0.1\t0.03\t6\trs3
+1\t400\tNA\tNA\tNA\tNA\t0.01\tv4\t0.3\t0.5\t0.1\t0.03\t15\trs4
+1\t900000\tG\tA\tNA\tNA\t0.01\tv5\t0.2\t2.0\t0.1\t0.02\t10\trs5
+""")
+    reader = CarryOverReader(header, HARMONISED_CARRYOVER["GCST007228"])
+    df = reader.window(it, "1", 100, 1000)
+    assert list(df["rsid"]) == ["rs1", "rs2", "rs3"]                       # hm_code 15: not harmonised; rs5: outside
+    assert df["beta"].tolist() == pytest.approx([math.log(2.0), -math.log(2.0), -math.log(0.5)])   # 11 and 6 flipped
+    assert df["eaf"].tolist() == pytest.approx([0.2, 0.8, 0.7]) and df["p"].tolist() == pytest.approx([0.02, 0.02, 0.03])
+    assert df["se"].isna().all()                                           # no standard error is read
+    assert reader.row(["1", "400", "NA", "NA", "NA", "NA", "0.01", "v4", "0.3", "0.5", "0.1", "0.03", "15", "rs4"]) == "not_harmonised"
+    with pytest.raises(InputContractError, match="header lacks"):
+        CarryOverReader([h for h in header if h != "p.value"], HARMONISED_CARRYOVER["GCST007228"])
 
 
 def test_sentinel_rules_per_source():

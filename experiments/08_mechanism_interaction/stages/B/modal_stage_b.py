@@ -358,9 +358,10 @@ def run_unit(unit_json: str, run_token: str) -> dict:
 # Archive the stale directories of unfinished units (stage_b.pipeline.supersede_units) after a code fix
 # changed their fingerprint: each unit's fingerprint is computed here as `checkpointed_unit` computes it,
 # a directory bound to another one is moved to /stage_b/superseded/units/<utc>/ with its error marker, and
-# nothing is deleted. Refused, nothing moved, if any unit given holds result.json. The guard stays first.
+# nothing is deleted. Refused, nothing moved, if any unit given holds result.json, unless `include_finished`
+# (then a stale finished unit is archived too; one bound to the current fingerprint is kept). The guard stays first.
 @app.function(**RUN_CONTAINER, timeout=3600)
-def supersede_stale_units(unit_jsons: list[str], run_token: str) -> dict:
+def supersede_stale_units(unit_jsons: list[str], run_token: str, include_finished: bool = False) -> dict:
     authorize(PREREG_IMAGE, run_token, A_IMAGE)
     run_commit(None)
     vol.reload()
@@ -368,9 +369,9 @@ def supersede_stale_units(unit_jsons: list[str], run_token: str) -> dict:
     pins, tools, code = verified_source_pins(INPUTS_MANIFEST_IMAGE, EXP_INPUTS), tool_versions(), package_sha256(PACKAGE_IMAGE)
     current = {u.unit_key: unit_fingerprint(u, pins, code, PLAN_SHA256, tools, volume_collect_digest(ROOT, u)) for u in units}
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out = supersede_units(ROOT, current, stamp, vol.commit)
+    out = supersede_units(ROOT, current, stamp, vol.commit, include_finished)
     vol.commit()
-    return {**out, "stamp": stamp, "code_sha256": code}
+    return {**out, "stamp": stamp, "code_sha256": code, "include_finished": include_finished}
 
 
 @app.function(timeout=600, volumes={"/vol": vol})

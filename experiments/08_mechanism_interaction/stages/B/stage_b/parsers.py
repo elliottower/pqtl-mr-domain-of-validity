@@ -12,8 +12,9 @@ from collections.abc import Iterable, Iterator
 
 import numpy as np
 import pandas as pd
+from pydantic import BaseModel, ConfigDict
 
-from stage_b.schemas import VARIANT_COLUMNS, InputContractError
+from stage_b.schemas import VARIANT_COLUMNS, InputContractError, SourceUnreadable
 
 MISSING = {"", "NA", "#NA", "nan", "NaN", "None", ".", "-"}   # "#NA": the GWAS-SSF missing value
 
@@ -246,7 +247,8 @@ class HarmonisedReader(RowReader):
         self.i_beta = _first(idx, ["hm_beta", "beta"], w, required=False)
         self.i_or = _first(idx, ["hm_odds_ratio", "odds_ratio"], w, required=False)
         if self.i_beta is None and self.i_or is None:
-            raise InputContractError(f"{w}: neither beta nor odds ratio in header {header}")
+            # a property of the deposited file, not of this code: no effect, so no direction (2026-10-07 amendment)
+            raise SourceUnreadable(f"{w}: neither beta nor odds ratio in header {header}")
         self.i_se = _first(idx, ["standard_error"], w)
         self.i_eaf = _first(idx, ["hm_effect_allele_frequency", "effect_allele_frequency"], w, required=False)
         self.i_p = _first(idx, ["p_value"], w, required=False)
@@ -274,6 +276,69 @@ def filter_gwas_catalog(rows: Iterable[list[str]], header: list[str], chrom: str
                         half_width: int) -> pd.DataFrame:
     """Window rows of a GWAS Catalog harmonised file as the canonical table (HarmonisedReader)."""
     return HarmonisedReader(header).window(rows, chrom, center, half_width)
+
+
+# ---- harmonised files whose effect is only in a column the harmoniser carried over (2026-10-07 amendment)
+#
+# The GWAS Catalog harmoniser (gwas-catalog/sumstats-harmoniser, bin/main_pysam.py) fills beta, odds_ratio and
+# effect_allele_frequency only from columns of those names, flips them where it flips the alleles (hm_code 2, 4,
+# 6, 8, 11, 13: "Flipped orientation", SumStatRecord.flip_beta), and copies every other column of the author's
+# file unchanged. A file whose author named the odds ratio otherwise has an empty beta and odds_ratio, and its
+# own columns stay on the author's effect allele. Such a file is read only under a reviewed map, in the p-value
+# form (pvalue_coloc): the published p, the author's effect-allele frequency, and ln(OR) for the direction
+# only, the last two flipped on the rows the harmoniser flipped. No standard error is read.
+
+HM_FLIPPED = frozenset({2, 4, 6, 8, 11, 13})
+HM_HARMONISED = frozenset({1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13})
+
+
+class CarryOverMap(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    odds_ratio: str
+    eaf: str
+    p: str
+    reason: str
+
+
+# GCST007228 (pulmonary arterial hypertension, GWAMA meta-analysis): the author columns OR, OR_se, OR_95L, OR_95U,
+# z, p.value. Over its first 200,000 rows sign(ln OR) = sign(z) on all 198,507 rows with both nonzero and p.value
+# = 2 Phi(-|z|) within 0.1 log10 on all 199,967 checkable rows, while OR_se agrees with the SE implied by the
+# 95% limits within 1% on 16,871 rows, at six printed decimals: the published uncertainty columns disagree.
+HARMONISED_CARRYOVER: dict[str, CarryOverMap] = {
+    "GCST007228": CarryOverMap(odds_ratio="OR", eaf="eaf", p="p.value",
+                               reason="odds ratio only in the author's column OR; OR_se and the 95% limits disagree"),
+}
+
+
+class CarryOverReader(RowReader):
+    """A harmonised file under a HARMONISED_CARRYOVER map, in the p-value form: beta is ln(OR) (direction
+    only), eaf the author's frequency, both flipped where hm_code is a flipped orientation; se is missing.
+    A row the harmoniser did not harmonise (hm_code 9, 14-18) is not read (`not_harmonised`)."""
+
+    def __init__(self, header: list[str], fmt: CarryOverMap):
+        w = "GWAS Catalog harmonised file (carried-over columns)"
+        idx = _index(header, ["chromosome", "base_pair_location", "effect_allele", "other_allele", "hm_code", "rsid",
+                              fmt.odds_ratio, fmt.eaf, fmt.p], w)
+        self.width = len(header)
+        self.i_chrom, self.i_pos = idx["chromosome"], idx["base_pair_location"]
+        self.i_ea, self.i_oa, self.i_code, self.i_rs = idx["effect_allele"], idx["other_allele"], idx["hm_code"], idx["rsid"]
+        self.i_or, self.i_eaf, self.i_p = idx[fmt.odds_ratio], idx[fmt.eaf], idx[fmt.p]
+
+    def values(self, r: list[str], chrom: str, pos: int) -> dict | str:
+        try:
+            code = int(r[self.i_code])
+            orv, eaf, p = _num(r[self.i_or]), _num(r[self.i_eaf]), _num(r[self.i_p])
+        except ValueError:
+            return "unparseable_number"
+        if code not in HM_HARMONISED:
+            return "not_harmonised"
+        flip = code in HM_FLIPPED
+        beta = math.log(orv) if math.isfinite(orv) and orv > 0 else float("nan")
+        rs = r[self.i_rs]
+        return {"rsid": rs if rs.startswith("rs") else "", "chrom": chrom, "pos": pos, "ea": r[self.i_ea].upper(),
+                "oa": r[self.i_oa].upper(), "eaf": 1.0 - eaf if flip else eaf, "beta": -beta if flip else beta,
+                "se": float("nan"), "p": p, "n": float("nan")}
 
 
 # ---- FinnGen R12 (GRCh38) ------------------------------------------------------------------------
