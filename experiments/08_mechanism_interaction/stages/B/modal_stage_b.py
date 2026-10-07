@@ -156,9 +156,10 @@ SECRET_NAMES = ("SYNAPSE_PAT", "OPENGWAS")
 COLLECT_SECRET_NAMES = ("DECODE_FOLDER_TOKEN",)     # set just before collect; its absence blocks `collect --source decode` only
 OPTIONAL_SECRET_NAMES = ("DECODE_SMP_FOLDER_TOKEN", "DECODE_FILE_URL_TEMPLATE", "DECODE_SMP_FILE_URL_TEMPLATE")
 # Containers at once. Collect: parallel whole-file downloads from one source. Analyze: every unit
-# container queries OpenGWAS, Ensembl and the eQTL Catalogue, whose rate limit is per client.
+# container queries OpenGWAS, Ensembl and the eQTL Catalogue, whose rate limit is per client; a 429 is
+# retried with backoff (stage_b/remote.py) and the unit resumes from its last committed step.
 COLLECT_CONTAINERS = 16
-ANALYZE_CONTAINERS = 24
+ANALYZE_CONTAINERS = 64
 TEST_PACKAGES = ["pytest==9.1.1"]
 TEST_IGNORE = [".venv", "**/__pycache__", "**/.pytest_cache", "output", "work", "launch_log.jsonl"]
 STAGES_IMAGE = Path("/root/exp/stages")
