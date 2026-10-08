@@ -16,7 +16,8 @@ harmonised reader applies no allele, standard-error or p-value rule, so only `ro
 Uncertainty mode (outcome_files module docstring). For a GWAS-SSF or author-format file, a first pass
 counts the `standard_error` field over the rows with a position and a valid pair of alleles
 (`se_census`: missing, present, not counted), and the mode is chosen once for the whole file from
-the header and those two counts (outcome_files.choose_uncertainty_mode); a harmonised file is read in
+the header and those two counts (outcome_files.choose_uncertainty_mode), and, for an odds-ratio file
+of a study in study_rules.STUDY_PVALUE_FORM, the study rule; a harmonised file is read in
 `native_se`. The second pass reads every row in that mode. No value of a row enters the choice.
 
 Pass/fail rules, fixed before any file is read:
@@ -91,6 +92,7 @@ from stage_b.outcome_files import (CI_LEVEL, CI_P_LOG10_TOLERANCE, CI_P_MIN_AGRE
 from stage_b.parsers import HarmonisedReader, RowReader, split_lines
 from stage_b.schemas import (UNCERTAINTY_MODES, CollectError, CollectRecord, InputContractError, SourceUnreadable,
                              UncertaintyMode)
+from stage_b.study_rules import STUDY_PVALUE_FORM
 
 MIN_KEPT_FRACTION_PERCENT = 50
 CHECKPOINT_ROWS = 1_000_000
@@ -106,6 +108,8 @@ RULES = {"min_kept_fraction_percent": MIN_KEPT_FRACTION_PERCENT,
                               "position and a valid pair of alleles (outcome_files.choose_uncertainty_mode); a file with "
                               "standard_error present on some rows and missing on others fails; pvalue_coloc for a beta or "
                               "an odds-ratio file with a p-value and an effect-allele frequency and no confidence limits"),
+         "study_pvalue_form": {str(s.pubmed_id): {"reason": s.reason, "accessions": sorted(s.accessions)}
+                               for s in STUDY_PVALUE_FORM},
          "harmonised_without_se": ("an indexed harmonised file whose standard_error is missing on its first 2000 data rows "
                                    "is collected whole and validated as a GWAS-SSF file (fetch.RemoteSources._harmonised_whole)"),
          "or_ci_derived_se": {"ci_level": CI_LEVEL, "z": CI_Z, "se": "(ln U - ln L) / (2 z)",
@@ -292,7 +296,7 @@ def _scan(record: CollectRecord, path: Path, work: Path, commit: Callable[[], No
         else:
             census = _census(reader, rows, work, commit, checkpoint_rows)
             cols = reader.cols if isinstance(reader, SsfReader) else None
-            mode, problem = choose_uncertainty_mode(cols, census["missing"], census["present"])
+            mode, problem = choose_uncertainty_mode(cols, census["missing"], census["present"], record.key)
     out = {"header": header, "header_problems": [], "uncertainty_mode": mode or "",
            "se_census": None if census is None else {k: census[k] for k in ("rows", "missing", "present", "not_counted")}}
     if mode is None:

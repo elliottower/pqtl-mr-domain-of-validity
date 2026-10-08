@@ -363,6 +363,7 @@ def pvalue_file(n: int = 60, se: str = "NA") -> bytes:
 
 
 OLD_RULES = {k: RULES[k] for k in ("min_kept_fraction_percent", "header", "integrity")}   # the rules before the modes
+MVP_KEY = "GCST90475575"           # a Verma et al. 2024 MVP accession (stage_b/study_rules.py)
 
 
 def failed_under_the_old_rules(root, key: str, data: bytes) -> tuple[CollectRecord, CollectRecord]:
@@ -442,6 +443,30 @@ def test_an_or_ci_file_whose_p_values_disagree_with_its_intervals_fails_the_ci_v
     assert apply_validation(tmp_path, record, got).status == "unreadable"
 
 
+@pytest.mark.parametrize("p_scale", [1.0, 3.0])
+def test_an_or_ci_file_of_a_study_read_in_the_p_value_form_is_read_so_whether_or_not_its_limits_agree(tmp_path, p_scale):
+    record = put(tmp_path, MVP_KEY, or_ci_file(p_scale=p_scale))
+    got = validate_file(tmp_path, record)
+    assert (got["uncertainty_mode"], got["rows_kept"], got["passed"], got["ci_p_check"]) == ("pvalue_coloc", 60, True, None)
+    other = validate_file(tmp_path, put(tmp_path, "GCST1", or_ci_file(p_scale=p_scale)))
+    assert (other["uncertainty_mode"], other["passed"]) == ("or_ci_derived_se", p_scale == 1.0)
+    apply_validation(tmp_path, record, got)
+    fetcher = VolumeFetcher(tmp_path, "", tmp_path / "a", tmp_path / "e")
+    spec = OutcomeSpec(accession=MVP_KEY, source="gwas_catalog", n_case=1, n_control=1, risk_coded=True)
+    df = fetcher.outcome_region(spec, "1", 1030, 100)
+    assert fetcher.outcome_mode(spec) == "pvalue_coloc" and len(df) == 60 and df["se"].isna().all()
+    assert ((df["beta"] < 0).sum(), (df["beta"] > 0).sum()) == (30, 29)   # ln OR read for the direction, one row at 0
+
+
+def test_a_study_file_with_a_native_standard_error_or_without_a_frequency_is_not_moved_by_the_study_rule(tmp_path):
+    native = tsv(SSF_OR_CI_HEADER, [or_ci_row(se="0.04", pos=str(1000 + i)) for i in range(20)])
+    assert validate_file(tmp_path, put(tmp_path, MVP_KEY, native))["uncertainty_mode"] == "native_se"
+    header = [c for c in SSF_OR_CI_HEADER if c != "effect_allele_frequency"]
+    no_eaf = tsv(header, [[v for c, v in zip(SSF_OR_CI_HEADER, or_ci_row(pos=str(1000 + i))) if c != "effect_allele_frequency"]
+                          for i in range(20)])
+    assert validate_file(tmp_path, put(tmp_path, "GCST90475591", no_eaf))["uncertainty_mode"] == "or_ci_derived_se"
+
+
 def test_a_pvalue_coloc_file_counts_its_mode_specific_rejections(tmp_path):
     rows = [ssf_row(pos=str(1000 + i), se="NA", rsid=f"rs{i}") for i in range(20)]
     rows += [ssf_row(pos="2000", se="NA", p="0"), ssf_row(pos="2001", se="NA", p="#NA"), ssf_row(pos="2002", se="NA", eaf="1"),
@@ -488,9 +513,11 @@ def test_the_classification_check_compares_the_files_by_mode_failed_and_error(tm
 # The rules hash under the frozen CI-versus-p rule, and the hash of the rules now in force. The validation of
 # 2026-10-04 ran under 7025ad58... (frozen rule) and that of 2026-10-05 under 3a1bcdc2... (rounding-aware); the
 # 2026-10-07 amendment (the p-value form for an odds-ratio file, harmonised files without a standard error collected
-# whole) changed RULES, so every whole file is validated again under these.
-FROZEN_RULES_SHA256 = "8ef4b21496f6bd2813b66ec9679bc212f82de2cdcaf8e27d1b5b98ef5075129e"
-AMENDED_RULES_SHA256 = "682bc75613185635593db9828c5fb38f0e3075747a32e83f8f64c9d0b358042a"
+# whole) changed RULES (8ef4b214... frozen, 682bc756... rounding-aware, the validation of 2026-10-07), and the
+# 2026-10-08 amendment (the Verma et al. 2024 MVP study read in the p-value form, stage_b/study_rules.py) changed them
+# again, so every whole file is validated again under these.
+FROZEN_RULES_SHA256 = "cbaae94191d245374a05c641f82ac69e4e46d9c39c0dc3f46a6de35493b8f822"
+AMENDED_RULES_SHA256 = "cdbe45408b304926e9a159239ca6af66e85ad4d2ad4429a20b4d214e700b0c87"
 
 
 def rules_sha256(rules: dict) -> str:
@@ -651,7 +678,10 @@ def write_current_report(root) -> dict:
     return report
 
 
-RESCUED = ("GCST90476039", "GCST90476123", "GCST90476165", "GCST90476238")
+# Four or_ci_derived_se files outside any study rule. The four files this restore was first run on (GCST90476039,
+# GCST90476123, GCST90476165, GCST90476238) are Verma et al. 2024 MVP files, read in the p-value form since the
+# 2026-10-08 amendment, so the mechanism is tested on keys the study rule does not move.
+RESCUED = ("GCST1", "GCST2", "GCST3", "GCST4")
 
 
 def test_four_files_unreadable_under_the_frozen_rule_that_pass_under_the_amended_rule_are_restored_and_bound(

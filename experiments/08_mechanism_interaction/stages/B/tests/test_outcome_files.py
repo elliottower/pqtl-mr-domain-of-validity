@@ -4,6 +4,7 @@ its MD5 checked, and read back as the canonical outcome table on the build its r
 import gzip
 import hashlib
 import math
+import re
 
 import numpy as np
 import pandas as pd
@@ -24,6 +25,7 @@ from stage_b.outcome_files import (MODE_REJECT_REASONS, REJECT_REASONS, AuthorRe
 from stage_b.pipeline import DirStore, process_unit
 from stage_b.schemas import (CollectError, CollectRecord, CollectTask, HypothesisInput, OutcomeSpec, SourceAbsent,
                              SourceUnreadable)
+from stage_b.study_rules import VERMA_2024_MVP, study_pvalue_form
 from v8_manifest import sha256_file
 
 SSF38 = "GCST90000101"
@@ -841,6 +843,25 @@ def test_the_mode_is_chosen_once_per_file_and_a_file_mixing_missing_and_present_
                                                                                                     reason):
     got, why = choose_uncertainty_mode(cols, missing, present)
     assert got == mode and reason in why and (why == "") == (mode is not None)
+
+
+@pytest.mark.parametrize("cols,accession,missing,present,mode", [
+    (OR_CI_COLS, "GCST90475575", 10, 0, "pvalue_coloc"),           # a study in study_rules: limits not read
+    (OR_CI_COLS, "GCST1", 10, 0, "or_ci_derived_se"),              # another study: unchanged
+    (OR_CI_COLS, "GCST90475575", 0, 10, "native_se"),              # a native SE is read as before
+    (OR_CI_COLS, "GCST90475575", 9, 1, None),                      # mixing still fails closed
+    (ssf_columns([c for c in SSF_OR_CI_HEADER if c != "effect_allele_frequency"], "X"), "GCST90475575", 10, 0,
+     "or_ci_derived_se"),                                         # no frequency: the study rule cannot apply
+    (BETA_COLS, "GCST90475575", 10, 0, "pvalue_coloc"),
+])
+def test_the_study_rule_reads_an_odds_ratio_file_of_its_study_in_the_p_value_form(cols, accession, missing, present, mode):
+    assert choose_uncertainty_mode(cols, missing, present, accession)[0] == mode
+
+
+def test_the_study_rule_names_the_207_verma_mvp_outcome_accessions():
+    assert (VERMA_2024_MVP.pubmed_id, len(VERMA_2024_MVP.accessions)) == (39024449, 207)
+    assert all(re.fullmatch(r"GCST904[7-9][0-9]{4}", a) for a in VERMA_2024_MVP.accessions)
+    assert study_pvalue_form("GCST90475591") == VERMA_2024_MVP and study_pvalue_form("GCST007228") is None
 
 
 def ci_p(rows) -> dict:

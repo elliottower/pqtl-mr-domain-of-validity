@@ -54,6 +54,10 @@ every such row, `or_ci_derived_se` for an odds-ratio file with `ci_lower` and `c
 `pvalue_coloc` for a beta file, or (2026-10-07 amendment) an odds-ratio file, with a p-value and an
 effect-allele frequency and no confidence limits; no mode, and the file unreadable, where it is present on some rows and missing on others
 (the file fails closed) or where no route fits. An author format is read in `native_se` only.
+Study rule (2026-10-08 amendment; stage_b/study_rules.py): an odds-ratio file of a study listed there
+(Verma et al. 2024 MVP, PubMed 39024449) whose standard_error is missing on every row is read in
+`pvalue_coloc` where it has a p-value and an effect-allele frequency, its confidence limits not read
+and no CI-versus-p check run, so every file of the study is read in one mode.
 `or_ci_derived_se`: SE of ln(OR) = (ln U - ln L) / (2 z), z the normal quantile of the interval's
 level (`ci_z_for_level`; 1.96 at 95%, the level read for these files: the GWAS-SSF metadata schema
 has no key stating another). `pvalue_coloc`: no standard error is read or formed; coloc.abf takes the
@@ -159,6 +163,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from stage_b.author_formats import AuthorFormat, check_header
 from stage_b.parsers import MISSING, RowReader
 from stage_b.schemas import InputContractError, SourceUnreadable, UncertaintyMode
+from stage_b.study_rules import study_pvalue_form
 
 SSF_DATA = re.compile(r"(?P<acc>GCST\d+)(?:_build(?:GRCh37|GRCh38))?\.tsv(?:\.gz)?")
 MD5SUM_NAME = "md5sum.txt"
@@ -326,11 +331,13 @@ def ssf_columns(header: list[str], what: str) -> SsfColumns:
                       ci_upper="ci_upper" if "ci_upper" in header else None)
 
 
-def choose_uncertainty_mode(cols: SsfColumns | None, missing: int, present: int) -> tuple[UncertaintyMode | None, str]:
+def choose_uncertainty_mode(cols: SsfColumns | None, missing: int, present: int,
+                            accession: str = "") -> tuple[UncertaintyMode | None, str]:
     """The uncertainty mode of a whole file (module docstring), or None and the reason none fits.
     `cols` is the GWAS-SSF column map, None for an author format (read in native_se only);
     `missing` and `present` count the rows whose standard_error is missing or present
-    (RowReader.se_state)."""
+    (RowReader.se_state). An odds-ratio file of a study in study_rules.STUDY_PVALUE_FORM is read in
+    pvalue_coloc where it has a p-value and an effect-allele frequency, its limits not read."""
     if missing + present == 0:
         return None, "no data row with a position and a valid pair of alleles to choose the uncertainty mode from"
     if missing == 0:
@@ -338,6 +345,8 @@ def choose_uncertainty_mode(cols: SsfColumns | None, missing: int, present: int)
     if present > 0:
         return None, (f"standard_error is missing in {missing} and present in {present} rows; the uncertainty mode is "
                       "chosen for the whole file, never row by row")
+    if cols is not None and cols.effect == "odds_ratio" and cols.p and cols.eaf and study_pvalue_form(accession):
+        return "pvalue_coloc", ""          # the study rule (2026-10-08 amendment): ln OR for the direction only
     if cols is not None and cols.effect == "odds_ratio" and cols.ci_lower and cols.ci_upper:
         return "or_ci_derived_se", ""
     if cols is not None and cols.p and cols.eaf and not (cols.ci_lower or cols.ci_upper):

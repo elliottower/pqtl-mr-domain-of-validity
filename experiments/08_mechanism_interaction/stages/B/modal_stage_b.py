@@ -151,7 +151,7 @@ RUN_MODULES = ("numpy", "pandas", "pydantic", "requests", "openpyxl", "synapsecl
                "stage_b.harmonize", "stage_b.launch", "stage_b.ld", "stage_b.parsers", "stage_b.pipeline", "stage_b.plan",
                "stage_b.outcome_files", "stage_b.author_formats",
                "stage_b.remote", "stage_b.schemas", "stage_b.sentinels", "stage_b.status", "stage_b.synapse_source",
-               "stage_b.units", "stage_b.validate")
+               "stage_b.study_rules", "stage_b.units", "stage_b.validate")
 SECRET_NAMES = ("SYNAPSE_PAT", "OPENGWAS")
 COLLECT_SECRET_NAMES = ("DECODE_FOLDER_TOKEN",)     # set just before collect; its absence blocks `collect --source decode` only
 OPTIONAL_SECRET_NAMES = ("DECODE_SMP_FOLDER_TOKEN", "DECODE_FILE_URL_TEMPLATE", "DECODE_SMP_FILE_URL_TEMPLATE")
@@ -160,6 +160,7 @@ OPTIONAL_SECRET_NAMES = ("DECODE_SMP_FOLDER_TOKEN", "DECODE_FILE_URL_TEMPLATE", 
 # retried with backoff (stage_b/remote.py) and the unit resumes from its last committed step.
 COLLECT_CONTAINERS = 16
 ANALYZE_CONTAINERS = 64
+VALIDATE_CONTAINERS = 48    # validation reads whole files from the volume only, no remote source
 TEST_PACKAGES = ["pytest==9.1.1"]
 TEST_IGNORE = [".venv", "**/__pycache__", "**/.pytest_cache", "output", "work", "launch_log.jsonl"]
 STAGES_IMAGE = Path("/root/exp/stages")
@@ -299,7 +300,7 @@ def collect_file(task_json: str, run_token: str, supersede_absent_record: bool =
 # Pre-analysis validation (stage_b/validate.py): every collected GWAS Catalog whole file (harmonised,
 # GWAS-SSF or reviewed author format) is read whole by the analysis reader, one call per file, checkpointed every 1M rows; a file that fails
 # a fixed rule is made `unreadable`. Aggregate parser diagnostics only. Run after collect, before spawn.
-@app.function(**{**RUN_CONTAINER, "memory": 16384}, timeout=24 * 3600, retries=3, max_containers=COLLECT_CONTAINERS)
+@app.function(**{**RUN_CONTAINER, "memory": 16384}, timeout=24 * 3600, retries=3, max_containers=VALIDATE_CONTAINERS)
 def validate_outcome_file(key: str, run_token: str) -> dict:
     authorize(PREREG_IMAGE, run_token, A_IMAGE)
     run_commit(None)
