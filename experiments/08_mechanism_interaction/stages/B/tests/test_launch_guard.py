@@ -288,6 +288,27 @@ def test_launcher_spawns_and_assembles_only_through_the_guard():
     assert "re.search" not in src and "require_logged_start" not in src
 
 
+def test_spawn_units_file_takes_planned_keys_and_refuses_any_key_outside_the_plan(tmp_path, planned):
+    units, _plan = planned
+    ns = {"Path": Path, "InstrumentUnit": InstrumentUnit, "InputContractError": InputContractError, "UNITS": units}
+    exec(compile(ast.Module([_function(HERE / "launch_stage_b.py", "unit_keys")], []), "launch_stage_b.py", "exec"), ns)
+    chosen = tmp_path / "chosen.txt"
+    chosen.write_text("u0\tfailed\n\nu2\n")
+    assert ns["unit_keys"](chosen) == {"u0", "u2"}
+    chosen.write_text("u0\nu9\n")
+    with pytest.raises(InputContractError, match="1 not in the plan"):
+        ns["unit_keys"](chosen)
+    chosen.write_text("\n")
+    with pytest.raises(InputContractError):
+        ns["unit_keys"](chosen)
+
+
+def test_spawn_with_a_units_file_still_spawns_through_the_guard_and_logs_only_the_spawned_calls():
+    body = ast.unparse(_function(HERE / "launch_stage_b.py", "cmd_spawn"))
+    assert "calls = spawn_units(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT, spawn," in body
+    assert "calls = [c for c in calls if c['call_id']]" in body
+
+
 def test_unit_directories_are_copied_only_outside_the_repository_or_under_the_gitignored_inputs_directory(tmp_path):
     repo = tmp_path / "repo"
     private = repo / "experiments" / "08_mechanism_interaction" / "inputs"

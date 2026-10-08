@@ -25,6 +25,7 @@ after it (the image bakes PREREG.md and the sealed stage A files).
     # 3. analyze: one call per instrument unit; refused while a file has no collect record, or while the
     #    validation report is missing or does not cover the current GWAS Catalog collect records
     $B spawn --run-token <token>
+    $B spawn --run-token <token> --units-file <file of unit keys>   # only these, e.g. failed units while others run
     $B status                            # until every unit is done
     #    after a code fix that changes the unit fingerprint (commit, deploy): the unfinished units' directories,
     #    now stale, and their error markers are moved to /stage_b/superseded/units/<utc>/ and
@@ -215,15 +216,35 @@ def cmd_check_validation(a: argparse.Namespace) -> None:
         raise InputContractError(f"the validation report differs from the expected classification: {got['mismatches']}")
 
 
+def unit_keys(path: Path) -> set[str]:
+    """The non-empty lines of a file of unit keys (first tab-separated field); refused unless every key is planned."""
+    keys = {line.split("\t")[0].strip() for line in path.read_text().splitlines() if line.strip()}
+    planned = {InstrumentUnit.model_validate_json(line).unit_key for line in UNITS.read_text().splitlines()}
+    if not keys or keys - planned:
+        raise InputContractError(f"{path}: {len(keys)} unit keys, {len(keys - planned)} not in the plan "
+                                 f"(first: {sorted(keys - planned)[:1]})")
+    return keys
+
+
+# With --units-file, only the units it names are spawned, so units whose calls are still running are not
+# started a second time on the same directory; every guard of spawn_units still applies to the whole plan.
 def cmd_spawn(a: argparse.Namespace) -> None:
     commit = clean_commit(REPO)
     state = modal.Function.from_name(APP, "stage_state").remote()
     fn = modal.Function.from_name(APP, "run_unit")
-    calls = spawn_units(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT, lambda line, token: fn.spawn(line, token).object_id,
+    only = unit_keys(a.units_file) if a.units_file else None
+
+    def spawn(line: str, token: str) -> str:
+        if only is not None and InstrumentUnit.model_validate_json(line).unit_key not in only:
+            return ""
+        return fn.spawn(line, token).object_id
+    calls = spawn_units(PREREG, a.run_token, UNITS, PLAN_JSON, A_OUTPUT, spawn,
                         recorded={(r["source"], r["key"]) for r in state["records"]},
                         validation=(state["outcome_validation"],
                                     [CollectRecord.model_validate(r) for r in state["gwas_catalog_records"]]))
-    log_entry({"what": "spawn", "repo_commit": commit, "calls": calls, "utc": utc_now()})
+    calls = [c for c in calls if c["call_id"]]
+    log_entry({"what": "spawn", "repo_commit": commit, "calls": calls,
+               **({"units_file": str(a.units_file)} if a.units_file else {}), "utc": utc_now()})
     print(f"{len(calls)} units spawned at {utc_now()}")
 
 
@@ -382,6 +403,8 @@ def main() -> None:
     sub.choices["supersede-units"].add_argument(
         "--include-finished", action="store_true",
         help="also archive units holding result.json under another fingerprint (with --units-file naming them)")
+    sub.choices["spawn"].add_argument("--units-file", type=Path,
+                                      help="spawn only these units: a file of unit keys, one per line (first tab-separated field)")
     sub.choices["collect"].add_argument("--source", nargs="*", help="collect only these sources (e.g. decode)")
     sub.choices["collect"].add_argument("--accessions", nargs="*",
                                         help="collect only these GWAS Catalog accessions again, superseding an `absent` or "

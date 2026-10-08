@@ -343,7 +343,10 @@ def restore_validated_records(keys: list[str], run_token: str) -> dict:
     return {"restored": restored}
 
 
-@app.function(**RUN_CONTAINER, timeout=24 * 3600, retries=3, max_containers=ANALYZE_CONTAINERS)
+# 8 CPUs and 32 GiB: coloc.susie's matrix algebra runs on multithreaded OpenBLAS (one thread per CPU), and
+# at 8 GiB the largest regions' Rscript was killed for memory (exit -9). Neither is part of the unit fingerprint.
+@app.function(**{**RUN_CONTAINER, "cpu": 8, "memory": 32768}, timeout=24 * 3600, retries=3,
+              max_containers=ANALYZE_CONTAINERS)
 def run_unit(unit_json: str, run_token: str) -> dict:
     authorize(PREREG_IMAGE, run_token, A_IMAGE)
     run_commit(None)
