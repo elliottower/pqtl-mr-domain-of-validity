@@ -33,7 +33,13 @@ def chain(a_manifest: Path) -> tuple[str, ...]:
 
 
 def prereg_with(path: Path, *events: str) -> Path:
-    shutil.copyfile(PREREG, path)
+    """PREREG.md with the log entries from the real stage B seal on left out (the closing fence of the
+    log kept), then `events`: the plan's own log now seals stage B, and stage C checks that seal by its
+    presence alone, so a copy holding it would pass the cases written without one."""
+    lines = PREREG.read_text(encoding="utf-8").splitlines(keepends=True)
+    cut = next((i for i, line in enumerate(lines) if "SEAL stage=B manifest_sha256=" in line), len(lines))
+    fence = max(i for i, line in enumerate(lines) if line.strip() == "```")
+    path.write_text("".join(lines[:cut] + lines[max(cut, fence):]), encoding="utf-8")
     for e in events:
         append(path, "2026-10-02", e, "nothing run")
     return path
