@@ -132,6 +132,10 @@ class EvidenceRow(_Row):
     s15f_pp_h4: float | None = None
     s15g_pp_h4: float | None = None
     s15f_low_coverage_excluded: bool | None = None
+    # What s15g_pp_h4 is (INTERFACES.md stage B); S15g-x leaves out abf_susie_did_not_complete. Absent ->
+    # S15g-x not formed.
+    s15g_basis: Literal["coloc.susie", "abf_susie_criterion_not_met", "abf_susie_not_run",
+                        "abf_susie_did_not_complete"] | None = None
     s16_evidence_state: EvidenceState | None = None
     # S17 (INTERFACES.md stage B). Absent -> set not formed.
     s17_sentinel_p: float | None = None

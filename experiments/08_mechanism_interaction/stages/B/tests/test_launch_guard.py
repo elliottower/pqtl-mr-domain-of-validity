@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from prereg.log import append
+from prereg.log import append, set_log_anchor
 from v8_manifest import ManifestError, write_manifest
 from v8_run_guard import RunNotAuthorized
 
@@ -24,8 +24,14 @@ def sha(path: Path) -> str:
 
 
 def prereg_with(tmp_path: Path, *events: str) -> Path:
+    """PREREG.md with the log entries from the real stage B seal on left out (the closing fence of the log
+    kept, the anchor line recounted), then `events`: the plan's own log now seals stage B, so a copy holding that seal would pass the
+    cases written without one."""
     p = tmp_path / "PREREG.md"
-    shutil.copyfile(PREREG, p)
+    lines = PREREG.read_text(encoding="utf-8").splitlines(keepends=True)
+    cut = next((i for i, line in enumerate(lines) if "SEAL stage=B manifest_sha256=" in line), len(lines))
+    fence = max(i for i, line in enumerate(lines) if line.strip() == "```")
+    p.write_text(set_log_anchor("".join(lines[:cut] + lines[max(cut, fence):])), encoding="utf-8")
     for e in events:
         append(p, "2026-10-02", e, "nothing run")
     return p

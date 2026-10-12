@@ -112,7 +112,7 @@ def test_hand_worked_membership(hand_sets, set_id):
 
 def test_every_registered_set_is_present_and_hand_checked_sets_have_their_members(hand_sets):
     _, sets = hand_sets
-    assert set(sets) == set(SET_ORDER) | set(DEVIATION_SETS) and len(SET_ORDER) == 30
+    assert set(sets) == set(SET_ORDER) | set(DEVIATION_SETS) and len(SET_ORDER) == 31
     assert not sets["S_frozen_ci_rule"].info.formed                 # the hand fixture has no verdict column
     assert {"S1", "S12", "S19"} <= set(EXPECTED)
     for set_id, members in EXPECTED.items():

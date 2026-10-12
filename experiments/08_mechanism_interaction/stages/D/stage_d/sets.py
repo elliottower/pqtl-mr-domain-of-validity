@@ -175,6 +175,7 @@ def form_sets(df: pd.DataFrame) -> dict[str, AnalysisSet]:
     for sid, (col, thr, text) in S15_VARIANTS.items():
         st = evidence_state(df[col], df["genetic_direction"], df["direction"], threshold=thr)
         sets[sid] = _make(df, base, sid, text, state=st)
+    sets[S15G_X] = s15g_x_set(df, base, present)
     low = df["low_coverage"]
     sets["S15f"] = _make(df, base & (low == False).fillna(False).to_numpy(), "S15f",  # noqa: E712
                          "low_coverage excluded (hypotheses with coverage computed)",
@@ -219,6 +220,29 @@ def form_sets(df: pd.DataFrame) -> dict[str, AnalysisSet]:
     return sets
 
 
+S15G_X = "S15g-x"
+S15G_X_DEFINITION = "S15g without hypotheses whose coloc.susie did not complete (s15g_basis abf_susie_did_not_complete)"
+S15G_INCOMPLETE = "abf_susie_did_not_complete"
+
+
+def s15g_x_set(df: pd.DataFrame, base: np.ndarray, present: set[str]) -> AnalysisSet:
+    """S15g-x (PREREG log, 2026-10-10 amendment): the S1 rows in S15g's evidence state, with every
+    hypothesis removed whose S15g colocalization has s15g_basis abf_susie_did_not_complete (coloc.susie
+    stopped in R or ran past its time limit, and S15g fell back to the primary coloc.abf PP.H4); fitted
+    with the primary model and reported beside S15g. Not formed when stage B wrote no s15g_basis, or
+    when no S1 hypothesis has that basis (the set would equal S15g)."""
+    if "s15g_basis" not in present:
+        return _not_formed(S15G_X, S15G_X_DEFINITION, ("h1",), "stage B output has no column s15g_basis")
+    incomplete = base & (df["s15g_basis"] == S15G_INCOMPLETE).to_numpy(dtype=bool)
+    if not incomplete.any():
+        return _not_formed(S15G_X, S15G_X_DEFINITION, ("h1",),
+                           "no held-out S1 hypothesis has s15g_basis abf_susie_did_not_complete; the set equals S15g")
+    col, thr, _ = S15_VARIANTS["S15g"]
+    state = evidence_state(df[col], df["genetic_direction"], df["direction"], threshold=thr)
+    return _make(df, base & ~incomplete, S15G_X, S15G_X_DEFINITION, state=state,
+                 notes={"susie_did_not_complete_removed": int(incomplete.sum())})
+
+
 FROZEN_CI_RULE_SET = "S_frozen_ci_rule"
 FROZEN_CI_RULE_COLUMN = "outcome_file_frozen_ci_p_pass"
 FROZEN_CI_RULE_DEFINITION = ("deviation sensitivity: S1 with every hypothesis whose outcome file fails the frozen "
@@ -251,7 +275,7 @@ def frozen_ci_rule_set(df: pd.DataFrame, base: np.ndarray, present: set[str]) ->
 
 
 SET_ORDER = ("S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S13",
-             "S14a", "S14b", "S14c", "S15a", "S15b", "S15c", "S15d", "S15e", "S15f", "S15g",
+             "S14a", "S14b", "S14c", "S15a", "S15b", "S15c", "S15d", "S15e", "S15f", "S15g", S15G_X,
              "S16", "S17", "S18", "S19", "S20", "S21", "S22")
 # Sets that are not registered: the sensitivity analysis of a logged deviation (module docstring).
 DEVIATION_SETS = (FROZEN_CI_RULE_SET,)

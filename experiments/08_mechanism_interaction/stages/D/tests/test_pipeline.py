@@ -135,7 +135,7 @@ def test_end_to_end_on_synthetic_data(tmp_path):
     assert meta["run_fingerprint"] == fp.record() == json.loads((tmp_path / "work" / FINGERPRINT_NAME).read_text())
     assert meta["run_fingerprint"]["environment"] == {"synthetic": "test"}
     assert meta["run_fingerprint"]["components"]["environment_sha256"] == fp.environment_sha256
-    assert len(res["descriptive"]["table10_analysis_sets"]) == 30
+    assert len(res["descriptive"]["table10_analysis_sets"]) == 31
     deviation = res["descriptive"]["deviation_frozen_ci_rule"]
     assert [(r["set_id"], r["model"], r["status"]) for r in deviation["set"]] == [
         ("S_frozen_ci_rule", "h1", "fitted"), ("S_frozen_ci_rule", "h4", "fitted")]

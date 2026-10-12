@@ -290,3 +290,49 @@ def test_the_frozen_rule_sensitivity_set_is_not_formed_when_no_s1_outcome_file_f
     assert not got.info.formed and got.info.reason.endswith("the set equals S1")
     with pytest.raises(SetError):
         got.analysed()
+
+
+BASIS = "s15g_basis"
+
+
+def _with_basis(df: pd.DataFrame, basis) -> pd.DataFrame:
+    out = df.assign(**{BASIS: basis})
+    out.attrs["present_columns"] = {**df.attrs["present_columns"], "B": [*df.attrs["present_columns"]["B"], BASIS]}
+    return out
+
+
+def test_s15g_x_is_s15g_without_the_hypotheses_whose_susie_did_not_complete(joined):
+    df, _ = joined
+    s1 = (df["in_s1"] & df["heldout"]).to_numpy()
+    basis = np.where(np.arange(len(df)) % 3 == 0, "abf_susie_did_not_complete",
+                     np.where(np.arange(len(df)) % 3 == 1, "coloc.susie", "abf_susie_not_run"))
+    sets = form_sets(_with_basis(df, basis))
+    s15g, x = sets["S15g"].frame, sets["S15g-x"]
+    assert x.info.formed and x.info.models == ("h1",) and SET_ORDER.index("S15g-x") == SET_ORDER.index("S15g") + 1
+    dropped = s15g.index[s15g[BASIS] == "abf_susie_did_not_complete"]
+    assert len(dropped) and len(dropped) < len(s15g)
+    assert x.frame.index.equals(s15g.index.difference(dropped, sort=False))
+    for col in ("state", "S", "E", "cls", "y"):
+        assert x.frame[col].equals(s15g.loc[x.frame.index, col]), col
+    assert x.info.notes == {"susie_did_not_complete_removed": int((s1 & (basis == "abf_susie_did_not_complete")).sum())}
+
+
+def test_s15g_x_is_not_formed_without_the_basis_column_or_without_an_incomplete_susie_in_s1(joined):
+    df, _ = joined
+    plain = form_sets(df)["S15g-x"]
+    assert not plain.info.formed and "no column s15g_basis" in plain.info.reason
+    s1 = (df["in_s1"] & df["heldout"]).to_numpy()
+    basis = np.where(s1, "coloc.susie", "abf_susie_did_not_complete")      # incomplete only outside S1
+    none_in_s1 = form_sets(_with_basis(df, basis))["S15g-x"]
+    assert not none_in_s1.info.formed and none_in_s1.info.reason.endswith("the set equals S15g")
+
+
+def test_the_basis_column_changes_no_other_set(joined):
+    df, _ = joined
+    basis = np.where(np.arange(len(df)) % 2 == 0, "abf_susie_did_not_complete", "coloc.susie")
+    with_basis, plain = form_sets(_with_basis(df, basis)), form_sets(df)
+    for sid in [s for s in SET_ORDER if s != "S15g-x"] + list(DEVIATION_SETS):
+        assert with_basis[sid].info == plain[sid].info, sid
+        if plain[sid].info.formed:
+            assert with_basis[sid].frame.drop(columns=[BASIS]).equals(
+                plain[sid].frame.drop(columns=[BASIS], errors="ignore")), sid   # the loader gives an empty column
