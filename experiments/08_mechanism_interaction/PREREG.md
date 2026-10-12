@@ -2,7 +2,7 @@
 
 **Status:** FROZEN at `b946087070e4`
 **Plan sha256:** `6cbba0840b213f586ef455b33e569a84a94fc676103b74adef6c46e2e0e70040`
-**Log:** 69 entries, head `2b2de3a9`
+**Log:** 70 entries, head `b8e88ba2`
 **Frozen:** 2026-09-30
 
 Sections use the [OSF Preregistration](https://osf.io/prereg/) question titles verbatim, so
@@ -985,4 +985,5 @@ decide which word to use: `nothing run`, `no results seen`, `results not opened`
 2026-10-11  Pre-stage note (C, Phase II/III registrations, a diagnostic outside the registered analyses): stage C writes phase23_diagnostic.csv, one row per hypothesis and quantity (the 12, 24, 36 and 48-month status, the Phase II and Phase III start dates, the time to Phase III and its event indicator) whose value would differ if a registration listing both PHASE2 and PHASE3 counted as a Phase III registration and not as a Phase II registration, with the Open Targets clinical stages unchanged. The registered reading counts such a registration as Phase II (note C, phase of a registration). The file is descriptive; no label, set or model reads it.  no results seen  ·79285683
 2026-10-11  Pre-stage note (C, test fixture): before RUN_START for stage C, the stage C suite on Modal failed 2 of 241 tests, both cases of test_run_refuses_without_the_sealed_chain_and_an_exact_stage_c_run_start_before_writing written without a stage B seal. The tests copy PREREG.md and append their own entries, and since SEAL stage=B was logged on 2026-10-11 the copy held a B seal, which stage C checks by its presence alone. The fixture now leaves out the log entries from that seal on (commit 0b32715); the guard and the stage C code are unchanged (tests are outside stage_code_sha256). Stage C suite on Modal, synthetic data only: 241 passed; run-image probe passed with 0 problems.  no results seen  ·250e3ce9
 2026-10-11  RUN_START stage=C token=6ed30e6e3c3c87d3  no results seen  ·2b2de3a9
+2026-10-11  SEAL stage=C manifest_sha256=9fab6ff21d1ceb7ee6d281a1aad8a196625d3d1b47355420d3ca3671201360d3  results not opened  ·b8e88ba2
 ```
