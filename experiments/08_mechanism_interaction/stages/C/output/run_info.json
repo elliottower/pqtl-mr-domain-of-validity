@@ -1,0 +1,9 @@
+{
+ "stage": "C",
+ "run_token": "6ed30e6e3c3c87d3",
+ "repo_commit": "9f037b671dea3923bb6cee90884110df38aa0a96",
+ "code_sha256": "40ed63cdc3681e5640b45eb7e9ab35589de2fa4873d29bdba9558d1ada375065",
+ "chembl_cross_check": "run",
+ "outcome_freeze_date": "2026-09-30",
+ "clinicaltrials_gov_source": "AACT flat files 2026-09-30, studies.txt sha256 120c77bb64bccf02db4a20714d4d714d65e62ac9d61ec9a6e0c51177c8e46cc0"
+}

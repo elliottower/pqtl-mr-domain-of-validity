@@ -1,0 +1,12 @@
+step,count,description
+hypotheses,11235,rows of hypotheses.csv
+hypotheses_with_clinical_indication_rows,11235,hypotheses with at least one Open Targets clinical_indication row for one of their programs and their indication id
+hypotheses_without_clinical_indication_rows,0,hypotheses with none (status no_phase)
+clinical_indication_rows,11010,distinct clinical_indication rows of those hypotheses
+report_ids,41946,distinct clinicalReportIds on those rows
+report_ids_not_clinicaltrials_gov,4351,"report ids that are not ClinicalTrials.gov registrations in clinical_report (another source, or absent)"
+clinicaltrials_gov_ids,37595,distinct NCT ids among the report ids
+clinicaltrials_gov_ids_in_aact_snapshot,37595,NCT ids with a row in the AACT studies table
+clinicaltrials_gov_ids_not_in_aact_snapshot,0,NCT ids with no row there (unmatched)
+hypotheses_with_zero_linked_trials,462,hypotheses with no NCT id among their report ids
+hypotheses_with_zero_trials_in_aact_snapshot,462,hypotheses with no NCT id that has a row in the AACT studies table (includes the previous row)

@@ -1,0 +1,8 @@
+{
+ "source": "/inputs/aact_20260930/studies.txt",
+ "source_sha256": "120c77bb64bccf02db4a20714d4d714d65e62ac9d61ec9a6e0c51177c8e46cc0",
+ "snapshot_date": "2026-09-30",
+ "requested": 37595,
+ "found": 37595,
+ "not_found": 0
+}

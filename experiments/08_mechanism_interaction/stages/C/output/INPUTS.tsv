@@ -1,0 +1,8 @@
+name	path	sha256	source	release	url_or_accession	download_date
+hypotheses	experiments/08_mechanism_interaction/stages/A/output/hypotheses.csv	4f25e0af831eba7c804de6a12539b751da62389cf2f4922165d578a3b4dc1e45				
+ot_clinical_indication	pqtl-v8-inputs:08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/clinical_indication.parquet	e10ced7ce09495cd3fa6e7cb94e81e083aed78ee399424730d567243b49a38d8				
+ot_drug_molecule	pqtl-v8-inputs:08_mechanism_interaction/feasibility/v2_all_indications/inputs/ot_26.09/drug_molecule.parquet	be65749aa1dbcc68d0930f8ac18126cec5c2bc2c0f232f11e8530dad4ba0585c				
+ot_clinical_report	pqtl-v8-inputs:08_mechanism_interaction/inputs/ot_26.09/clinical_report.parquet	ba0ea48b129182de119f5d676bb1483e6225ba65857a31b7319b65c0e6b8fa25				
+aact_studies	pqtl-v8-inputs:aact_20260930/studies.txt	120c77bb64bccf02db4a20714d4d714d65e62ac9d61ec9a6e0c51177c8e46cc0				
+chembl_37	proteome-mr-claim-audit-inputs:chembl_37/chembl_37.db	4be13df3b68e25dcd0bff44bf094033b5aebe98f415acdc8c1cdf380e0c15142				
+stage_code	experiments/08_mechanism_interaction/stages/C	40ed63cdc3681e5640b45eb7e9ab35589de2fa4873d29bdba9558d1ada375065	git commit	9f037b671dea3923bb6cee90884110df38aa0a96		
