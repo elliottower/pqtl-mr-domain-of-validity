@@ -1,11 +1,10 @@
 import hashlib
 import json
-import shutil
 from pathlib import Path
 
 import pandas as pd
 import pytest
-from prereg.log import append, set_log_anchor
+from prereg.log import append, log_problems, set_log_anchor
 from v8_manifest import ManifestError, code_sha256, read_inputs, verify_output_dir, write_manifest
 from v8_run_guard import RunNotAuthorized
 
@@ -40,8 +39,15 @@ def prereg_with(path: Path, *events: str) -> Path:
     cut = next((i for i, line in enumerate(lines) if "SEAL stage=B manifest_sha256=" in line), len(lines))
     fence = max(i for i, line in enumerate(lines) if line.strip() == "```")
     path.write_text(set_log_anchor("".join(lines[:cut] + lines[max(cut, fence):])), encoding="utf-8")
+    text = path.read_text(encoding="utf-8")
+    log = text.split("## Log", 1)[1]
+    assert "SEAL stage=B" not in log, "the fixture still holds the real stage B seal"
+    assert [line.strip() for line in log.splitlines()].count("```") == 2, "the log fence is not intact"
+    assert not log_problems(text), log_problems(text)
     for e in events:
         append(path, "2026-10-02", e, "nothing run")
+    assert sum(e.startswith("SEAL stage=B") for e in events) == path.read_text(encoding="utf-8").split("## Log", 1)[1].count("SEAL stage=B"), \
+        "the fixture holds a B seal it was not given"
     return path
 
 

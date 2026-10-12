@@ -143,6 +143,11 @@ def make_tables(seed: int = 1, n_genes: int = 90, n_indications: int = 40, hyps_
     flag_rng = np.random.default_rng([seed, 16])
     checked = flag_rng.random(n) < 0.3
     ev["outcome_file_frozen_ci_p_pass"] = np.where(checked, flag_rng.random(n) < 0.6, None)
+    # What s15g_pp_h4 is (S15g-x), from its own generator too; empty where colocalization did not run.
+    basis_rng = np.random.default_rng([seed, 18])
+    basis = basis_rng.choice(["coloc.susie", "abf_susie_criterion_not_met", "abf_susie_not_run",
+                              "abf_susie_did_not_complete"], size=n, p=[0.2, 0.5, 0.2, 0.1])
+    ev["s15g_basis"] = np.where(coloc, basis, None)
 
     S = ev["S"].to_numpy()
     aligned = (h["mechanism_class"] == "aligned").to_numpy()

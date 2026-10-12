@@ -16,6 +16,10 @@ S16 replaces the evidence state by `s16_evidence_state` where stage B wrote one 
 colocalized with its SMP-normalized statistics). When no S1 hypothesis has one, because no
 SMP-normalized file was retrieved, S16 is not formed and is reported as not run.
 
+S15g-x (PREREG log, 2026-10-10 amendment, part 2) is S15g without the hypotheses whose coloc.susie did
+not complete (s15g_basis abf_susie_did_not_complete); it is a registered sensitivity set, placed right
+after S15g in SET_ORDER and table 10.
+
 DEVIATION_SETS are not registered sets. S_frozen_ci_rule is the sensitivity analysis of the
 post-freeze amendment of stage B's CI-versus-p validation rule (PRESTAGE_NOTES_DRAFT.md, stage B):
 the held-out S1 rows, with every hypothesis whose outcome file fails the frozen rule
@@ -229,14 +233,12 @@ def s15g_x_set(df: pd.DataFrame, base: np.ndarray, present: set[str]) -> Analysi
     """S15g-x (PREREG log, 2026-10-10 amendment): the S1 rows in S15g's evidence state, with every
     hypothesis removed whose S15g colocalization has s15g_basis abf_susie_did_not_complete (coloc.susie
     stopped in R or ran past its time limit, and S15g fell back to the primary coloc.abf PP.H4); fitted
-    with the primary model and reported beside S15g. Not formed when stage B wrote no s15g_basis, or
-    when no S1 hypothesis has that basis (the set would equal S15g)."""
+    with the primary model and reported beside S15g. Formed whenever stage B wrote s15g_basis, also when
+    no row is removed (it then equals S15g and is fitted and reported as registered); a missing basis
+    removes nothing."""
     if "s15g_basis" not in present:
         return _not_formed(S15G_X, S15G_X_DEFINITION, ("h1",), "stage B output has no column s15g_basis")
-    incomplete = base & (df["s15g_basis"] == S15G_INCOMPLETE).to_numpy(dtype=bool)
-    if not incomplete.any():
-        return _not_formed(S15G_X, S15G_X_DEFINITION, ("h1",),
-                           "no held-out S1 hypothesis has s15g_basis abf_susie_did_not_complete; the set equals S15g")
+    incomplete = base & df["s15g_basis"].eq(S15G_INCOMPLETE).fillna(False).to_numpy(dtype=bool)
     col, thr, _ = S15_VARIANTS["S15g"]
     state = evidence_state(df[col], df["genetic_direction"], df["direction"], threshold=thr)
     return _make(df, base & ~incomplete, S15G_X, S15G_X_DEFINITION, state=state,

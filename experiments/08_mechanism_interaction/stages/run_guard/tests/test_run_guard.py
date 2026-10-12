@@ -1,10 +1,10 @@
 import hashlib
 import json
-import shutil
+import re
 from pathlib import Path
 
 import pytest
-from prereg.log import append, log_problems
+from prereg.log import append, log_problems, set_log_anchor
 from prereg.plan import plan_of, sha256_of
 
 import v8_run_guard as g
@@ -16,10 +16,26 @@ APPROVED = {"data": {"id": "9tzfk", "type": "registrations",
                      "attributes": {"pending_registration_approval": False, "public": True}}}
 
 
+def before_the_first_seal(text: str) -> str:
+    """PREREG.md with the log entries from its first real SEAL on left out (the closing fence of the log
+    kept, the anchor line recounted): the plan's own log now seals stages A, B and C, so a copy holding
+    those seals would pass the cases written without them."""
+    lines = text.splitlines(keepends=True)
+    log_at = next(i for i, line in enumerate(lines) if line.startswith("## Log"))
+    cut = next((i for i, line in enumerate(lines) if i > log_at and "  SEAL stage=" in line), len(lines))
+    fence = max(i for i, line in enumerate(lines) if line.strip() == "```")
+    out = set_log_anchor("".join(lines[:cut] + lines[max(cut, fence):]))
+    log_part = out.split("## Log", 1)[1]
+    assert "SEAL stage=" not in log_part, "the fixture still holds a real seal"
+    assert [line.strip() for line in log_part.splitlines()].count("```") == 2, "the log fence is not intact"
+    assert not log_problems(out), log_problems(out)
+    return out
+
+
 @pytest.fixture
 def plan(tmp_path) -> Path:
     p = tmp_path / "PREREG.md"
-    shutil.copyfile(PREREG, p)
+    p.write_text(before_the_first_seal(PREREG.read_text(encoding="utf-8")), encoding="utf-8")
     return p
 
 
@@ -47,11 +63,14 @@ def test_current_prereg_authorizes_no_stage_although_it_mentions_stage_b():
 
 
 def test_log_lines_parse_into_date_event_and_access():
-    entries = parse_log(PREREG.read_text(encoding="utf-8"))
-    first, last = entries[0], entries[-1]
+    text = PREREG.read_text(encoding="utf-8")
+    entries = parse_log(text)
+    first = entries[0]
     assert (first.date, first.event, first.access, first.chained) == ("2026-09-29", "created", "nothing run", False)
-    assert last.event.startswith("Pre-stage note (B, eQTL Catalogue access)") and last.chained
-    assert last.access == "nothing run"
+    eqtl = next(e for e in entries if e.event.startswith("Pre-stage note (B, eQTL Catalogue access)"))
+    assert eqtl.chained and eqtl.access == "nothing run"
+    assert all(e.chained for e in entries[eqtl.index - 1:])                     # every entry from the first chained one
+    assert len(entries) == int(re.search(r"\*\*Log:\*\* (\d+) entries", text).group(1))
 
 
 @pytest.mark.parametrize("event", [

@@ -59,12 +59,13 @@ def pairs_and_figure(snapshot: str, launch_log: str) -> dict:
         if tier in summary:
             c = summary[tier]["curve"]
             ax.step(c["minute"], c["share_completed"], where="post",
-                    label=f"{label} (n = {summary[tier]['completed'] + summary[tier]['censored']})")
+                    label=f"{label} (curve n = {summary[tier]['completed'] + summary[tier]['censored']})")
     ax.axvline(LIMIT_MIN, color="0.4", linestyle="--", linewidth=1)
     ax.set_xlim(0, LIMIT_MIN + 1)
     ax.set_ylim(0, 1)
     ax.set_xlabel("minutes from outcome region retrieved to colocalization written")
     ax.set_ylabel("share of coloc.susie runs completed")
+    # curve n counts completed and censored runs; interrupted and stopped-in-R runs are counted in summary.json
     ax.legend(frameon=False, loc="lower right")
     fig.tight_layout()
     figures = {}

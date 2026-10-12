@@ -75,3 +75,29 @@ def test_summary_counts_each_kind_per_tier_and_leaves_interrupted_and_stopped_ru
     assert s["2cpu"]["completed_in_minutes_45_to_60"] == 1 and s["8cpu"]["completed_in_minutes_45_to_60"] == 1
     curve = dict(zip(s["2cpu"]["curve"]["minute"], s["2cpu"]["curve"]["share_completed"]))
     assert curve[9] == 0 and curve[10] == pytest.approx(1 / 3) and curve[60] == pytest.approx(2 / 3)
+
+
+def test_an_event_and_a_censoring_at_the_same_minute_count_the_event_first():
+    # one completion and one censoring at 5, one completion at 10: S(5) = 1 - 1/3, S(10) = 2/3 * (1 - 1/1) = 0
+    got = kaplan_meier_completed(np.array([5.0, 5.0, 10.0]), np.array([True, False, True]), np.array([4, 5, 10]))
+    assert got == pytest.approx([0.0, 1 / 3, 1.0])
+
+
+def test_the_hardware_tier_changes_exactly_at_the_8_cpu_respawn():
+    log = [{"what": "spawn", "utc": "2026-10-08T17:30:44+00:00", "calls": [{"unit_key": "a", "call_id": "x"}]},
+           {"what": "spawn", "utc": "2026-10-08T17:30:45+00:00", "calls": [{"unit_key": "b", "call_id": "y"}]}]
+    spawns = spawns_by_unit(log)
+    rows = [pair_row(u, "T", "coloc.susie", "", "2026-10-08T17:31:00+00:00", "2026-10-08T17:40:00+00:00", spawns)
+            for u in ("a", "b")]
+    assert [r["tier"] for r in rows] == ["2cpu", "8cpu"]
+
+
+def test_a_spawn_at_the_start_is_the_runs_own_and_a_spawn_at_the_end_interrupts_it():
+    log = [{"what": "spawn", "utc": "2026-10-08T05:00:00+00:00", "calls": [{"unit_key": "a", "call_id": "x"}]},
+           {"what": "spawn", "utc": "2026-10-08T07:20:00+00:00", "calls": [{"unit_key": "b", "call_id": "y"}]},
+           {"what": "spawn", "utc": "2026-10-08T06:00:00+00:00", "calls": [{"unit_key": "b", "call_id": "z"}]}]
+    spawns = spawns_by_unit(log)
+    at_start = pair_row("a", "T", "coloc.susie", "", "2026-10-08T05:00:00+00:00", "2026-10-08T05:20:00+00:00", spawns)
+    assert at_start["kind"] == "completed"                                        # the interval is (start, end]
+    at_end = pair_row("b", "T", "coloc.susie", "", "2026-10-08T07:00:00+00:00", "2026-10-08T07:20:00+00:00", spawns)
+    assert (at_end["kind"], at_end["interrupted_because"]) == ("interrupted", "spawn inside the interval")
