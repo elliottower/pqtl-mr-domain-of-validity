@@ -88,7 +88,10 @@ def latest_calls() -> dict[str, dict[str, str]]:
 def cmd_status(a: argparse.Namespace) -> None:
     done = fn("plan_status").remote(a.run_token)
     vol = modal.Volume.from_name(VOLUME)
-    freq_done = {Path(e.path).stem for e in vol.listdir("/work/freq") if e.path.endswith(".json")}
+    try:
+        freq_done = {Path(e.path).stem for e in vol.listdir("/work/freq") if e.path.endswith(".json")}
+    except modal.exception.NotFoundError:      # no frequentist check has finished yet
+        freq_done = set()
     calls = latest_calls()
     fits = {f: "done" if ok else call_state(calls["fits"][f]) if f in calls["fits"] else "never spawned"
             for f, ok in done.items()}
