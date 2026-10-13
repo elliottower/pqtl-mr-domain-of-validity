@@ -1,0 +1,4 @@
+stratum,a_supportive_advanced,b_supportive_not,c_not_supportive_advanced,d_not_supportive_not,rs,rs_q05,rs_q95,or,or_q05,or_q95,sensitivity,sensitivity_q05,sensitivity_q95,specificity,specificity_q05,specificity_q95,ppv,ppv_q05,ppv_q95,npv,npv_q05,npv_q95,balanced_accuracy,balanced_accuracy_q05,balanced_accuracy_q95,bootstrap_finite.rs,bootstrap_finite.or
+aligned,0,0,19,0,,,,,,,0.0,0.0,0.0,,,,,,,0.0,0.0,0.0,,,,0,0
+blocking,0,0,63,0,,,,,,,0.0,0.0,0.0,,,,,,,0.0,0.0,0.0,,,,0,0
+other,0,0,34,3,,,,,,,0.0,0.0,0.0,1.0,1.0,1.0,,,,0.08108108108108109,0.0,0.19444444444444445,0.5,0.5,0.5,0,0

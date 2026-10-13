@@ -2,7 +2,7 @@
 
 **Status:** FROZEN at `b946087070e4`
 **Plan sha256:** `6cbba0840b213f586ef455b33e569a84a94fc676103b74adef6c46e2e0e70040`
-**Log:** 80 entries, head `66b07b91`
+**Log:** 82 entries, head `77f0414e`
 **Frozen:** 2026-09-30
 
 Sections use the [OSF Preregistration](https://osf.io/prereg/) question titles verbatim, so
@@ -996,4 +996,6 @@ decide which word to use: `nothing run`, `no results seen`, `results not opened`
 2026-10-13  RUN_START stage=D token=a23dc31477e8f272  no results seen  ·c2f6429f
 2026-10-13  Stage D operational note: the first start under token a23dc31477e8f272 stopped in prepare_remote at the input guard, before the join and before the work directory was claimed (StageInputError: stages/C/output holds files MANIFEST.tsv does not list: ['.gitattributes']). That file held only the git rule '* -text' added when stage C was committed, to keep its CRLF csv rows byte-identical to the seal. The rule moved to stages/.gitattributes as 'C/output/** -text' (git check-attr: text unset for every C output file); the old file is archived in the gitignored inputs/superseded/. No sealed byte, code file or guard changed; stage_d.guard.verify_inputs passes locally for A, B and C against the logged seals. Same token; app redeployed; start rerun.  no results seen  ·266b3f1d
 2026-10-13  Time-limit figure operational note: the first run of stages/B/modal_susie_time_limit.py hit Modal's 3,600 s function timeout while reading the coloc and meta records one at a time, and wrote nothing (no output exists; nothing seen). The wrapper now reads the same three fields per pair (s15g_basis, susie_note, retrieved_utc) with 32 threads, checkpoints them per unit under /vol/diagnostics/susie_time_limit_extract/ on the stage B volume so an interrupted call resumes, and has a 6-hour timeout. susie_time_limit.py (the registered rules), the snapshot and its sha256 check, and the outputs are unchanged.  no results seen  ·66b07b91
+2026-10-13  SEAL stage=D manifest_sha256=ebc512c3cd8ba9d561058ac3c14d4f3ec520c3989ff3f1f1dd7a45a28052f260  results not opened  ·5a11d7d9
+2026-10-13  Stage D seal detail: 48 Bayesian fits and 34 frequentist checks done (launch log 21a7820), assembled by assemble_remote; 33 output files verified against MANIFEST.tsv; recorded as results run v8-stage-d-20261013. Image commit 9f28a83cdaa89cb75e48f2b87cea1969f3f3c35c; run fingerprint 43914b0dc8e759496190a7c08cc484533b14f4d20657f6c0bb49364181f0a3e8; full environment digest 3600b0ad4148638caa88ddbe533ea80544a47a9a74591b6563f8347b2ae97507 with Modal image im-qxWRgL8qyosBDMUuja6Gcf (the digest without the image id was pinned before the run as 09e64687...). Only results.json meta provenance fields were read to write this entry. The time-limit figure ran in parallel (results run v8-susie-time-limit-20261013, commit bfcb2ca), also unopened.  results not opened  ·77f0414e
 ```

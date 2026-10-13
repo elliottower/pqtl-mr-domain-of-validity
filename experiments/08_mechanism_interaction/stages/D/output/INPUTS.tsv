@@ -1,0 +1,5 @@
+name	path	sha256	source	release	url_or_accession	download_date
+stage_A_manifest	experiments/08_mechanism_interaction/stages/A/output/MANIFEST.tsv	651ac6439cc724e2e4f34c1979c17c97a2e6486c6b4ba37e9cc2a17ba65a39ff				
+stage_B_manifest	experiments/08_mechanism_interaction/stages/B/output/MANIFEST.tsv	df93711a3c5dd981ed975ea34ca1027149d87784b1b288f644cedcbda86e7677				
+stage_C_manifest	experiments/08_mechanism_interaction/stages/C/output/MANIFEST.tsv	9fab6ff21d1ceb7ee6d281a1aad8a196625d3d1b47355420d3ca3671201360d3				
+stage_code	experiments/08_mechanism_interaction/stages/D	6b35413eb773965885830c7fa2bcd1e89b7ce0c62f5fb6fec9ec4d2e4fa6e38a	git commit	9f28a83cdaa89cb75e48f2b87cea1969f3f3c35c		

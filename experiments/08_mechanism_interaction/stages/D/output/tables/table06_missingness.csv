@@ -1,0 +1,10 @@
+class,state,n,pp_h4_missing,protein_altering_missing,platform_concordant_missing,splicing_candidate_missing,low_coverage_missing,pre_pqtl_publication_missing,outcome_neff_missing,platform_missing
+aligned,contradictory,4,0,0,0,0,0,1,0,0
+aligned,inconclusive,569,20,13,0,255,1,115,0,0
+aligned,supportive,9,0,0,0,7,0,3,0,0
+blocking,contradictory,1,0,0,0,1,0,0,0,0
+blocking,inconclusive,2665,104,84,0,1126,30,427,0,0
+blocking,supportive,5,0,0,0,3,0,2,0,0
+other,contradictory,2,0,0,0,0,0,0,0,0
+other,inconclusive,1808,60,47,0,788,11,355,0,0
+other,supportive,1,0,0,0,1,0,0,0,0

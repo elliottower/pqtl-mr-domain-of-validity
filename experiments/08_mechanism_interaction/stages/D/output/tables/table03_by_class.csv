@@ -1,0 +1,4 @@
+class,n,genes,indications,somascan_share,median_neff,oncology_share,hypotheses_per_gene_median,hypotheses_per_gene_max,hypotheses_per_indication_median,hypotheses_per_indication_max,supportive_hypotheses,supportive_genes,supportive_indications,supportive_programs
+aligned,582,69,241,0.08934707903780069,24131.738972894724,0.2972508591065292,4.0,71,2.0,17,9,6,9,14
+blocking,2671,170,359,0.265443654062149,21026.235532994924,0.5548483713964807,6.0,76,4.0,65,5,3,5,8
+other,1811,222,340,0.16510215350635007,21026.235532994924,0.4781888459414688,4.0,79,3.0,58,1,1,1,5

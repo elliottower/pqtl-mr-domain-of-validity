@@ -1,0 +1,8 @@
+class_reason,n
+other:molecule_or_action_type_not_in_table,1073
+other:biologic_target_not_blood_secreted,508
+other:binding_agent_not_neutralizing,174
+other:binding_agent_not_neutralizing;other:molecule_or_action_type_not_in_table,21
+other:oligonucleotide_target_not_blood_secreted,16
+other:biologic_target_not_blood_secreted;other:molecule_or_action_type_not_in_table,10
+other:conflicting_mechanism_rows,9
