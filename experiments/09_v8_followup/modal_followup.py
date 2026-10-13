@@ -71,6 +71,7 @@ if modal.is_local():
                       .add_local_file(str(V8 / "stages" / "run_guard" / "v8_run_guard.py"), "/root/stage_d_root/v8_run_guard.py", copy=True)
                       .add_local_file(str(V8 / "stages" / "run_guard" / "v8_manifest.py"), "/root/stage_d_root/v8_manifest.py", copy=True)
                       .add_local_file(str(V8 / "power" / "power_v9" / "power_v9_fast.py"), "/root/power/power_v9_fast.py", copy=True)
+                      .add_local_file(str(V8 / "power" / "power_v9" / "power_v9_logic.py"), "/root/power/power_v9_logic.py", copy=True)
                       .add_local_file(str(V8 / "PREREG.md"), "/root/v8/PREREG.md", copy=True)
                       .add_local_dir(str(V8 / "stages" / "A" / "output"), "/root/v8/stages/A/output", copy=True)
                       .add_local_dir(str(V8 / "stages" / "B" / "output"), "/root/v8/stages/B/output", copy=True)
