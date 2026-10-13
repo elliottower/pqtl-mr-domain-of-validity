@@ -1,0 +1,7 @@
+# Sidecars from provenance_core.locking. They hold nothing: the kernel releases a lock when its
+# holder exits, and a leftover temp file means a write was killed partway through.
+*.provenance-lock
+*.provenance-tmp
+
+# third-party downloads (Open Targets parquet, platform-docs page): hashed in results/inputs_sha256.json, never committed
+inputs/
