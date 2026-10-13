@@ -2,7 +2,7 @@
 
 **Status:** FROZEN at `b946087070e4`
 **Plan sha256:** `6cbba0840b213f586ef455b33e569a84a94fc676103b74adef6c46e2e0e70040`
-**Log:** 78 entries, head `c2f6429f`
+**Log:** 79 entries, head `266b3f1d`
 **Frozen:** 2026-09-30
 
 Sections use the [OSF Preregistration](https://osf.io/prereg/) question titles verbatim, so
@@ -994,4 +994,5 @@ decide which word to use: `nothing run`, `no results seen`, `results not opened`
 2026-10-12  Pre-stage note (D, missing flags in sets): S5 retains only hypotheses with protein_altering=false; S15f retains only hypotheses with low_coverage=false; S11 retains only hypotheses with splicing_candidate=false. Missing flags are excluded from the corresponding restriction and counted.  no results seen  ·8cbffa56
 2026-10-12  Pre-stage note (tests): the guard tests of stages B and C and of the shared run guard copied PREREG.md and appended their own entries, and since the real seals (A on 2026-10-02, B and C on 2026-10-11) they passed cases written without a seal or failed prereg's log-length anchor: stage C 2 of 241 tests (fixed in 0b32715 before RUN_START stage C), stage B 1 (the purge guard), the run guard 11 of 154 (failing since the stage A seal of 2026-10-02; that suite runs only in modal_shared_tests.py and was not run between then and 2026-10-12). Each fixture now copies PREREG.md without the log entries from the first real seal on, recounts the anchor with prereg's set_log_anchor and checks that the copy holds no real seal, one intact log fence and no log problem; the run-guard parse test no longer names the last log entry. The guards and the stage code are unchanged (commit 41f6f91). Modal, synthetic data only: stage B 669 passed, stage C 241, stage D 223 (7 skipped, the cross-stage tests), cross-stage 7, run guard 154.  no results seen  ·4956de54
 2026-10-13  RUN_START stage=D token=a23dc31477e8f272  no results seen  ·c2f6429f
+2026-10-13  Stage D operational note: the first start under token a23dc31477e8f272 stopped in prepare_remote at the input guard, before the join and before the work directory was claimed (StageInputError: stages/C/output holds files MANIFEST.tsv does not list: ['.gitattributes']). That file held only the git rule '* -text' added when stage C was committed, to keep its CRLF csv rows byte-identical to the seal. The rule moved to stages/.gitattributes as 'C/output/** -text' (git check-attr: text unset for every C output file); the old file is archived in the gitignored inputs/superseded/. No sealed byte, code file or guard changed; stage_d.guard.verify_inputs passes locally for A, B and C against the logged seals. Same token; app redeployed; start rerun.  no results seen  ·266b3f1d
 ```
