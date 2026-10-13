@@ -8,7 +8,7 @@ from followup.common import FROZEN_PLAN_SHA256, FollowupError, require_run, wils
 from followup.data import b_and_c, check_ensembl, check_unit_integrity, coloc_class, max_by_assay, midrank_quintile, s05_state
 from followup.q1 import design, fit, make_spec, rcs_term, run_bootstrap, standardize
 from followup.q2_q3 import ba_bootstrap, ba_by_class, balanced_accuracy
-from followup.q4_q5 import augment, check_evidence, g_columns, support
+from followup.q4_q5 import augment, check_evidence, closure, g_columns, support
 from followup.q7 import survival_table
 
 
@@ -233,3 +233,9 @@ def test_require_run_checks_the_plan_hash_and_the_token(tmp_path):
 def test_wilson_matches_a_known_value():
     lo, hi = wilson(5, 20)
     assert (lo, hi) == pytest.approx((0.1119, 0.4687), abs=1e-4)
+
+
+def test_closure_reads_descendants_as_parquet_gives_them_arrays_empty_or_missing():
+    disease = pd.DataFrame({"id": ["D1", "D2", "D3"],
+                            "descendants": [np.array(["D1a", "D1b"]), np.array([], dtype=object), None]})
+    assert closure(disease) == {"D1": {"D1", "D1a", "D1b"}, "D2": {"D2"}, "D3": {"D3"}}

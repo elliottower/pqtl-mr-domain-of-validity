@@ -26,7 +26,7 @@ def check_evidence(ev: pd.DataFrame) -> dict:
 
 def closure(disease: pd.DataFrame) -> dict[str, set[str]]:
     """D(i) = {i} plus its descendants in the 26.09 disease table."""
-    return {i: {i, *(d or [])} for i, d in zip(disease["id"], disease["descendants"])}
+    return {i: {i, *([] if d is None else list(d))} for i, d in zip(disease["id"], disease["descendants"])}
 
 
 def support(df: pd.DataFrame, ev: pd.DataFrame, closures: dict[str, set[str]]) -> pd.DataFrame:
