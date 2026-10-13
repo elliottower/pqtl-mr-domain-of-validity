@@ -58,8 +58,25 @@ def write_json(path: Path, obj: dict) -> None:
     """Atomic write; every output carries the declaration."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps({"declaration": DECLARATION, **obj}, indent=1, default=_default))
+    tmp.write_text(json.dumps({"declaration": DECLARATION, **_keys(obj)}, indent=1, default=_default))
     tmp.replace(path)
+
+
+def _keys(x):
+    """Every dict key as a string (pandas counts and crosstabs give numpy and float keys)."""
+    if isinstance(x, dict):
+        return {_key(k): _keys(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_keys(v) for v in x]
+    return x
+
+
+def _key(k) -> str:
+    if hasattr(k, "item"):
+        k = k.item()
+    if isinstance(k, float) and k.is_integer():
+        k = int(k)
+    return str(k)
 
 
 def _default(x):
