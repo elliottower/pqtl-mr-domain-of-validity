@@ -5,3 +5,6 @@
 
 # third-party downloads (Open Targets parquet, platform-docs page): hashed in results/inputs_sha256.json, never committed
 inputs/
+
+# the prereg log is evidence: the root .gitignore ignores *.log
+!PREREG.log
