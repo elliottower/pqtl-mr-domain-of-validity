@@ -8,3 +8,6 @@ inputs/
 
 # the prereg log is evidence: the root .gitignore ignores *.log
 !PREREG.log
+
+# local test and probe reports
+work/
